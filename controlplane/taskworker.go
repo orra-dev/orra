@@ -249,7 +249,7 @@ func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string) (j
 		ServiceID:       w.Service.ID,
 		Input:           input,
 		OrchestrationID: orchestrationID,
-		ProjectID:       w.LogManager.GetOrchestrationProjectID(orchestrationID),
+		ProjectID:       w.Service.ProjectID,
 		Status:          Processing,
 	}
 
