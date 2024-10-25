@@ -194,7 +194,7 @@ class OrraSDK {
 	
 	#sendPong() {
 		if (this.#isConnected && this.#ws.readyState === WebSocket.OPEN) {
-			this.#ws.send(JSON.stringify({ id: "pong", payload: { type: 'pong' } }));
+			this.#ws.send(JSON.stringify({ id: "pong", payload: { type: 'pong', serviceId: this.serviceId } }));
 		}
 	}
 	
@@ -209,7 +209,7 @@ class OrraSDK {
 			return;
 		}
 		
-		const { id: taskId, serviceId, executionId, idempotencyKey } = task;
+		const { id: taskId, executionId, idempotencyKey } = task;
 		
 		const processedResult = this.#processedTasksCache.get(idempotencyKey);
 		if (processedResult) {
@@ -217,7 +217,7 @@ class OrraSDK {
 			this.#sendTaskResult(
 				taskId,
 				executionId,
-				serviceId,
+				this.serviceId,
 				idempotencyKey,
 				processedResult.result,
 				processedResult.error
@@ -232,7 +232,7 @@ class OrraSDK {
 			this.#sendTaskStatus(
 				taskId,
 				executionId,
-				serviceId,
+				this.serviceId,
 				idempotencyKey,
 				'in_progress'
 			);
@@ -253,7 +253,7 @@ class OrraSDK {
 					timestamp: Date.now()
 				});
 				this.#inProgressTasks.delete(idempotencyKey);
-				this.#sendTaskResult(taskId, executionId, serviceId, idempotencyKey, result);
+				this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, result);
 			})
 			.catch((error) => {
 				console.error('Error handling task:', error);
@@ -263,7 +263,7 @@ class OrraSDK {
 					timestamp: Date.now()
 				});
 				this.#inProgressTasks.delete(idempotencyKey);
-				this.#sendTaskResult(taskId, executionId, serviceId, idempotencyKey, null, error.message);
+				this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, null, error.message);
 			});
 	}
 	
