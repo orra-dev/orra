@@ -75,10 +75,9 @@ func (wsm *WebSocketManager) HandleMessage(s *melody.Session, msg []byte, fn Ser
 	switch messagePayload.Type {
 	case WSPong:
 		s.Set("lastPong", time.Now().UTC())
-		if serviceID, ok := s.Get("serviceID"); ok {
-			wsm.UpdateServiceHealth(serviceID.(string), true)
-		}
+		wsm.UpdateServiceHealth(messagePayload.ServiceID, true)
 	case "task_status":
+		wsm.UpdateServiceHealth(messagePayload.ServiceID, true)
 		wsm.logger.
 			Info().
 			Str("IdempotencyKey", string(messagePayload.IdempotencyKey)).
@@ -87,6 +86,7 @@ func (wsm *WebSocketManager) HandleMessage(s *melody.Session, msg []byte, fn Ser
 			Str("ExecutionID", messagePayload.ExecutionID).
 			Msgf("Task status: %s", messagePayload.Status)
 	case "task_result":
+		wsm.UpdateServiceHealth(messagePayload.ServiceID, true)
 		wsm.handleTaskResult(messagePayload, fn)
 	default:
 		wsm.logger.Warn().Str("type", messagePayload.Type).Msg("Received unknown messageWrapper type")
