@@ -166,15 +166,16 @@ func (wsm *WebSocketManager) SendTask(serviceID string, task *Task) error {
 }
 
 func (wsm *WebSocketManager) pingRoutine(serviceID string) {
-	wsm.connMu.RLock()
-	session := wsm.connMap[serviceID]
-	wsm.connMu.RUnlock()
-
 	ticker := time.NewTicker(wsm.pingInterval)
 	defer ticker.Stop()
 
 	for {
 		<-ticker.C
+
+		wsm.connMu.RLock()
+		session := wsm.connMap[serviceID]
+		wsm.connMu.RUnlock()
+
 		if err := session.Write([]byte(WSPing)); err != nil {
 			wsm.logger.Warn().
 				Str("ServiceID", serviceID).
