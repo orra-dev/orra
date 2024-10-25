@@ -1,53 +1,92 @@
 package main
 
 import (
+	"time"
+
 	"github.com/rs/zerolog"
 )
 
 func NewHealthCoordinator(plane *ControlPlane, manager *LogManager, logger zerolog.Logger) *HealthCoordinator {
 	return &HealthCoordinator{
-		plane:           plane,
-		logManager:      manager,
-		logger:          logger,
-		lastHealthState: make(map[string]bool),
+		plane:             plane,
+		logManager:        manager,
+		logger:            logger,
+		lastHealthState:   make(map[string]bool),
+		lastHealthRestart: make(map[string]time.Time),
 	}
 }
 
 func (h *HealthCoordinator) handleServiceHealthChange(serviceID string, isHealthy bool) {
+	service, err := h.plane.GetServiceByID(serviceID)
+	if err != nil {
+		h.logger.Error().Err(err).Str("service", serviceID).Msg("Error getting service")
+		return
+	}
+
 	if health, exists := h.lastHealthState[serviceID]; exists && health == isHealthy {
 		return
 	}
 
+	//if updateTime, exists := h.lastHealthRestart[serviceID]; exists && time.Since(updateTime) < 30*time.Second {
+	//	return
+	//}
+
+	h.logger.Debug().
+		Str("ProjectID", service.ProjectID).
+		Str("serviceID", service.ID).
+		Str("serviceName", service.Name).
+		Bool("NewHealth", isHealthy).
+		Msg("Health change detected")
+
 	h.lastHealthState[serviceID] = isHealthy
 
-	orchestrationsAndTasks := h.GetActiveOrchestrationsAndTasksForService(serviceID)
 	if !isHealthy {
-		h.logManager.UpdateActiveOrchestrations(orchestrationsAndTasks, serviceID, "service_unhealthy", Processing, Paused)
 		return
 	}
 
-	h.logManager.UpdateActiveOrchestrations(orchestrationsAndTasks, serviceID, "service_healthy", Paused, Processing)
-	h.restartOrchestrationTasks(orchestrationsAndTasks)
+	//orchestrationsAndTasks := h.GetActiveOrchestrationsAndTasksForService(service)
+	//h.restartOrchestrationTasks(orchestrationsAndTasks)
+	//h.restartOrchestrationTasks(service)
+	//h.lastHealthRestart[serviceID] = time.Now().UTC()
 }
 
-func (h *HealthCoordinator) GetActiveOrchestrationsAndTasksForService(serviceID string) map[string]map[string]SubTask {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
+//func (h *HealthCoordinator) GetActiveOrchestrationsAndTasksForService(service *ServiceInfo) map[string]map[string]SubTask {
+//	h.mu.RLock()
+//	defer h.mu.RUnlock()
+//
+//	return h.logManager.GetActiveOrchestrationsWithTasks(service)
+//}
 
-	projectID, err := h.plane.GetProjectIDForService(serviceID)
-	if err != nil {
-		h.logger.Error().Err(err).Str("serviceID", serviceID).Msg("Failed to get project ID from control plane")
-		return map[string]map[string]SubTask{}
-	}
+//func (h *HealthCoordinator) restartOrchestrationTasks(orchestrationsAndTasks map[string]map[string]SubTask) {
+//	h.mu.Lock()
+//	defer h.mu.Unlock()
+//
+//	for orchestrationID, tasks := range orchestrationsAndTasks {
+//		for _, task := range tasks {
+//			completed, err := h.logManager.IsTaskCompleted(orchestrationID, task.ID)
+//			if err != nil {
+//				h.logger.Error().
+//					Err(err).
+//					Str("orchestrationID", orchestrationID).
+//					Str("taskID", task.ID).
+//					Msg("failed to check if task is completed during restart - continuing")
+//			}
+//
+//			if !completed {
+//				h.restartTask(orchestrationID, task)
+//			}
+//		}
+//	}
+//}
 
-	return h.plane.ActiveOrchestrationsWithTasks(projectID, serviceID)
-}
-
-func (h *HealthCoordinator) restartOrchestrationTasks(orchestrationsAndTasks map[string]map[string]SubTask) {
+func (h *HealthCoordinator) restartOrchestrationTasks(service *ServiceInfo) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	for orchestrationID, tasks := range orchestrationsAndTasks {
+	orchestrationsWithTasks := h.logManager.GetActiveOrchestrationsWithTasks(service.ProjectID, service.ID)
+	h.logger.Debug().Interface("orchestrationsWithTasks", orchestrationsWithTasks).Msg("tasks for restarting")
+
+	for orchestrationID, tasks := range orchestrationsWithTasks {
 		for _, task := range tasks {
 			completed, err := h.logManager.IsTaskCompleted(orchestrationID, task.ID)
 			if err != nil {
@@ -56,6 +95,7 @@ func (h *HealthCoordinator) restartOrchestrationTasks(orchestrationsAndTasks map
 					Str("orchestrationID", orchestrationID).
 					Str("taskID", task.ID).
 					Msg("failed to check if task is completed during restart - continuing")
+				continue
 			}
 
 			if !completed {

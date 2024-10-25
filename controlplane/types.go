@@ -57,11 +57,12 @@ type WebSocketManager struct {
 }
 
 type HealthCoordinator struct {
-	plane           *ControlPlane
-	logManager      *LogManager
-	logger          zerolog.Logger
-	mu              sync.RWMutex
-	lastHealthState map[string]bool
+	plane             *ControlPlane
+	logManager        *LogManager
+	logger            zerolog.Logger
+	mu                sync.RWMutex
+	lastHealthState   map[string]bool
+	lastHealthRestart map[string]time.Time
 }
 
 type Project struct {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -54,7 +55,7 @@ func (lm *LogManager) GetLog(orchestrationID string) *Log {
 	return lm.logs[orchestrationID]
 }
 
-func (lm *LogManager) PrepLogForOrchestration(orchestrationID string, plan *ServiceCallingPlan) *Log {
+func (lm *LogManager) PrepLogForOrchestration(projectID string, orchestrationID string, plan *ServiceCallingPlan) *Log {
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 
@@ -62,6 +63,7 @@ func (lm *LogManager) PrepLogForOrchestration(orchestrationID string, plan *Serv
 
 	state := &OrchestrationState{
 		ID:            orchestrationID,
+		ProjectID:     projectID,
 		Plan:          plan,
 		TasksStatuses: make(map[string]Status),
 		Status:        Processing,
@@ -166,6 +168,45 @@ func (lm *LogManager) FinalizeOrchestration(orchestrationID string, status Statu
 	delete(lm.orchestrations, orchestrationID)
 
 	return nil
+}
+
+func (o *OrchestrationState) GetSubTasksFor(serviceID string) map[string]SubTask {
+	out := map[string]SubTask{}
+	for _, subTask := range o.Plan.Tasks {
+		if strings.EqualFold(subTask.Service, serviceID) {
+			out[subTask.ID] = SubTask{
+				ID:             subTask.ID,
+				Service:        subTask.Service,
+				ServiceDetails: subTask.ServiceDetails,
+				Input:          subTask.Input,
+				Status:         subTask.Status,
+				Error:          subTask.Error,
+			}
+		}
+	}
+	return out
+}
+
+func (lm *LogManager) GetActiveOrchestrationsWithTasks(projectID, serviceID string) map[string]map[string]SubTask {
+	lm.mu.RLock()
+	defer lm.mu.RUnlock()
+	out := make(map[string]map[string]SubTask)
+
+	lm.Logger.Debug().Interface("lm.orchestrations", lm.orchestrations).Msg("current orchestrations")
+
+	for oID, o := range lm.orchestrations {
+		lm.Logger.Debug().
+			Str("oID", oID).
+			Str("projectID", projectID).
+			Str("o.ProjectID", o.ProjectID).
+			Str("o.Status", o.Status.String()).
+			Msg("current orchestrations")
+		if projectID == o.ProjectID && o.Status != Completed {
+			out[oID] = o.GetSubTasksFor(serviceID)
+		}
+	}
+
+	return out
 }
 
 func (lm *LogManager) UpdateActiveOrchestrations(orchestrationsAndTasks map[string]map[string]SubTask, serviceID, reason string, oldStatus, newStatus Status) {

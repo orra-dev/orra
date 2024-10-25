@@ -91,7 +91,7 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 
 func (p *ControlPlane) ExecuteOrchestration(orchestration *Orchestration) {
 	p.Logger.Debug().Msgf("About to create Log for orchestration %s", orchestration.ID)
-	log := p.LogManager.PrepLogForOrchestration(orchestration.ID, orchestration.Plan)
+	log := p.LogManager.PrepLogForOrchestration(orchestration.ProjectID, orchestration.ID, orchestration.Plan)
 
 	p.Logger.Debug().Msgf("About to create and start workers for orchestration %s", orchestration.ID)
 	p.createAndStartWorkers(orchestration.ID, orchestration.Plan)
@@ -100,6 +100,7 @@ func (p *ControlPlane) ExecuteOrchestration(orchestration *Orchestration) {
 
 	p.Logger.Debug().Msgf("About to append initial entry to Log for orchestration %s", orchestration.ID)
 	log.Append(initialEntry)
+	orchestration.Status = Processing
 }
 
 func (p *ControlPlane) FinalizeOrchestration(
