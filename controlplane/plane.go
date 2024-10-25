@@ -173,20 +173,6 @@ func (p *ControlPlane) GetProjectIDForService(serviceID string) (string, error) 
 	return "", fmt.Errorf("no project found for service %s", serviceID)
 }
 
-func (p *ControlPlane) ActiveOrchestrationsWithTasks(projectID string, serviceID string) map[string]map[string]SubTask {
-	p.orchestrationStoreMu.RLock()
-	defer p.orchestrationStoreMu.RUnlock()
-	out := map[string]map[string]SubTask{}
-
-	for _, orchestration := range p.orchestrationStore {
-		if orchestration.IsActive() && projectID == orchestration.ProjectID {
-			out[orchestration.ID] = orchestration.GetSubTasksFor(serviceID)
-		}
-	}
-
-	return out
-}
-
 func (p *ControlPlane) StopTaskWorker(orchestrationID string, taskID string) {
 	p.workerMu.Lock()
 	defer p.workerMu.Unlock()
