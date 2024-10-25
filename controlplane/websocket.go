@@ -37,7 +37,7 @@ func (wsm *WebSocketManager) HandleConnection(serviceID string, serviceName stri
 	wsm.connMu.Unlock()
 
 	wsm.UpdateServiceHealth(serviceID, true)
-	go wsm.pingRoutine(s)
+	go wsm.pingRoutine(serviceID)
 
 	wsm.logger.Info().
 		Str("serviceID", serviceID).
@@ -165,54 +165,46 @@ func (wsm *WebSocketManager) SendTask(serviceID string, task *Task) error {
 	return session.Write(message)
 }
 
-func (wsm *WebSocketManager) pingRoutine(s *melody.Session) {
+func (wsm *WebSocketManager) pingRoutine(serviceID string) {
+	wsm.connMu.RLock()
+	session := wsm.connMap[serviceID]
+	wsm.connMu.RUnlock()
+
 	ticker := time.NewTicker(wsm.pingInterval)
 	defer ticker.Stop()
 
 	for {
-		serviceID, _ := s.Get("serviceID")
-
 		<-ticker.C
-		if s.IsClosed() {
-			wsm.UpdateServiceHealth(serviceID.(string), false)
-
-			wsm.logger.Info().
-				Str("ServiceID", serviceID.(string)).
-				Msg("PING/PONG no longer required for closed connection")
-
-			return
-		}
-
-		if err := s.Write([]byte(WSPing)); err != nil {
+		if err := session.Write([]byte(WSPing)); err != nil {
 			wsm.logger.Warn().
-				Str("ServiceID", serviceID.(string)).
+				Str("ServiceID", serviceID).
 				Err(err).
 				Msg("Failed to send ping, closing connection")
 
-			wsm.UpdateServiceHealth(serviceID.(string), false)
+			wsm.UpdateServiceHealth(serviceID, false)
 
-			if err := s.Close(); err != nil {
+			if err := session.Close(); err != nil {
 				return
 			}
 			return
 		}
 
 		// Check for pong response
-		lastPong, ok := s.Get("lastPong")
+		lastPong, ok := session.Get("lastPong")
 		if !ok || time.Since(lastPong.(time.Time)) > wsm.pongWait {
 			wsm.logger.Warn().
-				Str("ServiceID", serviceID.(string)).
+				Str("ServiceID", serviceID).
 				Msg("Pong timeout, closing connection")
 
-			wsm.UpdateServiceHealth(serviceID.(string), false)
+			wsm.UpdateServiceHealth(serviceID, false)
 
-			if err := s.Close(); err != nil {
+			if err := session.Close(); err != nil {
 				return
 			}
 
 			return
 		}
-		wsm.UpdateServiceHealth(serviceID.(string), true)
+		wsm.UpdateServiceHealth(serviceID, true)
 	}
 }
 
