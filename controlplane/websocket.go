@@ -173,8 +173,15 @@ func (wsm *WebSocketManager) pingRoutine(serviceID string) {
 		<-ticker.C
 
 		wsm.connMu.RLock()
-		session := wsm.connMap[serviceID]
+		session, exists := wsm.connMap[serviceID]
 		wsm.connMu.RUnlock()
+
+		if !exists {
+			wsm.logger.Warn().
+				Str("ServiceID", serviceID).
+				Msg("Service connection has already been closed")
+			return
+		}
 
 		if err := session.Write([]byte(WSPing)); err != nil {
 			wsm.logger.Warn().
