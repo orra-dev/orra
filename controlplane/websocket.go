@@ -226,10 +226,6 @@ func (wsm *WebSocketManager) UpdateServiceHealth(serviceID string, isHealthy boo
 	wsm.healthMu.Lock()
 	wsm.serviceHealth[serviceID] = isHealthy
 	wsm.healthMu.Unlock()
-
-	wsm.healthCallbackMu.RLock()
-	wsm.healthCallback(serviceID, isHealthy)
-	wsm.healthCallbackMu.RUnlock()
 }
 
 // CleanupExpiredMessages cleans up expired messages

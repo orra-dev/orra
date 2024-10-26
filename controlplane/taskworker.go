@@ -60,11 +60,6 @@ func (w *TaskWorker) Start(ctx context.Context, orchestrationID string) {
 		return
 	}
 
-	go func() {
-		<-ctx.Done()
-		w.Stop(orchestrationID)
-	}()
-
 	// Channel to receive new log entries
 	entriesChan := make(chan LogEntry, 100)
 
@@ -161,19 +156,19 @@ func (w *TaskWorker) processEntry(ctx context.Context, entry LogEntry, orchestra
 
 func (w *TaskWorker) executeTaskWithRetry(ctx context.Context, orchestrationID string) (json.RawMessage, error) {
 	var result json.RawMessage
-	var consecutiveFailures int
+	w.consecutiveErrs = 0
 
 	operation := func() error {
-		// Simple health check before attempting execution
-		if !w.LogManager.controlPlane.WebSocketManager.IsServiceHealthy(w.Service.ID) {
-			return RetryableError{Err: fmt.Errorf("service %s is not healthy", w.Service.ID)}
+		// Check service health and respect MaxServiceDowntime
+		if err := w.checkServiceHealth(); err != nil {
+			return err // Returns RetryableError or permanent error if timeout exceeded
 		}
 
 		var err error
-		result, err = w.executeTask(ctx, orchestrationID)
+		result, err = w.tryExecute(ctx, orchestrationID)
 		if err != nil {
-			consecutiveFailures++
-			if consecutiveFailures > maxRetries {
+			w.consecutiveErrs++
+			if w.consecutiveErrs > maxRetries {
 				return backoff.Permanent(fmt.Errorf("too many consecutive failures: %w", err))
 			}
 			if isRetryableError(err) {
@@ -182,7 +177,8 @@ func (w *TaskWorker) executeTaskWithRetry(ctx context.Context, orchestrationID s
 			return backoff.Permanent(err)
 		}
 
-		consecutiveFailures = 0
+		// Reset consecutive errors on success
+		w.consecutiveErrs = 0
 		return nil
 	}
 
@@ -204,7 +200,28 @@ func (w *TaskWorker) executeTaskWithRetry(ctx context.Context, orchestrationID s
 	return result, nil
 }
 
-func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string) (json.RawMessage, error) {
+func (w *TaskWorker) checkServiceHealth() error {
+	if w.isServiceHealthy() {
+		// Reset pause tracking when service is healthy
+		w.pauseStart = time.Time{}
+		return nil
+	}
+
+	// Start tracking pause time if not already tracking
+	if w.pauseStart.IsZero() {
+		w.pauseStart = time.Now()
+	}
+
+	// Check if we've exceeded MaxServiceDowntime
+	if time.Since(w.pauseStart) >= MaxServiceDowntime {
+		return backoff.Permanent(fmt.Errorf("service %s remained unhealthy beyond maximum duration of %v",
+			w.Service.ID, MaxServiceDowntime))
+	}
+
+	return RetryableError{Err: fmt.Errorf("service %s is not healthy", w.Service.ID)}
+}
+
+func (w *TaskWorker) tryExecute(ctx context.Context, orchestrationID string) (json.RawMessage, error) {
 	idempotencyKey := w.generateIdempotencyKey(orchestrationID)
 	executionID := uuid.New().String()
 
@@ -214,6 +231,7 @@ func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string) (j
 		return nil, fmt.Errorf("failed to initialize execution: %w", err)
 	}
 
+	// If there's an existing execution
 	if !isNewExecution {
 		switch result.State {
 		case ExecutionCompleted:
@@ -221,26 +239,35 @@ func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string) (j
 		case ExecutionFailed:
 			return nil, result.Error
 		case ExecutionPaused:
-			// Handle paused execution - will be resumed by InitializeExecution
-			break
+			// Allow retrying if execution was paused
+			if _, resumed := w.Service.IdempotencyStore.ResumeExecution(idempotencyKey); !resumed {
+				return nil, RetryableError{Err: fmt.Errorf("execution is paused")}
+			}
+		case ExecutionInProgress:
+			// do nothing
 		}
 	}
 
-	// Start lease renewal goroutine
+	// Start lease renewal
 	renewalCtx, cancelRenewal := context.WithCancel(ctx)
 	defer cancelRenewal()
-	go w.renewLeaseWithHealthCheck(renewalCtx, orchestrationID, idempotencyKey, executionID)
+	go w.renewLeaseWithHealthCheck(renewalCtx, idempotencyKey, executionID)
 
+	// Execute the actual task
+	return w.executeTask(ctx, orchestrationID, idempotencyKey)
+}
+
+func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string, key IdempotencyKey) (json.RawMessage, error) {
 	input, err := mergeValueMapsToJson(w.logState.DependencyState)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal input for task %s: %w", w.TaskID, err)
+		return nil, fmt.Errorf("failed to marshal input: %w", err)
 	}
 
 	task := &Task{
 		Type:            "task_request",
 		ID:              w.TaskID,
-		ExecutionID:     executionID,
-		IdempotencyKey:  idempotencyKey,
+		ExecutionID:     uuid.New().String(),
+		IdempotencyKey:  key,
 		ServiceID:       w.Service.ID,
 		Input:           input,
 		OrchestrationID: orchestrationID,
@@ -249,46 +276,15 @@ func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string) (j
 	}
 
 	if err := w.LogManager.controlPlane.WebSocketManager.SendTask(w.Service.ID, task); err != nil {
-		return nil, RetryableError{Err: fmt.Errorf("failed to send task %s for service %s: %w", task.ID, w.Service.ID, err)}
+		// Pause execution before returning error
+		w.Service.IdempotencyStore.PauseExecution(key)
+		return nil, RetryableError{Err: fmt.Errorf("failed to send task: %w", err)}
 	}
 
-	return w.waitForResultWithHealthCheck(ctx, idempotencyKey)
+	return w.waitForResult(ctx, key)
 }
 
-func (w *TaskWorker) renewLeaseWithHealthCheck(ctx context.Context, orchestrationID string, key IdempotencyKey, executionID string) {
-	ticker := time.NewTicker(defaultLeaseDuration / 2)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			// Don't renew lease if service is unhealthy
-			if !w.LogManager.controlPlane.WebSocketManager.IsServiceHealthy(w.Service.ID) {
-				w.LogManager.Logger.Debug().
-					Str("TaskID", w.TaskID).
-					Msg("Stopping lease renewal due to unhealthy service")
-				return
-			}
-
-			// Check if task is paused
-			if w.isTaskPaused(orchestrationID) {
-				w.LogManager.Logger.Debug().
-					Str("TaskID", w.TaskID).
-					Msg("Stopping lease renewal due to paused task")
-				return
-			}
-
-			// Renew lease only if still the active execution
-			if !w.Service.IdempotencyStore.RenewLease(key, executionID) {
-				return
-			}
-		}
-	}
-}
-
-func (w *TaskWorker) waitForResultWithHealthCheck(ctx context.Context, key IdempotencyKey) (json.RawMessage, error) {
+func (w *TaskWorker) waitForResult(ctx context.Context, key IdempotencyKey) (json.RawMessage, error) {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -297,21 +293,14 @@ func (w *TaskWorker) waitForResultWithHealthCheck(ctx context.Context, key Idemp
 	for {
 		select {
 		case <-ctx.Done():
-			// Context cancelled - mark execution as paused and stop holding lease
 			w.Service.IdempotencyStore.PauseExecution(key)
 			return nil, ctx.Err()
 
 		case <-maxWait:
+			w.Service.IdempotencyStore.PauseExecution(key)
 			return nil, RetryableError{Err: fmt.Errorf("task execution timed out waiting for result")}
 
 		case <-ticker.C:
-			// Check service health first
-			if !w.LogManager.controlPlane.WebSocketManager.IsServiceHealthy(w.Service.ID) {
-				// Service is unhealthy - mark execution as paused and stop holding lease
-				w.Service.IdempotencyStore.PauseExecution(key)
-				return nil, RetryableError{Err: fmt.Errorf("service %s is not healthy", w.Service.ID)}
-			}
-
 			result, exists := w.Service.IdempotencyStore.GetExecutionWithResult(key)
 			if !exists {
 				return nil, RetryableError{Err: fmt.Errorf("execution not found")}
@@ -320,28 +309,49 @@ func (w *TaskWorker) waitForResultWithHealthCheck(ctx context.Context, key Idemp
 			switch result.State {
 			case ExecutionCompleted:
 				return result.Result, nil
-
 			case ExecutionFailed:
 				return nil, result.Error
-
-			case ExecutionInProgress:
-				if time.Now().After(result.LeaseExpiry) {
-					// Don't hold expired leases
-					w.Service.IdempotencyStore.PauseExecution(key)
-					return nil, RetryableError{Err: fmt.Errorf("execution lease expired while waiting")}
-				}
-				continue
-
 			case ExecutionPaused:
-				// Allow retrying if execution was paused
 				return nil, RetryableError{Err: fmt.Errorf("execution is paused")}
+			case ExecutionInProgress:
+				// do nothing
 			}
 		}
 	}
 }
 
-func (w *TaskWorker) isTaskPaused(orchestrationID string) bool {
-	return w.LogManager.IsTaskPaused(orchestrationID, w.TaskID)
+func (w *TaskWorker) renewLeaseWithHealthCheck(ctx context.Context, key IdempotencyKey, executionID string) {
+	ticker := time.NewTicker(defaultLeaseDuration / 2) // Renew at half the lease duration
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			// Context cancelled, stop renewal
+			return
+
+		case <-ticker.C:
+			// Check service health first
+			if !w.isServiceHealthy() {
+				w.LogManager.Logger.Debug().
+					Str("TaskID", w.TaskID).
+					Msg("Stopping lease renewal due to unhealthy service")
+
+				w.Service.IdempotencyStore.PauseExecution(key)
+				return
+			}
+
+			// Try to renew lease
+			renewed := w.Service.IdempotencyStore.RenewLease(key, executionID)
+			if !renewed {
+				// If we couldn't renew, the execution might be paused or taken over
+				w.LogManager.Logger.Debug().
+					Str("TaskID", w.TaskID).
+					Msg("Lease renewal failed, stopping renewal routine")
+				return
+			}
+		}
+	}
 }
 
 func mergeValueMapsToJson(src map[string]json.RawMessage) (json.RawMessage, error) {
@@ -361,6 +371,10 @@ func containsAll(s map[string]json.RawMessage, e map[string]struct{}) bool {
 		}
 	}
 	return true
+}
+
+func (w *TaskWorker) isServiceHealthy() bool {
+	return w.LogManager.controlPlane.WebSocketManager.IsServiceHealthy(w.Service.ID)
 }
 
 func isRetryableError(err error) bool {
@@ -396,14 +410,4 @@ func (w *TaskWorker) sortedInputs() []string {
 	}
 	sort.Strings(inputs)
 	return inputs
-}
-
-func (w *TaskWorker) Stop(orchestrationID string) {
-	key := w.generateIdempotencyKey(orchestrationID)
-	w.Service.IdempotencyStore.PauseExecution(key)
-	w.LogManager.Logger.Debug().
-		Str("OrchestrationID", orchestrationID).
-		Str("TaskID", w.TaskID).
-		Str("IdempotencyKey", string(key)).
-		Msg("paused execution for task")
 }

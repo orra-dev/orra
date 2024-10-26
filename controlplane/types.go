@@ -136,13 +136,14 @@ type FailureTracker struct {
 }
 
 type TaskWorker struct {
-	Service      *ServiceInfo
-	TaskID       string
-	Dependencies DependencyKeys
-	LogManager   *LogManager
-	logState     *LogState
-	backOff      *backoff.ExponentialBackOff
-	lastHealthy  bool
+	Service         *ServiceInfo
+	TaskID          string
+	Dependencies    DependencyKeys
+	LogManager      *LogManager
+	logState        *LogState
+	backOff         *backoff.ExponentialBackOff
+	pauseStart      time.Time // Track pause duration
+	consecutiveErrs int       // Track consecutive failures
 }
 
 type Task struct {

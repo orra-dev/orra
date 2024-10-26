@@ -21,11 +21,10 @@ func NewControlPlane(openAIKey string) *ControlPlane {
 	return plane
 }
 
-func (p *ControlPlane) Initialise(ctx context.Context, logMgr *LogManager, wsManager *WebSocketManager, coordinator *HealthCoordinator, Logger zerolog.Logger) {
+func (p *ControlPlane) Initialise(ctx context.Context, logMgr *LogManager, wsManager *WebSocketManager, _ *HealthCoordinator, Logger zerolog.Logger) {
 	p.LogManager = logMgr
 	p.Logger = Logger
 	p.WebSocketManager = wsManager
-	p.WebSocketManager.RegisterHealthCallback(coordinator.handleServiceHealthChange)
 	p.TidyWebSocketArtefacts(ctx)
 }
 

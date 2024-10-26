@@ -12,9 +12,9 @@ type ExecutionState int
 
 const (
 	ExecutionInProgress ExecutionState = iota
+	ExecutionPaused
 	ExecutionCompleted
 	ExecutionFailed
-	ExecutionPaused
 )
 
 const (
@@ -23,7 +23,14 @@ const (
 )
 
 func (s ExecutionState) String() string {
-	return [...]string{"in_progress", "completed", "failed", "paused"}[s]
+	return [...]string{"in_progress", "paused", "completed", "failed"}[s]
+}
+
+type IdempotencyStore struct {
+	mu            sync.RWMutex
+	executions    map[IdempotencyKey]*Execution
+	cleanupTicker *time.Ticker
+	ttl           time.Duration
 }
 
 type Execution struct {
@@ -34,14 +41,6 @@ type Execution struct {
 	Timestamp   time.Time       `json:"timestamp"`
 	StartedAt   time.Time       `json:"startedAt"`
 	LeaseExpiry time.Time       `json:"leaseExpiry"`
-}
-
-// IdempotencyStore manages execution results with automatic cleanup
-type IdempotencyStore struct {
-	mu            sync.RWMutex
-	executions    map[IdempotencyKey]*Execution
-	cleanupTicker *time.Ticker
-	ttl           time.Duration
 }
 
 func NewIdempotencyStore(ttl time.Duration) *IdempotencyStore {
@@ -59,24 +58,6 @@ func NewIdempotencyStore(ttl time.Duration) *IdempotencyStore {
 	return store
 }
 
-func (s *IdempotencyStore) startCleanup() {
-	for range s.cleanupTicker.C {
-		s.cleanup()
-	}
-}
-
-func (s *IdempotencyStore) cleanup() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	threshold := time.Now().Add(-s.ttl)
-	for key, execution := range s.executions {
-		if execution.Timestamp.Before(threshold) {
-			delete(s.executions, key)
-		}
-	}
-}
-
 func (s *IdempotencyStore) InitializeExecution(key IdempotencyKey, executionID string) (*Execution, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -89,7 +70,6 @@ func (s *IdempotencyStore) InitializeExecution(key IdempotencyKey, executionID s
 			return execution, false, nil
 
 		case ExecutionPaused:
-			// Always allow taking over paused executions
 			execution.State = ExecutionInProgress
 			execution.ExecutionID = executionID
 			execution.StartedAt = now
@@ -103,10 +83,13 @@ func (s *IdempotencyStore) InitializeExecution(key IdempotencyKey, executionID s
 				execution.LeaseExpiry = now.Add(defaultLeaseDuration)
 				return execution, true, nil
 			}
+
+			// Execution still valid
 			return execution, false, nil
 		}
 	}
 
+	// New execution
 	newExecution := &Execution{
 		ExecutionID: executionID,
 		State:       ExecutionInProgress,
@@ -116,20 +99,6 @@ func (s *IdempotencyStore) InitializeExecution(key IdempotencyKey, executionID s
 	}
 	s.executions[key] = newExecution
 	return newExecution, true, nil
-}
-
-func (s *IdempotencyStore) PauseExecution(key IdempotencyKey) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if execution, exists := s.executions[key]; exists {
-		if execution.State == ExecutionInProgress {
-			execution.State = ExecutionPaused
-			// Clear the lease when pausing
-			execution.LeaseExpiry = time.Time{} // Zero time
-			execution.ExecutionID = ""          // Clear execution ID
-		}
-	}
 }
 
 func (s *IdempotencyStore) RenewLease(key IdempotencyKey, executionID string) bool {
@@ -143,6 +112,30 @@ func (s *IdempotencyStore) RenewLease(key IdempotencyKey, executionID string) bo
 		return true
 	}
 	return false
+}
+
+func (s *IdempotencyStore) PauseExecution(key IdempotencyKey) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if execution, exists := s.executions[key]; exists &&
+		execution.State == ExecutionInProgress {
+		execution.State = ExecutionPaused
+		execution.LeaseExpiry = time.Time{} // Clear lease
+	}
+}
+
+func (s *IdempotencyStore) ResumeExecution(key IdempotencyKey) (*Execution, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if execution, exists := s.executions[key]; exists &&
+		execution.State == ExecutionPaused {
+		execution.State = ExecutionInProgress
+		execution.LeaseExpiry = time.Now().Add(defaultLeaseDuration)
+		return execution, true
+	}
+	return nil, false
 }
 
 func (s *IdempotencyStore) UpdateExecutionResult(key IdempotencyKey, result json.RawMessage, err error) {
@@ -178,9 +171,26 @@ func (s *IdempotencyStore) GetExecutionWithResult(key IdempotencyKey) (*Executio
 	return nil, false
 }
 
-func (s *IdempotencyStore) ClearResult(key IdempotencyKey) {
+func (s *IdempotencyStore) startCleanup() {
+	for range s.cleanupTicker.C {
+		s.cleanup()
+	}
+}
+
+func (s *IdempotencyStore) cleanup() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	threshold := time.Now().Add(-s.ttl)
+	for key, execution := range s.executions {
+		if execution.Timestamp.Before(threshold) {
+			delete(s.executions, key)
+		}
+	}
+}
+
+func (s *IdempotencyStore) ClearResult(key IdempotencyKey) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	delete(s.executions, key)
 }
