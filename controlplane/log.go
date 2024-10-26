@@ -5,13 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
-
-	"github.com/google/uuid"
 )
 
-func NewLogManager(_ context.Context, retention time.Duration, controlPlane *ControlPlane) *LogManager {
+func NewLogManager(ctx context.Context, retention time.Duration, controlPlane *ControlPlane) *LogManager {
 	lm := &LogManager{
 		logs:           make(map[string]*Log),
 		orchestrations: make(map[string]*OrchestrationState),
@@ -20,7 +17,7 @@ func NewLogManager(_ context.Context, retention time.Duration, controlPlane *Con
 		controlPlane:   controlPlane,
 	}
 
-	//go lm.startCleanup(ctx)
+	go lm.startCleanup(ctx)
 	return lm
 }
 
@@ -78,6 +75,10 @@ func (lm *LogManager) PrepLogForOrchestration(projectID string, orchestrationID 
 	return log
 }
 
+func (lm *LogManager) MarkTaskCompleted(orchestrationID, taskID string) error {
+	return lm.MarkTask(orchestrationID, taskID, Completed)
+}
+
 func (lm *LogManager) MarkTask(orchestrationID, taskID string, s Status) error {
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
@@ -92,8 +93,12 @@ func (lm *LogManager) MarkTask(orchestrationID, taskID string, s Status) error {
 	return nil
 }
 
-func (lm *LogManager) MarkTaskCompleted(orchestrationID, taskID string) error {
-	return lm.MarkTask(orchestrationID, taskID, Completed)
+func (lm *LogManager) MarkOrchestrationCompleted(orchestrationID string) (Status, error) {
+	return lm.MarkOrchestration(orchestrationID, Completed, nil)
+}
+
+func (lm *LogManager) MarkOrchestrationFailed(orchestrationID string, reason json.RawMessage) (Status, error) {
+	return lm.MarkOrchestration(orchestrationID, Failed, reason)
 }
 
 func (lm *LogManager) MarkOrchestration(orchestrationID string, s Status, reason json.RawMessage) (Status, error) {
@@ -112,20 +117,6 @@ func (lm *LogManager) MarkOrchestration(orchestrationID string, s Status, reason
 	state.LastUpdated = time.Now().UTC()
 
 	return state.Status, nil
-}
-
-func (lm *LogManager) MarkOrchestrationCompleted(orchestrationID string) (Status, error) {
-	return lm.MarkOrchestration(orchestrationID, Completed, nil)
-}
-
-func (lm *LogManager) MarkOrchestrationFailed(orchestrationID string, reason json.RawMessage) (Status, error) {
-	return lm.MarkOrchestration(orchestrationID, Failed, reason)
-}
-
-func (lm *LogManager) GetOrchestrationProjectID(orchestrationID string) string {
-	lm.mu.RLock()
-	defer lm.mu.RUnlock()
-	return lm.orchestrations[orchestrationID].ProjectID
 }
 
 func (lm *LogManager) AppendToLog(orchestrationID, entryType, id string, reason json.RawMessage, producerID string) {
@@ -164,169 +155,7 @@ func (lm *LogManager) FinalizeOrchestration(orchestrationID string, status Statu
 		return err
 	}
 
-	delete(lm.logs, orchestrationID)
-	delete(lm.orchestrations, orchestrationID)
-
 	return nil
-}
-
-func (o *OrchestrationState) GetSubTasksFor(serviceID string) map[string]SubTask {
-	out := map[string]SubTask{}
-	for _, subTask := range o.Plan.Tasks {
-		if strings.EqualFold(subTask.Service, serviceID) {
-			out[subTask.ID] = SubTask{
-				ID:             subTask.ID,
-				Service:        subTask.Service,
-				ServiceDetails: subTask.ServiceDetails,
-				Input:          subTask.Input,
-				Status:         subTask.Status,
-				Error:          subTask.Error,
-			}
-		}
-	}
-	return out
-}
-
-func (lm *LogManager) GetActiveOrchestrationsWithTasks(projectID, serviceID string) map[string]map[string]SubTask {
-	lm.mu.RLock()
-	defer lm.mu.RUnlock()
-	out := make(map[string]map[string]SubTask)
-
-	for oID, o := range lm.orchestrations {
-		if projectID == o.ProjectID && (o.Status == Processing || o.Status == Paused) {
-			out[oID] = o.GetSubTasksFor(serviceID)
-		}
-	}
-
-	return out
-}
-
-func (lm *LogManager) UpdateActiveOrchestrations(orchestrationsAndTasks map[string]map[string]SubTask, serviceID, reason string, oldStatus, newStatus Status) {
-	for orchestrationID, tasks := range orchestrationsAndTasks {
-		err := lm.UpdateOrchestrationStatus(orchestrationID, tasks, serviceID, reason, oldStatus, newStatus)
-		if err != nil {
-			lm.Logger.Error().Err(err).Fields(map[string]any{
-				"orchestrationId": orchestrationID,
-				"serviceId":       serviceID,
-				"tasks":           tasks,
-				"reason":          reason,
-				"oldStatus":       oldStatus,
-				"newStatus":       newStatus,
-			}).Msg("Failed to notify orchestration of new status")
-			continue
-		}
-	}
-}
-
-func (lm *LogManager) UpdateOrchestrationStatus(orchestrationID string, tasks map[string]SubTask, serviceID, reason string, oldStatus, newStatus Status) error {
-	lm.mu.Lock()
-	defer lm.mu.Unlock()
-
-	lm.Logger.Debug().
-		Str("expectedOldStatus", oldStatus.String()).
-		Str("newIntendedStatus", newStatus.String()).
-		Fields(tasks).
-		Msgf("Updating orchestration status: %s", orchestrationID)
-
-	state, exists := lm.orchestrations[orchestrationID]
-	if !exists {
-		return fmt.Errorf("orchestration %s not found", orchestrationID)
-	}
-
-	if state.Status != oldStatus {
-		lm.Logger.Debug().
-			Str("expectedOldStatus", oldStatus.String()).
-			Str("actualOldStatus", state.Status.String()).
-			Str("newIntendedStatus", newStatus.String()).
-			Msgf("Ignoring orchestration status update for orchestration %s", orchestrationID)
-		return nil
-	}
-
-	state.Status = newStatus
-	var taskIDs []string
-	for taskID := range tasks {
-		if state.TasksStatuses[taskID] == Completed {
-			continue
-		}
-		state.TasksStatuses[taskID] = newStatus
-		taskIDs = append(taskIDs, taskID)
-	}
-	state.LastUpdated = time.Now().UTC()
-
-	// Create a unique ID for the status change entry
-	entryID := fmt.Sprintf("status_change_%s_%s", orchestrationID, uuid.New().String())
-
-	var statusChange = struct {
-		OrchestrationID string   `json:"orchestrationID"`
-		TaskIDs         []string `json:"tasks"`
-		ServiceID       string   `json:"serviceID"`
-		OldStatus       Status   `json:"oldStatus"`
-		NewStatus       Status   `json:"newStatus"`
-		Reason          string   `json:"reason"`
-	}{
-		OrchestrationID: orchestrationID,
-		TaskIDs:         taskIDs,
-		ServiceID:       serviceID,
-		OldStatus:       oldStatus,
-		NewStatus:       newStatus,
-		Reason:          reason,
-	}
-
-	message, err := json.Marshal(statusChange)
-	if err != nil {
-		return fmt.Errorf("failed to marshal status change for orchestration %s: %w", orchestrationID, err)
-	}
-
-	lm.AppendToLog(orchestrationID, "orchestration_status_change", entryID, message, "log_manager")
-	return nil
-}
-
-func (lm *LogManager) GetOrchestrationStatus(orchestrationID string) (Status, error) {
-	lm.mu.RLock()
-	defer lm.mu.RUnlock()
-
-	state, exists := lm.orchestrations[orchestrationID]
-	if !exists {
-		return 0, fmt.Errorf("orchestration %s not found", orchestrationID)
-	}
-
-	return state.Status, nil
-}
-
-func (lm *LogManager) IsOrchestrationPaused(orchestrationID string) (bool, error) {
-	lm.mu.RLock()
-	defer lm.mu.RUnlock()
-
-	state, exists := lm.orchestrations[orchestrationID]
-	if !exists {
-		return false, fmt.Errorf("orchestration %s not found", orchestrationID)
-	}
-
-	return state.Status == Paused, nil
-}
-
-func (lm *LogManager) IsTaskPaused(orchestrationID, taskID string) bool {
-	lm.mu.RLock()
-	defer lm.mu.RUnlock()
-
-	state, exists := lm.orchestrations[orchestrationID]
-	if !exists {
-		return false
-	}
-
-	return state.TasksStatuses[taskID] == Paused
-}
-
-func (lm *LogManager) IsTaskCompleted(orchestrationID, taskID string) bool {
-	lm.mu.RLock()
-	defer lm.mu.RUnlock()
-
-	state, exists := lm.orchestrations[orchestrationID]
-	if !exists {
-		return false
-	}
-
-	return state.TasksStatuses[taskID] == Completed
 }
 
 func NewLog() *Log {

@@ -37,7 +37,6 @@ type WebSocketQueuedMessage struct {
 	Time    time.Time
 }
 
-type ServiceHealthCallback func(serviceID string, isHealthy bool)
 type ServiceFinder func(serviceID string) (*ServiceInfo, error)
 
 type WebSocketManager struct {
@@ -52,18 +51,6 @@ type WebSocketManager struct {
 	pongWait          time.Duration
 	serviceHealth     map[string]bool
 	healthMu          sync.RWMutex
-	healthCallback    ServiceHealthCallback
-	healthCallbackMu  sync.RWMutex
-}
-
-type HealthCoordinator struct {
-	plane           *ControlPlane
-	logManager      *LogManager
-	logger          zerolog.Logger
-	mu              sync.RWMutex
-	lastHealthState map[string]bool
-	pauseTimers     map[string]*time.Timer // track pause timeouts per orchestration
-	pauseTimersMu   sync.Mutex
 }
 
 type Project struct {

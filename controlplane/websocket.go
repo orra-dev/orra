@@ -216,12 +216,6 @@ func (wsm *WebSocketManager) pingRoutine(serviceID string) {
 	}
 }
 
-func (wsm *WebSocketManager) RegisterHealthCallback(callback ServiceHealthCallback) {
-	wsm.healthCallbackMu.Lock()
-	defer wsm.healthCallbackMu.Unlock()
-	wsm.healthCallback = callback
-}
-
 func (wsm *WebSocketManager) UpdateServiceHealth(serviceID string, isHealthy bool) {
 	wsm.healthMu.Lock()
 	wsm.serviceHealth[serviceID] = isHealthy

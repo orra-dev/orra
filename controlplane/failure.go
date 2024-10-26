@@ -88,15 +88,6 @@ func (f *FailureTracker) shouldProcess(entry LogEntry) bool {
 }
 
 func (f *FailureTracker) processEntry(entry LogEntry, orchestrationID string) error {
-	paused, err := f.LogManager.IsOrchestrationPaused(orchestrationID)
-	if err != nil {
-		return err
-	}
-
-	if paused {
-		return nil
-	}
-
 	// Mark this entry as processed
 	f.logState.Processed[entry.ID()] = true
 

@@ -28,8 +28,7 @@ func main() {
 	wsManager := NewWebSocketManager(app.Logger)
 	logManager := NewLogManager(ctx, LogsRetentionPeriod, plane)
 	logManager.Logger = app.Logger
-	healthCoordinator := NewHealthCoordinator(plane, logManager, app.Logger)
-	plane.Initialise(ctx, logManager, wsManager, healthCoordinator, app.Logger)
+	plane.Initialise(ctx, logManager, wsManager, app.Logger)
 
 	app.Plane = plane
 	app.Router = mux.NewRouter()
