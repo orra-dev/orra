@@ -320,7 +320,7 @@ async function retryWithBackoff(fn, retries = 0) {
 	} catch (error) {
 		if (error.statusCode === 429 && retries < MAX_RETRIES) {
 			const backoff = INITIAL_BACKOFF * Math.pow(2, retries);
-			console.log(`Rate limit hit. Retrying in ${backoff}ms...`);
+			console.error(`Rate limit hit. Retrying in ${backoff}ms...`);
 			await setTimeout(backoff);
 			return retryWithBackoff(fn, retries + 1);
 		}
@@ -351,10 +351,6 @@ export async function runAgent(opts) {
 	for (const toolCall of toolCalls) {
 		const functionName = toolCall.function.name;
 		const functionParams = JSON.parse(toolCall.function.arguments);
-		
-		console.log(`calling functionName: ${functionName}`);
-		console.log(`functionParams: ${toolCall.function.arguments}`);
-		
 		const functionResult = namesToFunctions[functionName](functionParams);
 		
 		messages.push({
@@ -374,6 +370,5 @@ export async function runAgent(opts) {
 	);
 	
 	const result = response.choices[0].message.content;
-	console.log(extractAndParseJson(result));
 	return extractAndParseJson(result);
 }

@@ -40,8 +40,6 @@ const serviceSchema = {
 
 // Task handler function
 async function handleTask(task) {
-	console.log('Received task:', task);
-	
 	// Extract the message from the task input
 	const { customerId }  = task.input;
 	
@@ -52,7 +50,6 @@ async function handleTask(task) {
 		customerAddress: "1a Goldsmiths Row, London E2 8QA"
 	};
 	
-	console.log('Sending result:', result);
 	return result;
 }
 
@@ -64,12 +61,9 @@ async function main() {
 			description: serviceDescription,
 			schema: serviceSchema
 		});
-		console.log(`${serviceName} service registered successfully`);
 		
 		// Start the task handler
 		orra.startHandler(handleTask);
-		console.log('Task handler started');
-		
 	} catch (error) {
 		console.error('Error setting up the service:', error);
 	}
