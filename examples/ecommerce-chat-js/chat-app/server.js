@@ -47,11 +47,7 @@ app.prepare().then(() => {
 	global.io = io;
 	
 	io.on('connection', (socket) => {
-		console.log('A client connected');
-		
 		socket.on('chat message', async (msg) => {
-			console.log('Message received:', msg);
-			
 			// Broadcast the message to all connected clients
 			io.emit('chat message', msg);
 			
@@ -93,7 +89,6 @@ app.prepare().then(() => {
 							'Content-Type': 'application/json'
 						}
 					});
-				console.log('External API response:', response.data);
 				io.emit('orra_plan', response.data?.plan);
 			} catch (error) {
 				console.error('Error posting to external API:', error);

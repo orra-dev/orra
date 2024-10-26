@@ -42,8 +42,6 @@ const serviceSchema = {
 
 // Task handler function
 async function handleTask(task) {
-	console.log('Received task:', task);
-	
 	// Extract the productDescription from the task input
 	const { productDescription }  = task.input;
 	
@@ -55,7 +53,6 @@ async function handleTask(task) {
 		warehouseAddress: 'Unit 1 Cairnrobin Way, Portlethen, Aberdeen AB12 4NJ'
 	};
 	
-	console.log('Sending result:', result);
 	return result;
 }
 
@@ -67,12 +64,9 @@ async function main() {
 			description: serviceDescription,
 			schema: serviceSchema
 		});
-		console.log(`${serviceName} service registered successfully`);
 		
 		// Start the task handler
 		orra.startHandler(handleTask);
-		console.log('Task handler started');
-		
 	} catch (error) {
 		console.error('Error setting up the service:', error);
 	}

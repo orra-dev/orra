@@ -1,4 +1,6 @@
 import WebSocket from 'ws';
+import { OrraLogger } from './logger.js';
+
 import { promises as fs } from 'fs';
 import path from 'path';
 
@@ -40,6 +42,7 @@ class OrraSDK {
 			...persistenceOpts
 		};
 		this.#startProcessedTasksCacheCleanup()
+		this.logger = new OrraLogger({});
 	}
 	
 	async saveServiceKey() {
@@ -95,6 +98,12 @@ class OrraSDK {
 	}) {
 		await this.loadServiceKey(); // Try to load an existing service id
 		
+		this.logger.debug('Registering service/agent', {
+			kind,
+			name,
+			existingServiceId: this.serviceId
+		});
+		
 		const response = await fetch(`${this.#apiUrl}/register/${kind}`, {
 			method: 'POST',
 			headers: {
@@ -112,17 +121,35 @@ class OrraSDK {
 		
 		if (!response.ok) {
 			const resText = await response.text()
-			throw new Error(`Failed to register ${kind} because of ${response.statusText}: ${resText}`);
+			const error = `Failed to register ${kind} because of ${response.statusText}: ${resText}`
+			this.logger.error(error, {
+				statusCode: response.status,
+				responseText: resText,
+				kind,
+				name
+			});
+			throw new Error(error);
 		}
 		
 		const data = await response.json();
 		this.serviceId = data.id;
 		if (!this.serviceId) {
-			throw new Error(`${kind} ID was not received after registration`);
+			const error = `${kind} ID was not received after registration`
+			this.logger.error(error, { response: data });
+			throw new Error(error);
 		}
 		this.version = data.version;
-		await this.saveServiceKey(); // Save the new or updated key
 		
+		this.logger.reconfigure({
+			serviceId: this.serviceId,
+			serviceVersion: this.version
+		});
+		
+		this.logger.info(`Successfully registered ${kind}`, {
+			name,
+		});
+		
+		await this.saveServiceKey(); // Save the new or updated key
 		this.#connect();
 		return this;
 	}
@@ -131,10 +158,15 @@ class OrraSDK {
 		const wsUrl = this.#apiUrl.replace('http', 'ws');
 		this.#ws = new WebSocket(`${wsUrl}/ws?serviceId=${this.serviceId}&apiKey=${this.#apiKey}`);
 		
+		this.logger.debug('Initiating WebSocket connection');
+		
 		this.#ws.onopen = () => {
 			this.#isConnected = true;
 			this.#reconnectAttempts = 0;
 			this.#reconnectInterval = 1000;
+			
+			this.logger.info('WebSocket connection established');
+			
 			this.#sendQueuedMessages();
 		};
 		
@@ -142,6 +174,7 @@ class OrraSDK {
 			const data = event.data;
 			
 			if (data === 'ping') {
+				this.logger.trace('Received ping');
 				this.#handlePing();
 				return;
 			}
@@ -149,8 +182,12 @@ class OrraSDK {
 			let parsedData;
 			try {
 				parsedData = JSON.parse(data);
+				this.logger.trace('Received message', { messageType: parsedData.type });
 			} catch (error) {
-				console.error('Failed to parse WebSocket message:', error);
+				this.logger.error('Failed to parse WebSocket message', {
+					error: error.message,
+					data
+				});
 				return;
 			}
 			
@@ -162,7 +199,9 @@ class OrraSDK {
 					this.#handleTask(parsedData);
 					break;
 				default:
-					console.warn('Received unknown message type:', parsedData.type);
+					this.logger.warn('Received unknown message type', {
+						type: parsedData.type
+					});
 			}
 		};
 		
@@ -173,23 +212,32 @@ class OrraSDK {
 			}
 			this.#pendingMessages.clear();
 			
+			const meta = {
+				code: event.code,
+				reason: event.reason,
+				wasClean: event.wasClean
+			};
+			
 			if (event.wasClean) {
-				console.log(`WebSocket closed cleanly, code=${event.code}, reason=${event.reason}`);
+				this.logger.info('WebSocket closed cleanly', meta);
 			} else {
-				console.log('WebSocket connection died');
+				this.logger.warn('WebSocket connection died', meta);
 			}
+			
 			this.#reconnect();
 		};
 		
 		this.#ws.onerror = (error) => {
-			console.error('WebSocket error:', error);
+			this.logger.error('WebSocket error', {
+				error: error.message
+			});
 		};
 	}
 	
 	#handlePing() {
-		console.log("Received PING");
+		this.logger.trace("Received PING");
 		this.#sendPong();
-		console.log("Sent PONG");
+		this.logger.trace("Sent PONG");
 	}
 	
 	#sendPong() {
@@ -199,21 +247,44 @@ class OrraSDK {
 	}
 	
 	#handleAcknowledgment(data) {
-		console.log("Acknowledged sent message", data.id);
+		this.logger.trace("Acknowledging already sent message", { msgId: data.id });
 		this.#pendingMessages.delete(data.id);
 	}
 	
 	#handleTask(task) {
+		const { id: taskId, executionId, idempotencyKey } = task;
+		
+		this.logger.trace('Task handling initiated', {
+			taskId,
+			executionId,
+			idempotencyKey,
+			handlerPresent: !!this.#taskHandler,
+			timestamp: new Date().toISOString()
+		});
+		
 		if (!this.#taskHandler) {
-			console.warn('Received task but no task handler is set');
+			this.logger.warn('Received task but no task handler is set', {
+				taskId,
+				executionId
+			});
 			return;
 		}
 		
-		const { id: taskId, executionId, idempotencyKey } = task;
+		this.logger.trace('Checking task cache', {
+			taskId,
+			idempotencyKey,
+			cacheSize: this.#processedTasksCache.size,
+			checkTimestamp: new Date().toISOString()
+		});
 		
 		const processedResult = this.#processedTasksCache.get(idempotencyKey);
 		if (processedResult) {
-			console.log(`Returning cached result for task with idempotency key: ${idempotencyKey}`);
+			this.logger.debug('Cache hit found', {
+				taskId,
+				idempotencyKey,
+				resultAge: Date.now() - processedResult.timestamp,
+				hasError: !!processedResult.error
+			});
 			this.#sendTaskResult(
 				taskId,
 				executionId,
@@ -225,10 +296,20 @@ class OrraSDK {
 			return;
 		}
 		
-		// Check our in-progress tasks
+		this.logger.trace('Checking in-progress tasks', {
+			taskId,
+			idempotencyKey,
+			inProgressCount: this.#inProgressTasks.size,
+			checkTimestamp: new Date().toISOString()
+		});
+		
 		if (this.#inProgressTasks.has(idempotencyKey)) {
-			// We're already processing this task
-			// Don't start another execution, but send an acknowledgment
+			this.logger.debug('Task already in progress', {
+				taskId,
+				idempotencyKey,
+				startTime: this.#inProgressTasks.get(idempotencyKey).startTime
+			});
+			
 			this.#sendTaskStatus(
 				taskId,
 				executionId,
@@ -239,24 +320,49 @@ class OrraSDK {
 			return;
 		}
 		
-		// New task - mark as in progress and execute
-		this.#inProgressTasks.set(idempotencyKey, {
-			startTime: Date.now()
+		const startTime = Date.now();
+		this.logger.trace('Starting new task processing', {
+			taskId,
+			executionId,
+			idempotencyKey,
+			startTime: new Date(startTime).toISOString()
 		});
+		
+		this.#inProgressTasks.set(idempotencyKey, { startTime });
 		
 		Promise.resolve(this.#taskHandler(task))
 			.then((result) => {
-				console.log(`Handled task:`, task);
+				
+				const processingTime = Date.now() - startTime;
+				this.logger.trace('Task processing completed', {
+					taskId,
+					executionId,
+					idempotencyKey,
+					processingTimeMs: processingTime,
+					resultSize: JSON.stringify(result).length
+				});
+				
 				this.#processedTasksCache.set(idempotencyKey, {
 					result,
 					error: null,
 					timestamp: Date.now()
 				});
+				
 				this.#inProgressTasks.delete(idempotencyKey);
 				this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, result);
 			})
 			.catch((error) => {
-				console.error('Error handling task:', error);
+				const processingTime = Date.now() - startTime;
+				this.logger.trace('Task processing failed', {
+					taskId,
+					executionId,
+					idempotencyKey,
+					processingTimeMs: processingTime,
+					errorType: error.constructor.name,
+					errorMessage: error.message,
+					stackTrace: error.stack
+				});
+				
 				this.#processedTasksCache.set(idempotencyKey, {
 					result: null,
 					error: error.message,
@@ -270,17 +376,25 @@ class OrraSDK {
 	
 	#reconnect() {
 		if (this.#reconnectAttempts >= this.#maxReconnectAttempts) {
-			console.log('Max reconnection attempts reached. Giving up.');
+			this.logger.error('Max reconnection attempts reached', {
+				attempts: this.#reconnectAttempts,
+				maxAttempts: this.#maxReconnectAttempts
+			});
 			return;
 		}
 		
 		this.#reconnectAttempts++;
 		const delay = Math.min(this.#reconnectInterval * Math.pow(2, this.#reconnectAttempts), this.#maxReconnectInterval);
 		
-		console.log(`Attempting to reconnect in ${delay}ms...`);
+		this.logger.info('Scheduling reconnection attempt', {
+			attempt: this.#reconnectAttempts,
+			delayMs: delay
+		});
 		
 		setTimeout(() => {
-			console.log('Reconnecting...');
+			this.logger.debug('Attempting to reconnect', {
+				attempt: this.#reconnectAttempts
+			});
 			this.#connect();
 		}, delay);
 	}
@@ -315,23 +429,36 @@ class OrraSDK {
 		const id = `message_${this.#messageId}_${message.executionId}`;
 		const wrappedMessage = { id, payload: message };
 		
-		console.log("About to send message:", id);
+		this.logger.trace('Preparing to send message', {
+			messageId: id,
+			type: message.type
+		});
+		
 		if (this.#isConnected && this.#ws.readyState === WebSocket.OPEN) {
-			
 			try {
 				this.#ws.send(JSON.stringify(wrappedMessage));
-				console.log("Sending message:", id);
+				this.logger.debug('Message sent successfully', {
+					messageId: id,
+					type: message.type
+				});
 				this.#pendingMessages.set(id, message);
 				// Set a timeout to move message back to queue if no ACK received
 				setTimeout(() => this.#handleMessageTimeout(id), 5000);
 				
 			} catch (e) {
-				console.log('Message failed to send. Queueing message:', e.message);
+				this.logger.error('Failed to send message, queueing message', {
+					messageId: id,
+					error: e.message,
+					type: message.type
+				});
 				this.#messageQueue.push(message);
 			}
-			
 		} else {
-			console.log('WebSocket is not open. Queueing message.');
+			this.logger.debug('WebSocket not ready, queueing message', {
+				messageId: id,
+				type: message.type,
+				queueLength: this.#messageQueue.length + 1
+			});
 			this.#messageQueue.push(message);
 		}
 	}
@@ -348,23 +475,39 @@ class OrraSDK {
 		while (this.#messageQueue.length > 0 && this.#isConnected && this.#ws.readyState === WebSocket.OPEN) {
 			const message = this.#messageQueue.shift();
 			this.#ws.send(JSON.stringify(message));
-			console.log('Sent queued message:', message);
+			this.logger.debug('Sent queued message', {
+				message,
+			});
 		}
 	}
 	
 	#startProcessedTasksCacheCleanup() {
 		setInterval(() => {
 			const now = Date.now();
+			let processedTasksRemoved = 0;
+			let inProgressTasksRemoved = 0;
+			
 			for (const [key, data] of this.#processedTasksCache.entries()) {
 				if (now - data.timestamp > this.#maxProcessedTasksAge) {
 					this.#processedTasksCache.delete(key);
+					processedTasksRemoved++;
 				}
 			}
 			
 			for (const [key, data] of this.#inProgressTasks.entries()) {
 				if (now - data.startTime > this.#maxInProgressAge) {
 					this.#inProgressTasks.delete(key);
+					inProgressTasksRemoved++;
 				}
+			}
+			
+			if (processedTasksRemoved > 0 || inProgressTasksRemoved > 0) {
+				this.logger.debug('Cache cleanup completed', {
+					processedTasksRemoved,
+					inProgressTasksRemoved,
+					remainingProcessedTasks: this.#processedTasksCache.size,
+					remainingInProgressTasks: this.#inProgressTasks.size
+				});
 			}
 		}, 60 * 60 * 1000); // Run cleanup every hour
 	}
@@ -380,16 +523,6 @@ class OrraSDK {
 	}
 }
 
-export function createClient(opts = {
-	orraUrl: undefined,
-	orraKey: undefined,
-	persistenceOpts: {},
-}) {
-	if (!opts?.orraUrl || !opts?.orraKey) {
-		throw "Cannot create an SDK client: ensure both a valid Orra URL and Orra API Key have been provided.";
-	}
-	return new OrraSDK(opts?.orraUrl, opts?.orraKey, opts?.persistenceOpts);
-}
 
 function extractDirectoryFromFilePath(filePath) {
 	return path.dirname(filePath);
@@ -415,11 +548,29 @@ async function createDirectoryIfNotExists(directoryPath) {
 		
 		try {
 			await fs.mkdir(directoryPath, { recursive: true });
-			console.log(`Directory ${directoryPath} created successfully.`);
+			
+			this.logger.trace('Directory created successfully', {directoryPath});
 		} catch (mkdirError) {
-			console.error(`Error creating directory ${directoryPath}:`, mkdirError);
+			this.logger.error('Error creating directory', {
+				error: mkdirError.message,
+				directoryPath
+			});
 		}
 	}catch (e) {
-		console.error(`Error creating directory ${directoryPath}:`, e);
+		this.logger.error('Error creating directory', {
+			error: e.message,
+			directoryPath
+		});
 	}
+}
+
+export const createClient = (opts = {
+	orraUrl: undefined,
+	orraKey: undefined,
+	persistenceOpts: {},
+}) => {
+	if (!opts?.orraUrl || !opts?.orraKey) {
+		throw new Error("Cannot create an SDK client: ensure both a valid Orra URL and Orra API Key have been provided.");
+	}
+	return new OrraSDK(opts?.orraUrl, opts?.orraKey, opts?.persistenceOpts);
 }

@@ -44,8 +44,6 @@ const agentSchema = {
 
 // Task handler function
 async function handleTask(task) {
-	console.log('Received task:', task);
-	
 	// Extract the message from the task input
 	const {
 		customerId,
@@ -56,7 +54,6 @@ async function handleTask(task) {
 		warehouseAddress
 	} = task.input;
 	
-	console.log('Running agent:', agentName)
 	const response = await runAgent({
 		customerId,
 		customerName,
@@ -65,7 +62,6 @@ async function handleTask(task) {
 		productAvailability,
 		warehouseAddress,
 	})
-	console.log('Agent task response:', response)
 	
 	return { response: response };
 }
@@ -78,12 +74,9 @@ async function main() {
 			description: agentDescription,
 			schema: agentSchema
 		});
-		console.log(agentName, ' registered successfully');
 		
 		// Start the task handler
 		orra.startHandler(handleTask);
-		console.log('Task handler started');
-		
 	} catch (error) {
 		console.error('Error setting up the agent:', error);
 	}
