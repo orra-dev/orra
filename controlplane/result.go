@@ -52,7 +52,7 @@ func (r *ResultAggregator) Start(ctx context.Context, orchestrationID string) {
 	}
 }
 
-func (r *ResultAggregator) PollLog(ctx context.Context, orchestrationID string, logStream *Log, entriesChan chan<- LogEntry) {
+func (r *ResultAggregator) PollLog(ctx context.Context, _ string, logStream *Log, entriesChan chan<- LogEntry) {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -70,15 +70,15 @@ func (r *ResultAggregator) PollLog(ctx context.Context, orchestrationID string, 
 				processableEntries = append(processableEntries, entry)
 				select {
 				case entriesChan <- entry:
-					r.logState.LastOffset = entry.Offset + 1
+					r.logState.LastOffset = entry.Offset() + 1
 				case <-ctx.Done():
 					return
 				}
 			}
 
-			r.LogManager.Logger.Debug().
-				Interface("entries", processableEntries).
-				Msgf("polling log entries for result aggregator in orchestration: %s", orchestrationID)
+			//r.LogManager.Logger.Debug().
+			//	Interface("entries", processableEntries).
+			//	Msgf("polling log entries for result aggregator in orchestration: %s", orchestrationID)
 
 		case <-ctx.Done():
 			return
@@ -87,17 +87,21 @@ func (r *ResultAggregator) PollLog(ctx context.Context, orchestrationID string, 
 }
 
 func (r *ResultAggregator) shouldProcess(entry LogEntry) bool {
-	_, isDependency := r.Dependencies[entry.ID]
-	return entry.Type == "task_output" && isDependency
+	_, isDependency := r.Dependencies[entry.ID()]
+	return entry.Type() == "task_output" && isDependency
 }
 
 func (r *ResultAggregator) processEntry(entry LogEntry, orchestrationID string) error {
-	if _, exists := r.logState.DependencyState[entry.ID]; exists {
+	if _, exists := r.logState.DependencyState[entry.ID()]; exists {
+		return nil
+	}
+
+	if entry.Value() == nil {
 		return nil
 	}
 
 	// Store the entry's output in our dependency state
-	r.logState.DependencyState[entry.ID] = entry.Value
+	r.logState.DependencyState[entry.ID()] = entry.Value()
 
 	if !containsAll(r.logState.DependencyState, r.Dependencies) {
 		return nil
@@ -106,7 +110,7 @@ func (r *ResultAggregator) processEntry(entry LogEntry, orchestrationID string) 
 	r.LogManager.Logger.Debug().
 		Msgf("All result aggregator dependencies have been processed for orchestration: %s", orchestrationID)
 
-	if _, err := r.LogManager.MarkTaskCompleted(orchestrationID, entry.ID); err != nil {
+	if err := r.LogManager.MarkTaskCompleted(orchestrationID, entry.ID()); err != nil {
 		return r.LogManager.AppendFailureToLog(orchestrationID, ResultAggregatorID, ResultAggregatorID, err.Error())
 	}
 

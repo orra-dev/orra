@@ -21,18 +21,14 @@ func main() {
 		log.Fatalf("could not initialise control plane server: %s", err.Error())
 	}
 
-	plane := NewControlPlane(cfg.OpenApiKey)
-	plane.Logger = app.Logger
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	plane := NewControlPlane(cfg.OpenApiKey)
 	wsManager := NewWebSocketManager(app.Logger)
 	logManager := NewLogManager(ctx, LogsRetentionPeriod, plane)
 	logManager.Logger = app.Logger
-	plane.LogManager = logManager
-	plane.WebSocketManager = wsManager
-	plane.TidyWebSocketArtefacts(ctx)
+	plane.Initialise(ctx, logManager, wsManager, app.Logger)
 
 	app.Plane = plane
 	app.Router = mux.NewRouter()

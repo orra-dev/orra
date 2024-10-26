@@ -2,6 +2,7 @@
 
 # Default values
 UPDATE_ENV=false
+CLEAN_SVC_KEYS=false
 REINSTALL_NPM=false
 RUN_SERVICES=false
 STOP_SERVICES=false
@@ -11,6 +12,7 @@ usage() {
     echo "Usage: $0 [OPTIONS]"
     echo "Options:"
     echo "  -u, --update-env     Update environment variables"
+    echo "  -c, --clean-svc-keys Clean service key files"
     echo "  -i, --install-npm    Reinstall npm packages"
     echo "  -r, --run-services   Run example services"
     echo "  -s, --stop-services  Stop all running example services"
@@ -21,6 +23,7 @@ usage() {
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         -u|--update-env) UPDATE_ENV=true ;;
+        -c|--clean-svc-keys) CLEAN_SVC_KEYS=true ;;
         -i|--install-npm) REINSTALL_NPM=true ;;
         -r|--run-services) RUN_SERVICES=true ;;
         -s|--stop-services) STOP_SERVICES=true ;;
@@ -83,6 +86,25 @@ if $UPDATE_ENV; then
                 echo "Updated $env_file"
             fi
         done
+    done
+fi
+
+# Update environment variables
+if $CLEAN_SVC_KEYS; then
+    echo "Cleaning service key files..."
+
+    for dir in "${example_dirs[@]}"; do
+        full_dir="$EXAMPLES_DIR/$dir"
+        echo "Attempting to remove service key in $full_dir"
+
+        # Clean up orra-service-key.json files
+        service_key_file="$full_dir/orra-service-key.json"
+        if [ -f "$service_key_file" ]; then
+            echo "Removing $service_key_file"
+            rm "$service_key_file"
+        else
+          echo "No service key file to remove in $full_dir"
+        fi
     done
 fi
 

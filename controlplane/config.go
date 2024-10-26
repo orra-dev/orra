@@ -16,11 +16,11 @@ const (
 	FailureTrackerID   = "failure_tracker"
 	WSPing             = "ping"
 	WSPong             = "pong"
+	MaxServiceDowntime = 30 * time.Minute
 )
 
 var (
 	LogsRetentionPeriod       = time.Hour * 24
-	MaxQueueSize              = 1000
 	DependencyPattern         = regexp.MustCompile(`^\$([^.]+)\.`)
 	WSWriteTimeOut            = time.Second * 120
 	WSMaxMessageBytes   int64 = 10 * 1024 // 10K
@@ -49,10 +49,11 @@ const (
 	Completed
 	Failed
 	NotActionable
+	Paused
 )
 
 func (s *Status) String() string {
-	return [...]string{"registered", "pending", "processing", "completed", "failed", "not-actionable"}[*s-1]
+	return [...]string{"registered", "pending", "processing", "completed", "failed", "not-actionable", "paused"}[*s-1]
 }
 
 func (s *Status) MarshalJSON() ([]byte, error) {
@@ -77,6 +78,8 @@ func (s *Status) UnmarshalJSON(data []byte) error {
 		*s = Failed
 	case "not-actionable":
 		*s = NotActionable
+	case "paused":
+		*s = Paused
 	default:
 		return fmt.Errorf("invalid Status: %+v", s)
 	}

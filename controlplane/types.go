@@ -4,10 +4,10 @@ import (
 	"container/list"
 	"context"
 	"encoding/json"
-	"net/http"
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/olahol/melody"
 	"github.com/rs/zerolog"
 )
@@ -23,6 +23,7 @@ type ControlPlane struct {
 	workerMu             sync.RWMutex
 	WebSocketManager     *WebSocketManager
 	openAIKey            string
+	mu                   sync.RWMutex
 	Logger               zerolog.Logger
 }
 
@@ -36,20 +37,20 @@ type WebSocketQueuedMessage struct {
 	Time    time.Time
 }
 
-type WebSocketCallback func(json.RawMessage, error)
+type ServiceFinder func(serviceID string) (*ServiceInfo, error)
 
 type WebSocketManager struct {
 	melody            *melody.Melody
 	logger            zerolog.Logger
 	connMap           map[string]*melody.Session
 	connMu            sync.RWMutex
-	taskCallbacks     map[string]WebSocketCallback
-	callbacksMu       sync.RWMutex
 	messageQueues     map[string]*WebSocketMessageQueue
 	messageQueuesMu   sync.RWMutex
 	messageExpiration time.Duration
 	pingInterval      time.Duration
 	pongWait          time.Duration
+	serviceHealth     map[string]bool
+	healthMu          sync.RWMutex
 }
 
 type Project struct {
@@ -59,24 +60,24 @@ type Project struct {
 }
 
 type OrchestrationState struct {
-	ID             string
-	ProjectID      string
-	Plan           *ServiceCallingPlan
-	CompletedTasks map[string]bool
-	Status         Status
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	Error          string
+	ID            string
+	ProjectID     string
+	Plan          *ServiceCallingPlan
+	TasksStatuses map[string]Status
+	Status        Status
+	CreatedAt     time.Time
+	LastUpdated   time.Time
+	Error         string
 }
 
 type LogEntry struct {
-	Offset     uint64          `json:"offset"`
-	Type       string          `json:"type"`
-	ID         string          `json:"id"`
-	Value      json.RawMessage `json:"value"`
-	Timestamp  time.Time       `json:"timestamp"`
-	ProducerID string          `json:"producer_id"`
-	AttemptNum int             `json:"attempt_num"`
+	offset     uint64
+	entryType  string
+	id         string
+	value      json.RawMessage
+	timestamp  time.Time
+	producerID string
+	attemptNum int
 }
 
 type LogManager struct {
@@ -85,7 +86,6 @@ type LogManager struct {
 	mu             sync.RWMutex
 	retention      time.Duration
 	cleanupTicker  *time.Ticker
-	webhookClient  *http.Client
 	controlPlane   *ControlPlane
 	Logger         zerolog.Logger
 }
@@ -93,8 +93,9 @@ type LogManager struct {
 type Log struct {
 	Entries       []LogEntry
 	CurrentOffset uint64
-	mu            sync.RWMutex
+	seenEntries   map[string]bool
 	lastAccessed  time.Time // For cleanup
+	mu            sync.RWMutex
 }
 
 type DependencyState map[string]json.RawMessage
@@ -114,32 +115,45 @@ type ResultAggregator struct {
 	Dependencies DependencyKeys
 	LogManager   *LogManager
 	logState     *LogState
-	stateMu      sync.Mutex
 }
 
 type FailureTracker struct {
 	LogManager *LogManager
 	logState   *LogState
-	stateMu    sync.Mutex
 }
 
 type TaskWorker struct {
-	ServiceID    string
-	TaskID       string
-	Dependencies DependencyKeys
-	LogManager   *LogManager
-	logState     *LogState
-	stateMu      sync.Mutex
+	Service         *ServiceInfo
+	TaskID          string
+	Dependencies    DependencyKeys
+	LogManager      *LogManager
+	logState        *LogState
+	backOff         *backoff.ExponentialBackOff
+	pauseStart      time.Time // Track pause duration
+	consecutiveErrs int       // Track consecutive failures
 }
 
 type Task struct {
+	Type            string          `json:"type"`
 	ID              string          `json:"id"`
 	Input           json.RawMessage `json:"input"`
 	ExecutionID     string          `json:"executionId"`
-	ServiceID       string          `json:"-"`
+	IdempotencyKey  IdempotencyKey  `json:"idempotencyKey"`
+	ServiceID       string          `json:"serviceId"`
 	OrchestrationID string          `json:"-"`
 	ProjectID       string          `json:"-"`
 	Status          Status          `json:"-"`
+}
+
+type TaskResult struct {
+	Type           string          `json:"type"`
+	TaskID         string          `json:"taskId"`
+	ExecutionID    string          `json:"executionId"`
+	ServiceID      string          `json:"serviceId"`
+	IdempotencyKey IdempotencyKey  `json:"idempotencyKey"`
+	Result         json.RawMessage `json:"result,omitempty"`
+	Error          string          `json:"error,omitempty"`
+	Status         string          `json:"status,omitempty"`
 }
 
 // Source is either user input or the subtask Id of where the value is expected from
@@ -162,13 +176,14 @@ type ServiceSchema struct {
 }
 
 type ServiceInfo struct {
-	Type        ServiceType   `json:"type"`
-	ID          string        `json:"id"`
-	Name        string        `json:"name"`
-	Description string        `json:"description"`
-	Schema      ServiceSchema `json:"schema"`
-	ProjectID   string        `json:"-"`
-	Version     int64         `json:"version"`
+	Type             ServiceType       `json:"type"`
+	ID               string            `json:"id"`
+	Name             string            `json:"name"`
+	Description      string            `json:"description"`
+	Schema           ServiceSchema     `json:"schema"`
+	ProjectID        string            `json:"-"`
+	Version          int64             `json:"version"`
+	IdempotencyStore *IdempotencyStore `json:"-"`
 }
 
 type Orchestration struct {

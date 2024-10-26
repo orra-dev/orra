@@ -20,6 +20,10 @@ class OrraSDK {
 	#isConnected = false;
 	#messageId = 0;
 	#pendingMessages = new Map();
+	#processedTasksCache = new Map();
+	#inProgressTasks = new Map();
+	#maxProcessedTasksAge = 24 * 60 * 60 * 1000; // 24 hours
+	#maxInProgressAge = 30 * 60 * 1000; // 30 minutes
 	
 	constructor(apiUrl, apiKey, persistenceOpts={}) {
 		this.#apiUrl = apiUrl;
@@ -35,6 +39,7 @@ class OrraSDK {
 			customLoad: null,
 			...persistenceOpts
 		};
+		this.#startProcessedTasksCacheCleanup()
 	}
 	
 	async saveServiceKey() {
@@ -153,7 +158,7 @@ class OrraSDK {
 				case 'ACK':
 					this.#handleAcknowledgment(parsedData);
 					break;
-				case 'task':
+				case 'task_request':
 					this.#handleTask(parsedData);
 					break;
 				default:
@@ -189,7 +194,7 @@ class OrraSDK {
 	
 	#sendPong() {
 		if (this.#isConnected && this.#ws.readyState === WebSocket.OPEN) {
-			this.#ws.send(JSON.stringify({ id: "pong", payload: { type: 'pong' } }));
+			this.#ws.send(JSON.stringify({ id: "pong", payload: { type: 'pong', serviceId: this.serviceId } }));
 		}
 	}
 	
@@ -204,16 +209,61 @@ class OrraSDK {
 			return;
 		}
 		
-		const { id: taskId, executionId } = task;
+		const { id: taskId, executionId, idempotencyKey } = task;
+		
+		const processedResult = this.#processedTasksCache.get(idempotencyKey);
+		if (processedResult) {
+			console.log(`Returning cached result for task with idempotency key: ${idempotencyKey}`);
+			this.#sendTaskResult(
+				taskId,
+				executionId,
+				this.serviceId,
+				idempotencyKey,
+				processedResult.result,
+				processedResult.error
+			);
+			return;
+		}
+		
+		// Check our in-progress tasks
+		if (this.#inProgressTasks.has(idempotencyKey)) {
+			// We're already processing this task
+			// Don't start another execution, but send an acknowledgment
+			this.#sendTaskStatus(
+				taskId,
+				executionId,
+				this.serviceId,
+				idempotencyKey,
+				'in_progress'
+			);
+			return;
+		}
+		
+		// New task - mark as in progress and execute
+		this.#inProgressTasks.set(idempotencyKey, {
+			startTime: Date.now()
+		});
 		
 		Promise.resolve(this.#taskHandler(task))
 			.then((result) => {
 				console.log(`Handled task:`, task);
-				this.#sendTaskResult(taskId, executionId, result);
+				this.#processedTasksCache.set(idempotencyKey, {
+					result,
+					error: null,
+					timestamp: Date.now()
+				});
+				this.#inProgressTasks.delete(idempotencyKey);
+				this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, result);
 			})
 			.catch((error) => {
 				console.error('Error handling task:', error);
-				this.#sendTaskResult(taskId, executionId, null, error.message);
+				this.#processedTasksCache.set(idempotencyKey, {
+					result: null,
+					error: error.message,
+					timestamp: Date.now()
+				});
+				this.#inProgressTasks.delete(idempotencyKey);
+				this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, null, error.message);
 			});
 	}
 	
@@ -235,11 +285,25 @@ class OrraSDK {
 		}, delay);
 	}
 	
-	#sendTaskResult(taskId, executionId, result, error = null) {
+	#sendTaskStatus(taskId, executionId, serviceId, idempotencyKey, status) {
+		const message = {
+			type: 'task_status',
+			taskId,
+			executionId,
+			serviceId,
+			idempotencyKey,
+			status,
+		};
+		this.#sendMessage(message);
+	}
+	
+	#sendTaskResult(taskId, executionId, serviceId, idempotencyKey, result, error = null) {
 		const message = {
 			type: 'task_result',
 			taskId,
 			executionId,
+			serviceId,
+			idempotencyKey,
 			result,
 			error
 		};
@@ -286,6 +350,23 @@ class OrraSDK {
 			this.#ws.send(JSON.stringify(message));
 			console.log('Sent queued message:', message);
 		}
+	}
+	
+	#startProcessedTasksCacheCleanup() {
+		setInterval(() => {
+			const now = Date.now();
+			for (const [key, data] of this.#processedTasksCache.entries()) {
+				if (now - data.timestamp > this.#maxProcessedTasksAge) {
+					this.#processedTasksCache.delete(key);
+				}
+			}
+			
+			for (const [key, data] of this.#inProgressTasks.entries()) {
+				if (now - data.startTime > this.#maxInProgressAge) {
+					this.#inProgressTasks.delete(key);
+				}
+			}
+		}, 60 * 60 * 1000); // Run cleanup every hour
 	}
 	
 	startHandler(handler) {

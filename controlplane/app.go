@@ -73,7 +73,9 @@ func (app *App) configureWebSocket() {
 	})
 
 	app.Plane.WebSocketManager.melody.HandleMessage(func(s *melody.Session, msg []byte) {
-		app.Plane.WebSocketManager.HandleMessage(s, msg)
+		app.Plane.WebSocketManager.HandleMessage(s, msg, func(serviceID string) (*ServiceInfo, error) {
+			return app.Plane.GetServiceByID(serviceID)
+		})
 	})
 }
 

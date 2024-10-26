@@ -20,24 +20,24 @@ func NewWebSocketManager(logger zerolog.Logger) *WebSocketManager {
 		melody:            m,
 		logger:            logger,
 		connMap:           make(map[string]*melody.Session),
-		taskCallbacks:     make(map[string]WebSocketCallback),
 		messageQueues:     make(map[string]*WebSocketMessageQueue),
 		messageExpiration: time.Hour * 24, // Keep messages for 24 hours
 		pingInterval:      m.Config.PingPeriod,
 		pongWait:          m.Config.PongWait,
+		serviceHealth:     make(map[string]bool),
 	}
 }
 
 func (wsm *WebSocketManager) HandleConnection(serviceID string, serviceName string, s *melody.Session) {
 	s.Set("serviceID", serviceID)
-	s.Set("lastPong", time.Now())
+	s.Set("lastPong", time.Now().UTC())
 
 	wsm.connMu.Lock()
 	wsm.connMap[serviceID] = s
 	wsm.connMu.Unlock()
 
-	go wsm.pingRoutine(s)
-	wsm.sendQueuedMessages(serviceID, s)
+	wsm.UpdateServiceHealth(serviceID, true)
+	go wsm.pingRoutine(serviceID)
 
 	wsm.logger.Info().
 		Str("serviceID", serviceID).
@@ -45,58 +45,22 @@ func (wsm *WebSocketManager) HandleConnection(serviceID string, serviceName stri
 		Msg("New WebSocket connection established")
 }
 
-func (wsm *WebSocketManager) sendQueuedMessages(serviceID string, s *melody.Session) {
-	wsm.messageQueuesMu.RLock()
-	queue, exists := wsm.messageQueues[serviceID]
-	wsm.messageQueuesMu.RUnlock()
-
-	if !exists {
-		return
-	}
-
-	queue.mu.Lock()
-	defer queue.mu.Unlock()
-
-	for e := queue.Front(); e != nil; e = e.Next() {
-		msg := e.Value.(*WebSocketQueuedMessage)
-		if time.Since(msg.Time) > wsm.messageExpiration {
-			queue.Remove(e)
-			continue
-		}
-
-		wsm.logger.Debug().
-			Fields(map[string]any{"serviceID": serviceID, "task": string(msg.Message)}).
-			Msg("Queueing up message for disconnected Service")
-
-		if err := s.Write(msg.Message); err != nil {
-			wsm.logger.Error().Err(err).Str("serviceID", serviceID).Msg("Failed to send queued message")
-			return
-		}
-		queue.Remove(e)
-	}
-}
-
 func (wsm *WebSocketManager) HandleDisconnection(serviceID string) {
 	wsm.connMu.Lock()
 	delete(wsm.connMap, serviceID)
 	wsm.connMu.Unlock()
 
+	wsm.UpdateServiceHealth(serviceID, false)
 	wsm.logger.Info().Str("ServiceID", serviceID).Msg("WebSocket connection closed")
 }
 
-func (wsm *WebSocketManager) HandleMessage(s *melody.Session, msg []byte) {
+func (wsm *WebSocketManager) HandleMessage(s *melody.Session, msg []byte, fn ServiceFinder) {
 	var messageWrapper struct {
 		ID      string          `json:"id"`
 		Payload json.RawMessage `json:"payload"`
 	}
 
-	var messagePayload struct {
-		Type        string          `json:"type"`
-		TaskID      string          `json:"taskId"`
-		ExecutionID string          `json:"executionId"`
-		Result      json.RawMessage `json:"result,omitempty"`
-		Error       string          `json:"error,omitempty"`
-	}
+	var messagePayload TaskResult
 
 	if err := json.Unmarshal(msg, &messageWrapper); err != nil {
 		wsm.logger.Error().Err(err).Msg("Failed to unmarshal wrapped WebSocket messageWrapper")
@@ -108,18 +72,29 @@ func (wsm *WebSocketManager) HandleMessage(s *melody.Session, msg []byte) {
 		return
 	}
 
+	switch messagePayload.Type {
+	case WSPong:
+		s.Set("lastPong", time.Now().UTC())
+		wsm.UpdateServiceHealth(messagePayload.ServiceID, true)
+	case "task_status":
+		wsm.UpdateServiceHealth(messagePayload.ServiceID, true)
+		wsm.logger.
+			Info().
+			Str("IdempotencyKey", string(messagePayload.IdempotencyKey)).
+			Str("ServiceID", messagePayload.ServiceID).
+			Str("TaskID", messagePayload.TaskID).
+			Str("ExecutionID", messagePayload.ExecutionID).
+			Msgf("Task status: %s", messagePayload.Status)
+	case "task_result":
+		wsm.UpdateServiceHealth(messagePayload.ServiceID, true)
+		wsm.handleTaskResult(messagePayload, fn)
+	default:
+		wsm.logger.Warn().Str("type", messagePayload.Type).Msg("Received unknown messageWrapper type")
+	}
+
 	if err := wsm.acknowledgeMessageReceived(s, messageWrapper.ID); err != nil {
 		wsm.logger.Error().Err(err).Msg("Failed to handle messageWrapper acknowledgement")
 		return
-	}
-
-	switch messagePayload.Type {
-	case WSPong:
-		s.Set("lastPong", time.Now())
-	case "task_result":
-		wsm.handleTaskResult(messagePayload)
-	default:
-		wsm.logger.Warn().Str("type", messagePayload.Type).Msg("Received unknown messageWrapper type")
 	}
 }
 
@@ -149,31 +124,28 @@ func (wsm *WebSocketManager) acknowledgeMessageReceived(s *melody.Session, id st
 	return nil
 }
 
-func (wsm *WebSocketManager) handleTaskResult(message struct {
-	Type        string          `json:"type"`
-	TaskID      string          `json:"taskId"`
-	ExecutionID string          `json:"executionId"`
-	Result      json.RawMessage `json:"result,omitempty"`
-	Error       string          `json:"error,omitempty"`
-}) {
-	wsm.callbacksMu.RLock()
-	callback, exists := wsm.taskCallbacks[message.ExecutionID]
-	wsm.callbacksMu.RUnlock()
-
-	if !exists {
-		wsm.logger.Error().Str("taskID", message.TaskID).Msg("No callback registered for task")
+func (wsm *WebSocketManager) handleTaskResult(message TaskResult, fn ServiceFinder) {
+	service, err := fn(message.ServiceID)
+	if err != nil {
+		wsm.logger.Error().
+			Err(err).
+			Str("serviceID", message.ServiceID).
+			Msg("Failed to get service when handling task result")
 		return
 	}
 
-	wsm.callbacksMu.Lock()
-	if message.Error != "" {
-		callback(nil, fmt.Errorf(message.Error))
-	} else {
-		callback(message.Result, nil)
-	}
-	wsm.callbacksMu.Unlock()
+	service.IdempotencyStore.UpdateExecutionResult(
+		message.IdempotencyKey,
+		message.Result,
+		parseError(message.Error),
+	)
+}
 
-	wsm.UnregisterTaskCallback(message.ExecutionID)
+func parseError(errStr string) error {
+	if errStr == "" {
+		return nil
+	}
+	return fmt.Errorf(errStr)
 }
 
 func (wsm *WebSocketManager) SendTask(serviceID string, task *Task) error {
@@ -181,124 +153,73 @@ func (wsm *WebSocketManager) SendTask(serviceID string, task *Task) error {
 	session, connected := wsm.connMap[serviceID]
 	wsm.connMu.RUnlock()
 
-	message := struct {
-		Type        string          `json:"type"`
-		ID          string          `json:"id"`
-		ExecutionID string          `json:"executionId"`
-		Input       json.RawMessage `json:"input"`
-	}{
-		Type:        "task",
-		ID:          task.ID,
-		ExecutionID: task.ExecutionID,
-		Input:       task.Input,
-	}
-
-	jsonMessage, err := json.Marshal(message)
+	message, err := json.Marshal(task)
 	if err != nil {
 		return fmt.Errorf("failed to convert message to JSON for service %s: %w", serviceID, err)
 	}
 
 	if !connected {
-		wsm.logger.Debug().
-			Fields(map[string]any{"serviceID": serviceID, "taskID": task.ID}).
-			Msg("Queueing up message for disconnected Service")
-		wsm.QueueMessage(serviceID, jsonMessage)
 		return nil
 	}
 
-	return session.Write(jsonMessage)
+	return session.Write(message)
 }
 
-func (wsm *WebSocketManager) QueueMessage(serviceID string, message []byte) {
-	wsm.messageQueuesMu.Lock()
-	queue, exists := wsm.messageQueues[serviceID]
-	if !exists {
-		queue = &WebSocketMessageQueue{List: list.New()}
-		wsm.messageQueues[serviceID] = queue
-	}
-	wsm.messageQueuesMu.Unlock()
-
-	queue.mu.Lock()
-	defer queue.mu.Unlock()
-	if queue.Len() >= MaxQueueSize {
-		wsm.logger.Warn().Str("serviceID", serviceID).Msg("Message queue full, dropping oldest message")
-		queue.Remove(queue.Front())
-	}
-	queue.PushBack(&WebSocketQueuedMessage{Message: message, Time: time.Now()})
-}
-
-func (wsm *WebSocketManager) RegisterTaskCallback(executionID string, callback WebSocketCallback) {
-	wsm.callbacksMu.Lock()
-	defer wsm.callbacksMu.Unlock()
-	wsm.taskCallbacks[executionID] = callback
-}
-
-func (wsm *WebSocketManager) UnregisterTaskCallback(executionID string) {
-	wsm.callbacksMu.Lock()
-	defer wsm.callbacksMu.Unlock()
-	delete(wsm.taskCallbacks, executionID)
-}
-
-func (wsm *WebSocketManager) pingRoutine(s *melody.Session) {
+func (wsm *WebSocketManager) pingRoutine(serviceID string) {
 	ticker := time.NewTicker(wsm.pingInterval)
 	defer ticker.Stop()
 
 	for {
-		serviceID, _ := s.Get("serviceID")
-
 		<-ticker.C
-		if s.IsClosed() {
-			wsm.logger.Info().
-				Str("ServiceID", serviceID.(string)).
-				Msg("PING/PONG no longer required for old connection")
+
+		wsm.connMu.RLock()
+		session, exists := wsm.connMap[serviceID]
+		wsm.connMu.RUnlock()
+
+		if !exists {
+			wsm.logger.Warn().
+				Str("ServiceID", serviceID).
+				Msg("Service connection has already been closed")
 			return
 		}
-		if err := s.Write([]byte(WSPing)); err != nil {
+
+		if err := session.Write([]byte(WSPing)); err != nil {
 			wsm.logger.Warn().
-				Str("ServiceID", serviceID.(string)).
+				Str("ServiceID", serviceID).
 				Err(err).
 				Msg("Failed to send ping, closing connection")
 
-			err := s.Close()
-			if err != nil {
-				wsm.logger.Warn().
-					Str("ServiceID", serviceID.(string)).
-					Err(err).
-					Msg("Failed to close connection")
+			wsm.UpdateServiceHealth(serviceID, false)
+
+			if err := session.Close(); err != nil {
 				return
 			}
 			return
 		}
 
-		lastPong, ok := s.Get("lastPong")
-		if !ok {
+		// Check for pong response
+		lastPong, ok := session.Get("lastPong")
+		if !ok || time.Since(lastPong.(time.Time)) > wsm.pongWait {
 			wsm.logger.Warn().
-				Str("ServiceID", serviceID.(string)).
-				Msg("Missing Pong, closing connection")
-			err := s.Close()
-			if err != nil {
-				wsm.logger.Warn().
-					Str("ServiceID", serviceID.(string)).
-					Err(err).Msg("Failed to close connection")
-				return
-			}
-			return
-		}
-
-		if time.Since(lastPong.(time.Time)) > wsm.pongWait {
-			wsm.logger.Warn().
-				Str("ServiceID", serviceID.(string)).
+				Str("ServiceID", serviceID).
 				Msg("Pong timeout, closing connection")
-			err := s.Close()
-			if err != nil {
-				wsm.logger.Warn().
-					Str("ServiceID", serviceID.(string)).
-					Err(err).Msg("Failed to close connection")
+
+			wsm.UpdateServiceHealth(serviceID, false)
+
+			if err := session.Close(); err != nil {
 				return
 			}
+
 			return
 		}
+		wsm.UpdateServiceHealth(serviceID, true)
 	}
+}
+
+func (wsm *WebSocketManager) UpdateServiceHealth(serviceID string, isHealthy bool) {
+	wsm.healthMu.Lock()
+	wsm.serviceHealth[serviceID] = isHealthy
+	wsm.healthMu.Unlock()
 }
 
 // CleanupExpiredMessages cleans up expired messages
@@ -320,4 +241,11 @@ func (wsm *WebSocketManager) CleanupExpiredMessages() {
 
 		wsm.logger.Debug().Str("serviceID", serviceID).Int("queueLength", queue.Len()).Msg("Cleaned up expired messages")
 	}
+}
+
+func (wsm *WebSocketManager) IsServiceHealthy(serviceID string) bool {
+	wsm.healthMu.RLock()
+	defer wsm.healthMu.RUnlock()
+	healthy, exists := wsm.serviceHealth[serviceID]
+	return exists && healthy
 }
