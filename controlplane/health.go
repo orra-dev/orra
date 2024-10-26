@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -8,11 +10,11 @@ import (
 
 func NewHealthCoordinator(plane *ControlPlane, manager *LogManager, logger zerolog.Logger) *HealthCoordinator {
 	return &HealthCoordinator{
-		plane:             plane,
-		logManager:        manager,
-		logger:            logger,
-		lastHealthState:   make(map[string]bool),
-		lastHealthRestart: make(map[string]time.Time),
+		plane:           plane,
+		logManager:      manager,
+		logger:          logger,
+		lastHealthState: make(map[string]bool),
+		pauseTimers:     make(map[string]*time.Timer),
 	}
 }
 
@@ -27,90 +29,152 @@ func (h *HealthCoordinator) handleServiceHealthChange(serviceID string, isHealth
 		return
 	}
 
-	//if updateTime, exists := h.lastHealthRestart[serviceID]; exists && time.Since(updateTime) < 30*time.Second {
-	//	return
-	//}
-
-	h.logger.Debug().
-		Str("ProjectID", service.ProjectID).
-		Str("serviceID", service.ID).
-		Str("serviceName", service.Name).
-		Bool("NewHealth", isHealthy).
-		Msg("Health change detected")
-
 	h.lastHealthState[serviceID] = isHealthy
+	orchestrationsAndTasks := h.GetActiveOrchestrationsAndTasksForService(service)
+	h.logger.Debug().
+		Interface("orchestrationsAndTasks", orchestrationsAndTasks).
+		Msg("active orchestrations and tasks for service")
 
 	if !isHealthy {
+		// Mark orchestrations as paused, stop workers
+		h.logManager.UpdateActiveOrchestrations(
+			orchestrationsAndTasks,
+			serviceID,
+			"service_unhealthy",
+			Processing,
+			Paused,
+		)
+		h.stopTasks(orchestrationsAndTasks)
+
+		// Start timeout timers for each paused orchestration
+		for orchestrationID := range orchestrationsAndTasks {
+			h.startPauseTimeout(orchestrationID, serviceID)
+		}
 		return
 	}
 
-	//orchestrationsAndTasks := h.GetActiveOrchestrationsAndTasksForService(service)
-	//h.restartOrchestrationTasks(orchestrationsAndTasks)
-	//h.restartOrchestrationTasks(service)
-	//h.lastHealthRestart[serviceID] = time.Now().UTC()
+	// Service is healthy again - restart tasks with clean state
+	h.logManager.UpdateActiveOrchestrations(
+		orchestrationsAndTasks,
+		serviceID,
+		"service_healthy",
+		Paused,
+		Processing,
+	)
+
+	// Cancel timeout timers
+	for orchestrationID := range orchestrationsAndTasks {
+		h.cancelPauseTimeout(orchestrationID)
+	}
+
+	h.restartTasks(orchestrationsAndTasks)
 }
 
-//func (h *HealthCoordinator) GetActiveOrchestrationsAndTasksForService(service *ServiceInfo) map[string]map[string]SubTask {
-//	h.mu.RLock()
-//	defer h.mu.RUnlock()
-//
-//	return h.logManager.GetActiveOrchestrationsWithTasks(service)
-//}
+func (h *HealthCoordinator) GetActiveOrchestrationsAndTasksForService(service *ServiceInfo) map[string]map[string]SubTask {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 
-//func (h *HealthCoordinator) restartOrchestrationTasks(orchestrationsAndTasks map[string]map[string]SubTask) {
-//	h.mu.Lock()
-//	defer h.mu.Unlock()
-//
-//	for orchestrationID, tasks := range orchestrationsAndTasks {
-//		for _, task := range tasks {
-//			completed, err := h.logManager.IsTaskCompleted(orchestrationID, task.ID)
-//			if err != nil {
-//				h.logger.Error().
-//					Err(err).
-//					Str("orchestrationID", orchestrationID).
-//					Str("taskID", task.ID).
-//					Msg("failed to check if task is completed during restart - continuing")
-//			}
-//
-//			if !completed {
-//				h.restartTask(orchestrationID, task)
-//			}
-//		}
-//	}
-//}
+	return h.logManager.GetActiveOrchestrationsWithTasks(service.ProjectID, service.ID)
+}
 
-func (h *HealthCoordinator) restartOrchestrationTasks(service *ServiceInfo) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	orchestrationsWithTasks := h.logManager.GetActiveOrchestrationsWithTasks(service.ProjectID, service.ID)
-	h.logger.Debug().Interface("orchestrationsWithTasks", orchestrationsWithTasks).Msg("tasks for restarting")
-
-	for orchestrationID, tasks := range orchestrationsWithTasks {
+func (h *HealthCoordinator) stopTasks(orchestrationsAndTasks map[string]map[string]SubTask) {
+	for orchestrationID, tasks := range orchestrationsAndTasks {
 		for _, task := range tasks {
-			completed, err := h.logManager.IsTaskCompleted(orchestrationID, task.ID)
-			if err != nil {
-				h.logger.Error().
-					Err(err).
-					Str("orchestrationID", orchestrationID).
-					Str("taskID", task.ID).
-					Msg("failed to check if task is completed during restart - continuing")
+			completed := h.logManager.IsTaskCompleted(orchestrationID, task.ID)
+			if completed {
 				continue
 			}
+			h.logger.Debug().
+				Str("orchestrationID", orchestrationID).
+				Str("taskID", task.ID).
+				Msg("Stopping task")
 
-			if !completed {
-				h.restartTask(orchestrationID, task)
-			}
+			h.plane.StopTaskWorker(orchestrationID, task.ID)
 		}
 	}
 }
 
-func (h *HealthCoordinator) restartTask(orchestrationID string, task SubTask) {
-	h.logger.Debug().
-		Str("orchestrationID", orchestrationID).
-		Str("taskID", task.ID).
-		Msg("Restarting task")
+func (h *HealthCoordinator) restartTasks(orchestrationsAndTasks map[string]map[string]SubTask) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
-	h.plane.StopTaskWorker(orchestrationID, task.ID)
-	h.plane.CreateAndStartTaskWorker(orchestrationID, task)
+	for orchestrationID, tasks := range orchestrationsAndTasks {
+		for _, task := range tasks {
+			completed := h.logManager.IsTaskCompleted(orchestrationID, task.ID)
+			if completed {
+				continue
+			}
+			h.logger.Debug().
+				Str("orchestrationID", orchestrationID).
+				Str("taskID", task.ID).
+				Msg("Restarting task")
+
+			h.plane.CreateAndStartTaskWorker(orchestrationID, task)
+		}
+	}
+}
+
+func (h *HealthCoordinator) startPauseTimeout(orchestrationID, serviceID string) {
+	h.pauseTimersMu.Lock()
+	defer h.pauseTimersMu.Unlock()
+
+	// Cancel existing timer if any
+	if timer, exists := h.pauseTimers[orchestrationID]; exists {
+		timer.Stop()
+	}
+
+	// Start new timeout timer
+	h.pauseTimers[orchestrationID] = time.AfterFunc(MaxServiceDowntime, func() {
+		h.handlePauseTimeout(orchestrationID, serviceID)
+	})
+}
+
+func (h *HealthCoordinator) cancelPauseTimeout(orchestrationID string) {
+	h.pauseTimersMu.Lock()
+	defer h.pauseTimersMu.Unlock()
+
+	if timer, exists := h.pauseTimers[orchestrationID]; exists {
+		timer.Stop()
+		delete(h.pauseTimers, orchestrationID)
+	}
+}
+
+func (h *HealthCoordinator) handlePauseTimeout(orchestrationID, serviceID string) {
+	h.pauseTimersMu.Lock()
+	delete(h.pauseTimers, orchestrationID)
+	h.pauseTimersMu.Unlock()
+
+	h.logger.Error().
+		Str("orchestrationID", orchestrationID).
+		Str("serviceID", serviceID).
+		Dur("timeout", MaxServiceDowntime).
+		Msg("Service remained unhealthy beyond maximum pause duration")
+
+	reason := fmt.Sprintf("Service %s remained unhealthy beyond maximum duration of %v",
+		serviceID, MaxServiceDowntime)
+
+	// Mark orchestration as failed
+	marshaledReason, _ := json.Marshal(reason)
+	if err := h.logManager.FinalizeOrchestration(
+		orchestrationID,
+		Failed,
+		marshaledReason,
+		nil,
+	); err != nil {
+		h.logger.Error().
+			Err(err).
+			Str("orchestrationID", orchestrationID).
+			Msg("Failed to finalize timed out orchestration")
+	}
+}
+
+// Shutdown Clean up on shutdown
+func (h *HealthCoordinator) Shutdown() {
+	h.pauseTimersMu.Lock()
+	defer h.pauseTimersMu.Unlock()
+
+	for _, timer := range h.pauseTimers {
+		timer.Stop()
+	}
+	h.pauseTimers = make(map[string]*time.Timer)
 }

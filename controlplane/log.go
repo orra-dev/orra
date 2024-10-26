@@ -192,16 +192,8 @@ func (lm *LogManager) GetActiveOrchestrationsWithTasks(projectID, serviceID stri
 	defer lm.mu.RUnlock()
 	out := make(map[string]map[string]SubTask)
 
-	lm.Logger.Debug().Interface("lm.orchestrations", lm.orchestrations).Msg("current orchestrations")
-
 	for oID, o := range lm.orchestrations {
-		lm.Logger.Debug().
-			Str("oID", oID).
-			Str("projectID", projectID).
-			Str("o.ProjectID", o.ProjectID).
-			Str("o.Status", o.Status.String()).
-			Msg("current orchestrations")
-		if projectID == o.ProjectID && o.Status != Completed {
+		if projectID == o.ProjectID && (o.Status == Processing || o.Status == Paused) {
 			out[oID] = o.GetSubTasksFor(serviceID)
 		}
 	}
@@ -325,16 +317,16 @@ func (lm *LogManager) IsTaskPaused(orchestrationID, taskID string) bool {
 	return state.TasksStatuses[taskID] == Paused
 }
 
-func (lm *LogManager) IsTaskCompleted(orchestrationID, taskID string) (bool, error) {
+func (lm *LogManager) IsTaskCompleted(orchestrationID, taskID string) bool {
 	lm.mu.RLock()
 	defer lm.mu.RUnlock()
 
 	state, exists := lm.orchestrations[orchestrationID]
 	if !exists {
-		return false, fmt.Errorf("orchestration %s not found", orchestrationID)
+		return false
 	}
 
-	return state.TasksStatuses[taskID] == Completed, nil
+	return state.TasksStatuses[taskID] == Completed
 }
 
 func NewLog() *Log {

@@ -96,6 +96,10 @@ func (r *ResultAggregator) processEntry(entry LogEntry, orchestrationID string) 
 		return nil
 	}
 
+	if entry.Value() == nil {
+		return nil
+	}
+
 	// Store the entry's output in our dependency state
 	r.logState.DependencyState[entry.ID()] = entry.Value()
 

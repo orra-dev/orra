@@ -60,6 +60,11 @@ func (w *TaskWorker) Start(ctx context.Context, orchestrationID string) {
 		return
 	}
 
+	go func() {
+		<-ctx.Done()
+		w.Stop(orchestrationID)
+	}()
+
 	// Channel to receive new log entries
 	entriesChan := make(chan LogEntry, 100)
 
@@ -159,17 +164,8 @@ func (w *TaskWorker) executeTaskWithRetry(ctx context.Context, orchestrationID s
 	var consecutiveFailures int
 
 	operation := func() error {
-		// Check service health
-		isHealthy := w.LogManager.controlPlane.WebSocketManager.IsServiceHealthy(w.Service.ID)
-
-		// Reset backoff if service transitioned from unhealthy to healthy
-		if isHealthy && !w.lastHealthy {
-			w.backOff.Reset()
-			consecutiveFailures = 0
-		}
-		w.lastHealthy = isHealthy
-
-		if !isHealthy {
+		// Simple health check before attempting execution
+		if !w.LogManager.controlPlane.WebSocketManager.IsServiceHealthy(w.Service.ID) {
 			return RetryableError{Err: fmt.Errorf("service %s is not healthy", w.Service.ID)}
 		}
 
@@ -218,23 +214,22 @@ func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string) (j
 		return nil, fmt.Errorf("failed to initialize execution: %w", err)
 	}
 
-	// If there's an existing execution
 	if !isNewExecution {
 		switch result.State {
 		case ExecutionCompleted:
 			return result.Result, nil
 		case ExecutionFailed:
 			return nil, result.Error
-		case ExecutionInProgress:
-			// Wait for the existing execution
-			return w.waitForResultWithHealthCheck(ctx, idempotencyKey)
+		case ExecutionPaused:
+			// Handle paused execution - will be resumed by InitializeExecution
+			break
 		}
 	}
 
 	// Start lease renewal goroutine
 	renewalCtx, cancelRenewal := context.WithCancel(ctx)
 	defer cancelRenewal()
-	go w.renewLeaseWithHealthCheck(renewalCtx, idempotencyKey, executionID)
+	go w.renewLeaseWithHealthCheck(renewalCtx, orchestrationID, idempotencyKey, executionID)
 
 	input, err := mergeValueMapsToJson(w.logState.DependencyState)
 	if err != nil {
@@ -254,13 +249,13 @@ func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string) (j
 	}
 
 	if err := w.LogManager.controlPlane.WebSocketManager.SendTask(w.Service.ID, task); err != nil {
-		return nil, fmt.Errorf("failed to send task %s for service %s: %w", task.ID, w.Service.ID, err)
+		return nil, RetryableError{Err: fmt.Errorf("failed to send task %s for service %s: %w", task.ID, w.Service.ID, err)}
 	}
 
 	return w.waitForResultWithHealthCheck(ctx, idempotencyKey)
 }
 
-func (w *TaskWorker) renewLeaseWithHealthCheck(ctx context.Context, key IdempotencyKey, executionID string) {
+func (w *TaskWorker) renewLeaseWithHealthCheck(ctx context.Context, orchestrationID string, key IdempotencyKey, executionID string) {
 	ticker := time.NewTicker(defaultLeaseDuration / 2)
 	defer ticker.Stop()
 
@@ -269,7 +264,7 @@ func (w *TaskWorker) renewLeaseWithHealthCheck(ctx context.Context, key Idempote
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			// Check service health before renewing lease
+			// Don't renew lease if service is unhealthy
 			if !w.LogManager.controlPlane.WebSocketManager.IsServiceHealthy(w.Service.ID) {
 				w.LogManager.Logger.Debug().
 					Str("TaskID", w.TaskID).
@@ -277,6 +272,15 @@ func (w *TaskWorker) renewLeaseWithHealthCheck(ctx context.Context, key Idempote
 				return
 			}
 
+			// Check if task is paused
+			if w.isTaskPaused(orchestrationID) {
+				w.LogManager.Logger.Debug().
+					Str("TaskID", w.TaskID).
+					Msg("Stopping lease renewal due to paused task")
+				return
+			}
+
+			// Renew lease only if still the active execution
 			if !w.Service.IdempotencyStore.RenewLease(key, executionID) {
 				return
 			}
@@ -293,29 +297,51 @@ func (w *TaskWorker) waitForResultWithHealthCheck(ctx context.Context, key Idemp
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, nil
+			// Context cancelled - mark execution as paused and stop holding lease
+			w.Service.IdempotencyStore.PauseExecution(key)
+			return nil, ctx.Err()
+
 		case <-maxWait:
 			return nil, RetryableError{Err: fmt.Errorf("task execution timed out waiting for result")}
+
 		case <-ticker.C:
 			// Check service health first
 			if !w.LogManager.controlPlane.WebSocketManager.IsServiceHealthy(w.Service.ID) {
+				// Service is unhealthy - mark execution as paused and stop holding lease
+				w.Service.IdempotencyStore.PauseExecution(key)
 				return nil, RetryableError{Err: fmt.Errorf("service %s is not healthy", w.Service.ID)}
 			}
 
-			if result, exists := w.Service.IdempotencyStore.GetExecutionWithResult(key); exists {
-				switch result.State {
-				case ExecutionCompleted:
-					return result.Result, nil
-				case ExecutionFailed:
-					return nil, result.Error
-				case ExecutionInProgress:
-					if time.Now().After(result.LeaseExpiry) {
-						return nil, RetryableError{Err: fmt.Errorf("execution lease expired while waiting")}
-					}
+			result, exists := w.Service.IdempotencyStore.GetExecutionWithResult(key)
+			if !exists {
+				return nil, RetryableError{Err: fmt.Errorf("execution not found")}
+			}
+
+			switch result.State {
+			case ExecutionCompleted:
+				return result.Result, nil
+
+			case ExecutionFailed:
+				return nil, result.Error
+
+			case ExecutionInProgress:
+				if time.Now().After(result.LeaseExpiry) {
+					// Don't hold expired leases
+					w.Service.IdempotencyStore.PauseExecution(key)
+					return nil, RetryableError{Err: fmt.Errorf("execution lease expired while waiting")}
 				}
+				continue
+
+			case ExecutionPaused:
+				// Allow retrying if execution was paused
+				return nil, RetryableError{Err: fmt.Errorf("execution is paused")}
 			}
 		}
 	}
+}
+
+func (w *TaskWorker) isTaskPaused(orchestrationID string) bool {
+	return w.LogManager.IsTaskPaused(orchestrationID, w.TaskID)
 }
 
 func mergeValueMapsToJson(src map[string]json.RawMessage) (json.RawMessage, error) {
@@ -345,7 +371,7 @@ func isRetryableError(err error) bool {
 	// Otherwise check error message patterns
 	errorMsg := strings.ToLower(err.Error())
 	return strings.Contains(errorMsg, "task execution timed out") ||
-		strings.Contains(errorMsg, "failed to send task") ||
+		//strings.Contains(errorMsg, "failed to send task") ||
 		strings.Contains(errorMsg, "failed to read result") ||
 		strings.Contains(errorMsg, "rate limit exceeded")
 }
@@ -370,4 +396,14 @@ func (w *TaskWorker) sortedInputs() []string {
 	}
 	sort.Strings(inputs)
 	return inputs
+}
+
+func (w *TaskWorker) Stop(orchestrationID string) {
+	key := w.generateIdempotencyKey(orchestrationID)
+	w.Service.IdempotencyStore.PauseExecution(key)
+	w.LogManager.Logger.Debug().
+		Str("OrchestrationID", orchestrationID).
+		Str("TaskID", w.TaskID).
+		Str("IdempotencyKey", string(key)).
+		Msg("paused execution for task")
 }

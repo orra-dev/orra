@@ -16,6 +16,7 @@ const (
 	FailureTrackerID   = "failure_tracker"
 	WSPing             = "ping"
 	WSPong             = "pong"
+	MaxServiceDowntime = 30 * time.Minute
 )
 
 var (

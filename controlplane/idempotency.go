@@ -14,6 +14,7 @@ const (
 	ExecutionInProgress ExecutionState = iota
 	ExecutionCompleted
 	ExecutionFailed
+	ExecutionPaused
 )
 
 const (
@@ -22,7 +23,7 @@ const (
 )
 
 func (s ExecutionState) String() string {
-	return [...]string{"in_progress", "completed", "failed"}[s]
+	return [...]string{"in_progress", "completed", "failed", "paused"}[s]
 }
 
 type Execution struct {
@@ -86,20 +87,26 @@ func (s *IdempotencyStore) InitializeExecution(key IdempotencyKey, executionID s
 		switch execution.State {
 		case ExecutionCompleted, ExecutionFailed:
 			return execution, false, nil
+
+		case ExecutionPaused:
+			// Always allow taking over paused executions
+			execution.State = ExecutionInProgress
+			execution.ExecutionID = executionID
+			execution.StartedAt = now
+			execution.LeaseExpiry = now.Add(defaultLeaseDuration)
+			return execution, true, nil
+
 		case ExecutionInProgress:
 			if now.After(execution.LeaseExpiry) {
-				// Lease expired, we can take over
 				execution.ExecutionID = executionID
 				execution.StartedAt = now
 				execution.LeaseExpiry = now.Add(defaultLeaseDuration)
 				return execution, true, nil
 			}
-			// Execution is still valid and in progress
 			return execution, false, nil
 		}
 	}
 
-	// New execution
 	newExecution := &Execution{
 		ExecutionID: executionID,
 		State:       ExecutionInProgress,
@@ -109,6 +116,20 @@ func (s *IdempotencyStore) InitializeExecution(key IdempotencyKey, executionID s
 	}
 	s.executions[key] = newExecution
 	return newExecution, true, nil
+}
+
+func (s *IdempotencyStore) PauseExecution(key IdempotencyKey) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if execution, exists := s.executions[key]; exists {
+		if execution.State == ExecutionInProgress {
+			execution.State = ExecutionPaused
+			// Clear the lease when pausing
+			execution.LeaseExpiry = time.Time{} // Zero time
+			execution.ExecutionID = ""          // Clear execution ID
+		}
+	}
 }
 
 func (s *IdempotencyStore) RenewLease(key IdempotencyKey, executionID string) bool {
