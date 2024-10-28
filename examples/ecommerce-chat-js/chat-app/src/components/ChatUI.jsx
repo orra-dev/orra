@@ -18,8 +18,17 @@ export default function ChatUI() {
 				setMessages(prevMessages => [...prevMessages, msg])
 			})
 			
+			socket.on('orra_err', (data) => {
+				const orraMessage = {
+					id: Date.now(),
+					content: data,
+					sender: 'orra_platform',
+					isJson: false
+				}
+				setMessages(prevMessages => [...prevMessages, orraMessage])
+			})
+			
 			socket.on('webhook_data', (data) => {
-				console.log('Received webhook_data', data)
 				const orraMessage = {
 					id: Date.now(),
 					content: data,
@@ -30,7 +39,6 @@ export default function ChatUI() {
 			})
 			
 			socket.on('orra_plan', (data) => {
-				console.log('Received orra_plan', data)
 				const orraMessage = {
 					id: Date.now(),
 					content: data,

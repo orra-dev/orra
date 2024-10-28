@@ -204,7 +204,12 @@ func (app *App) OrchestrationsHandler(w http.ResponseWriter, r *http.Request) {
 			Debug().
 			Str("Status", orchestration.Status.String()).
 			Msgf("Orchestration %s cannot be executed: %s", orchestration.ID, orchestration.Error)
-		w.WriteHeader(http.StatusUnprocessableEntity)
+
+		if orchestration.Status == NotActionable {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
 	} else {
 		app.Logger.Debug().Msgf("About to execute orchestration %s", orchestration.ID)
 		go app.Plane.ExecuteOrchestration(&orchestration)

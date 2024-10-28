@@ -91,7 +91,11 @@ app.prepare().then(() => {
 					});
 				io.emit('orra_plan', response.data?.plan);
 			} catch (error) {
-				console.error('Error posting to external API:', error);
+				if (error.response && error.response.status === 422) {
+					io.emit('orra_err', "Sorry, I can't help with that. 😐");
+				}else {
+					console.error('Error posting to external API:', error);
+				}
 			}
 		});
 		
