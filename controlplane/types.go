@@ -58,9 +58,10 @@ type WebSocketManager struct {
 }
 
 type Project struct {
-	ID      string `json:"id"`
-	APIKey  string `json:"apiKey"`
-	Webhook string `json:"webhook"`
+	ID                string   `json:"id"`
+	APIKey            string   `json:"apiKey"`
+	AdditionalAPIKeys []string `json:"additionalAPIKeys"`
+	Webhook           string   `json:"webhook"`
 }
 
 type OrchestrationState struct {

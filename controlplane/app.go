@@ -39,6 +39,7 @@ func NewApp(cfg Config, args []string) (*App, error) {
 
 func (app *App) configureRoutes() *App {
 	app.Router.HandleFunc("/register/project", app.RegisterProject).Methods("POST")
+	app.Router.HandleFunc("/apikey", app.APIKeyMiddleware(app.CreateApiKey)).Methods("POST")
 	app.Router.HandleFunc("/register/service", app.APIKeyMiddleware(app.RegisterService)).Methods("POST")
 	app.Router.HandleFunc("/orchestrations", app.APIKeyMiddleware(app.OrchestrationsHandler)).Methods("POST")
 	app.Router.HandleFunc("/register/agent", app.APIKeyMiddleware(app.RegisterAgent)).Methods("POST")
@@ -249,6 +250,31 @@ func (app *App) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	if err := app.Plane.WebSocketManager.melody.HandleRequest(w, r); err != nil {
 		app.Logger.Error().Str("serviceID", serviceID).Msg("Failed to handle request using the WebSocket")
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
+		return
+	}
+}
+
+func (app *App) CreateApiKey(w http.ResponseWriter, r *http.Request) {
+	apiKey := r.Context().Value("api_key").(string)
+	project, err := app.Plane.GetProjectByApiKey(apiKey)
+	if err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
+		return
+	}
+
+	// Generate new API key
+	newApiKey := uuid.New().String()
+
+	// Associate new API key with project
+	// Note: Would need to modify Project struct to support multiple API keys
+	project.AdditionalAPIKeys = append(project.AdditionalAPIKeys, newApiKey)
+
+	// Return the new key
+	w.WriteHeader(http.StatusCreated)
+	if err := json.NewEncoder(w).Encode(map[string]string{
+		"apiKey": newApiKey,
+	}); err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
 		return
 	}

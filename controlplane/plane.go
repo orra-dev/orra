@@ -133,16 +133,21 @@ func (p *ControlPlane) GetServiceName(projectID string, serviceID string) (strin
 }
 
 func (p *ControlPlane) GetProjectByApiKey(key string) (*Project, error) {
-	apiKeyToProjectID := make(map[string]string)
-	for id, project := range p.projects {
-		apiKeyToProjectID[project.APIKey] = id
+	for _, project := range p.projects {
+		if project.APIKey == key || contains(project.AdditionalAPIKeys, key) {
+			return project, nil
+		}
 	}
+	return nil, fmt.Errorf("no project found with the given API key: %s", key)
+}
 
-	if projectID, exists := apiKeyToProjectID[key]; exists {
-		return p.projects[projectID], nil
-	} else {
-		return nil, fmt.Errorf("no project found with the given API key: %s", key)
+func contains(entries []string, v string) bool {
+	for _, e := range entries {
+		if e == v {
+			return true
+		}
 	}
+	return false
 }
 
 func (p *ControlPlane) ServiceBelongsToProject(svcID, projectID string) bool {
