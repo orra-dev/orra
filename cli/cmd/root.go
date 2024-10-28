@@ -3,7 +3,9 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"time"
 
+	"github.com/ezodude/orra/cli/internal/api"
 	"github.com/ezodude/orra/cli/internal/config"
 	"github.com/spf13/cobra"
 )
@@ -12,6 +14,7 @@ type CliOpts struct {
 	Config     *config.Config
 	ConfigPath string
 	ProjectID  string // For project override via flag
+	ApiClient  *api.Client
 }
 
 func NewOrraCommand(opts *CliOpts) *cobra.Command {
@@ -30,11 +33,12 @@ Command line interface for interacting with Orra Control Plane.`,
 				return nil
 			}
 
-			cfg, err := config.LoadOrInit(opts.ConfigPath)
+			cfg, configPath, err := config.LoadOrInit(opts.ConfigPath)
 			if err != nil {
 				return fmt.Errorf("failed to initialize config: %w", err)
 			}
 			opts.Config = cfg
+			opts.ConfigPath = configPath
 			return nil
 		},
 	}
@@ -54,7 +58,10 @@ Command line interface for interacting with Orra Control Plane.`,
 }
 
 func Execute() {
-	opts := &CliOpts{}
+	opts := &CliOpts{
+		ApiClient: api.NewClient().Timeout(30 * time.Second),
+	}
+
 	rootCmd := NewOrraCommand(opts)
 
 	if err := rootCmd.Execute(); err != nil {

@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
+	"net/url"
 
 	"github.com/ezodude/orra/cli/internal/config"
 	"github.com/spf13/cobra"
@@ -25,23 +27,44 @@ func newProjectCreateCmd(opts *CliOpts) *cobra.Command {
 	var serverAddr string
 
 	cmd := &cobra.Command{
-		Use:   "create [project-id] --webhook [webhook-url]",
+		Use:   "create [name] --webhook [webhook-url]",
 		Short: "Create a new project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			projectID := args[0]
+			projectName := args[0]
 			webhook, _ := cmd.Flags().GetString("webhook")
-			fmt.Printf("Creating project %s with webhook: %s\n", projectID, webhook)
 
-			// TODO: Call API to create project and get API key
-			apiKey := "dummy-api-key"
-
-			if err := config.SaveProject(opts.ConfigPath, projectID, apiKey, serverAddr); err != nil {
-				return fmt.Errorf("failed to save project: %w", err)
+			_, err := url.Parse(webhook)
+			if err != nil {
+				return fmt.Errorf("project name %s already exists", projectName)
 			}
 
-			fmt.Printf("Project %s created successfully\n", projectID)
-			fmt.Printf("API Key: %s\n", apiKey)
+			if serverAddr == "" {
+				serverAddr = "http://localhost:8005"
+			}
+
+			// Check if project name already exists
+			if _, exists := opts.Config.Projects[projectName]; exists {
+				return fmt.Errorf("project name %s already exists", projectName)
+			}
+
+			// Create project in control plane
+			client := opts.ApiClient.BaseUrl(serverAddr)
+			ctx, cancel := context.WithTimeout(cmd.Context(), client.GetTimeout())
+			defer cancel()
+
+			project, err := client.CreateProject(ctx, webhook)
+			if err != nil {
+				return fmt.Errorf("failed to create project: %w", err)
+			}
+
+			// Save project with user-friendly name mapping to control plane UUID
+			if err := config.SaveProject(opts.ConfigPath, projectName, project.ID, project.APIKey, serverAddr); err != nil {
+				return fmt.Errorf("failed to save project config: %w", err)
+			}
+
+			fmt.Printf("Project %s created successfully (ID: %s)\n", projectName, project.ID)
+			fmt.Printf("API Key: %s\n", project.APIKey)
 			return nil
 		},
 	}
@@ -64,12 +87,12 @@ func newProjectListCmd(opts *CliOpts) *cobra.Command {
 			}
 
 			fmt.Printf("Current project: %s\n\n", opts.Config.CurrentProject)
-			for id, proj := range opts.Config.Projects {
+			for name, proj := range opts.Config.Projects {
 				current := " "
-				if id == opts.Config.CurrentProject {
+				if name == opts.Config.CurrentProject {
 					current = "*"
 				}
-				fmt.Printf("%s %s\n  Server: %s\n", current, id, proj.ServerAddr)
+				fmt.Printf("%s %s\n  ID: %s\n  Server: %s\n", current, name, proj.ID, proj.ServerAddr)
 			}
 			return nil
 		},
@@ -78,22 +101,22 @@ func newProjectListCmd(opts *CliOpts) *cobra.Command {
 
 func newProjectUseCmd(opts *CliOpts) *cobra.Command {
 	return &cobra.Command{
-		Use:   "use [project-id]",
+		Use:   "use [name]",
 		Short: "Set the current project",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			projectID := args[0]
+			projectName := args[0]
 
-			if _, exists := opts.Config.Projects[projectID]; !exists {
-				return fmt.Errorf("project %s not found", projectID)
+			if _, exists := opts.Config.Projects[projectName]; !exists {
+				return fmt.Errorf("project %s not found", projectName)
 			}
 
-			opts.Config.CurrentProject = projectID
+			opts.Config.CurrentProject = projectName
 			if err := config.SaveConfig(opts.ConfigPath, opts.Config); err != nil {
 				return fmt.Errorf("failed to save config: %w", err)
 			}
 
-			fmt.Printf("Now using project: %s\n", projectID)
+			fmt.Printf("Now using project: %s\n", projectName)
 			return nil
 		},
 	}
