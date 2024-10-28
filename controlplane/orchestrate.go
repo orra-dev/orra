@@ -7,10 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
-
-	"github.com/sashabaranov/go-openai"
 )
 
 func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
@@ -30,7 +29,32 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 		return
 	}
 
-	callingPlan, err := p.decomposeAction(orchestration, services)
+	serviceDescriptions, err := p.serviceDescriptions(services)
+	if err != nil {
+		wrappedErr := fmt.Errorf("failed to create service descriptions required for prompting: %w", err)
+		p.Logger.Error().
+			Str("OrchestrationID", orchestration.ID).
+			Err(wrappedErr)
+		orchestration.Status = Failed
+		orchestration.Error = []byte(wrappedErr.Error())
+		return
+	}
+
+	actionParams, err := orchestration.Params.Json()
+	if err != nil {
+		wrappedErr := fmt.Errorf("failed to convert action parameters to prompt friendly format: %w", err)
+		p.Logger.Error().
+			Str("OrchestrationID", orchestration.ID).
+			Err(wrappedErr)
+		orchestration.Status = Failed
+		orchestration.Error = []byte(wrappedErr.Error())
+		return
+	}
+
+	callingPlan, err := p.decomposeAction(
+		orchestration,
+		orchestration.Action.Content, actionParams, serviceDescriptions,
+	)
 	if err != nil {
 		p.Logger.Error().
 			Str("OrchestrationID", orchestration.ID).
@@ -133,127 +157,65 @@ func (p *ControlPlane) FinalizeOrchestration(
 	return nil
 }
 
-func (p *ControlPlane) discoverProjectServices(projectID string) ([]*ServiceInfo, error) {
-	p.servicesMu.RLock()
-	defer p.servicesMu.RUnlock()
-
-	var out []*ServiceInfo
-	projectServices, ok := p.services[projectID]
-	if !ok {
-		return nil, fmt.Errorf("no services found for project %s", projectID)
-	}
-	for _, s := range projectServices {
-		out = append(out, s)
-	}
-	return out, nil
-}
-
-func (p *ControlPlane) generateLLMPrompt(orchestration *Orchestration, services []*ServiceInfo) (string, error) {
-	serviceDescriptions := make([]string, len(services))
+func (p *ControlPlane) serviceDescriptions(services []*ServiceInfo) (string, error) {
+	out := make([]string, len(services))
 	for i, service := range services {
 		schemaStr, err := json.Marshal(service.Schema)
 		if err != nil {
 			return "", fmt.Errorf("failed to marshal service schema: %w", err)
 		}
-		serviceDescriptions[i] = fmt.Sprintf("Service ID: %s\nService Name: %s\nDescription: %s\nSchema: %s", service.ID, service.Name, service.Description, string(schemaStr))
+		out[i] = fmt.Sprintf("Service ID: %s\nService Name: %s\nDescription: %s\nSchema: %s", service.ID, service.Name, service.Description, string(schemaStr))
 	}
-
-	actionStr := orchestration.Action.Content
-
-	dataStr, err := json.Marshal(orchestration.Params)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal data: %w", err)
-	}
-
-	prompt := fmt.Sprintf(`You are an AI orchestrator tasked with planning the execution of services based on a user's action. A user's action contains PARAMS for the action to be executed, USE THEM. Your goal is to create an efficient, parallel execution plan that fulfills the user's request.
-
-Available Services:
-%s
-
-User Action: %s
-
-Action Params:
-%s
-
-Guidelines:
-1. Each service described above contains input/output types and description. You must strictly adhere to these types and descriptions when using the services.
-2. Each task in the plan should strictly use one of the available services. Follow the JSON conventions for each task.
-3. Each task MUST have a unique ID, which is strictly increasing.
-4. With the excpetion of Task 0, whose inputs are constants derived from the User Action, inputs for other tasks have to be outputs from preceding tasks. In the latter case, use the format $taskId to denote the ID of the previous task whose output will be the input.
-5. There can only be a single Task 0, other tasks HAVE TO CORRESPOND TO AVAILABLE SERVICES.
-6. Ensure the plan maximizes parallelizability.
-7. Only use the provided services.
-	- If a query cannot be addressed using these, USE A "final" TASK TO SUGGEST THE NEXT STEPS.
-		- The final task MUST have "final" as the task ID.
-		- The final task DOES NOT require a service.
-		- The final task input PARAM key should be "error" and the value should explain why the query cannot be addressed.   
-		- NO OTHER TASKS ARE REQUIRED. 
-8. Never explain the plan with comments.
-9. Never introduce new services other than the ones provided.
-
-Please generate a plan in the following JSON format:
-
-{
-  "tasks": [
-    {
-      "id": "task0",
-      "input": {
-        "param1": "value1"
-      }
-    },
-    {
-      "id": "task1",
-      "service": "ServiceID",
-      "input": {
-        "param1": "$task0.param1"
-      }
-    },
-    {
-      "id": "task2",
-      "service": "AnotherServiceID",
-      "input": {
-        "param1": "$task1.param1"
-      }
-    }
-  ],
-  "parallel_groups": [
-    ["task1"],
-    ["task2"]
-  ]
+	return strings.Join(out, "\n\n"), nil
 }
 
-Ensure that the plan is efficient, maximizes parallelization, and accurately fulfills the user's action using the available services. If the action cannot be completed with the given services, explain why in a "final" task and suggest alternatives if possible.
+func (p *ControlPlane) discoverProjectServices(projectID string) ([]*ServiceInfo, error) {
+	p.servicesMu.RLock()
+	defer p.servicesMu.RUnlock()
 
-Generate the execution plan:`,
-		strings.Join(serviceDescriptions, "\n\n"),
-		actionStr,
-		string(dataStr),
-	)
-
-	return prompt, nil
-}
-
-func (p *ControlPlane) decomposeAction(orchestration *Orchestration, services []*ServiceInfo) (*ServiceCallingPlan, error) {
-	prompt, err := p.generateLLMPrompt(orchestration, services)
-	if err != nil {
-		return nil, fmt.Errorf("error generating LLM prompt for decomposing actions: %v", err)
+	projectServices, ok := p.services[projectID]
+	if !ok {
+		return nil, fmt.Errorf("no services found for project %s", projectID)
 	}
 
-	p.Logger.Debug().
-		Str("Prompt", prompt).
-		Msg("Decompose action prompt")
+	out := make([]*ServiceInfo, 0, len(projectServices))
+	for _, s := range projectServices {
+		out = append(out, s)
+	}
 
-	client := openai.NewClient(p.openAIKey)
-	resp, err := client.CreateChatCompletion(context.Background(), openai.ChatCompletionRequest{
-		Model: openai.GPT4oLatest,
-		Messages: []openai.ChatCompletionMessage{
-			{
-				Role:    openai.ChatMessageRoleUser,
-				Content: prompt,
-			},
-		},
+	slices.SortFunc(out, func(a, b *ServiceInfo) int {
+		return strings.Compare(a.ID, b.ID)
 	})
 
+	return out, nil
+}
+
+func (p *ControlPlane) decomposeAction(orchestration *Orchestration, action string, actionParams json.RawMessage, serviceDescriptions string) (*ServiceCallingPlan, error) {
+	//client := openai.NewClient(p.openAIKey)
+	//resp, err := client.CreateChatCompletion(context.Background(), openai.ChatCompletionRequest{
+	//	Model: openai.GPT4oLatest,
+	//	Messages: []openai.ChatCompletionMessage{
+	//		{
+	//			Role:    openai.ChatMessageRoleUser,
+	//			Content: prompt,
+	//		},
+	//	},
+	//})
+	//
+	//if err != nil {
+	//	return nil, fmt.Errorf("error calling OpenAI API: %v", err)
+	//}
+	p.Logger.Trace().
+		Str("Prompt", generateLLMPrompt(action, actionParams, serviceDescriptions)).
+		Msg("Decompose action prompt using cache powered completion")
+
+	resp, cachedEntryID, _, err := p.VectorCache.Get(
+		context.Background(),
+		orchestration.ProjectID,
+		action,
+		actionParams,
+		serviceDescriptions,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("error calling OpenAI API: %v", err)
 	}
@@ -266,7 +228,8 @@ func (p *ControlPlane) decomposeAction(orchestration *Orchestration, services []
 
 	err = json.Unmarshal([]byte(sanitisedJSON), &result)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing LLM response as JSON: %v", err)
+		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
+		return nil, fmt.Errorf("error parsing LLM response as JSON: %w", err)
 	}
 
 	result.ProjectID = orchestration.ProjectID
@@ -534,12 +497,12 @@ func (s Spec) String() (string, error) {
 	return string(data), nil
 }
 
-func (a ActionParams) String() (string, error) {
+func (a ActionParams) Json() (json.RawMessage, error) {
 	data, err := json.Marshal(a)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return string(data), nil
+	return data, nil
 }
 
 func (si *ServiceInfo) String() string {

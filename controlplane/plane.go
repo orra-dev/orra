@@ -21,11 +21,17 @@ func NewControlPlane(openAIKey string) *ControlPlane {
 	return plane
 }
 
-func (p *ControlPlane) Initialise(ctx context.Context, logMgr *LogManager, wsManager *WebSocketManager, Logger zerolog.Logger) {
+func (p *ControlPlane) Initialise(ctx context.Context,
+	logMgr *LogManager,
+	wsManager *WebSocketManager,
+	vCache *VectorCache,
+	Logger zerolog.Logger) {
 	p.LogManager = logMgr
 	p.Logger = Logger
 	p.WebSocketManager = wsManager
+	p.VectorCache = vCache
 	p.TidyWebSocketArtefacts(ctx)
+	p.VectorCache.StartCleanup(ctx)
 }
 
 func (p *ControlPlane) TidyWebSocketArtefacts(ctx context.Context) {
@@ -239,7 +245,7 @@ func (o *Orchestration) IsActive() bool {
 func (s *SubTask) extractDependencies() DependencyKeys {
 	out := make(DependencyKeys)
 	for _, source := range s.Input {
-		if dep := extractDependencyID(string(source)); dep != "" {
+		if dep := extractDependencyID(source); dep != "" {
 			out[dep] = struct{}{}
 		}
 	}
@@ -248,11 +254,13 @@ func (s *SubTask) extractDependencies() DependencyKeys {
 
 // extractDependencyID extracts the task ID from a dependency reference
 // Example: "$task0.param1" returns "task0"
-func extractDependencyID(input string) string {
-	matches := DependencyPattern.FindStringSubmatch(input)
-	if len(matches) > 1 {
-		return matches[1]
+func extractDependencyID(input any) string {
+	switch val := input.(type) {
+	case string:
+		matches := DependencyPattern.FindStringSubmatch(val)
+		if len(matches) > 1 {
+			return matches[1]
+		}
 	}
-
 	return ""
 }
