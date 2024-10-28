@@ -6,57 +6,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	"github.com/sashabaranov/go-openai"
-	"golang.org/x/sync/singleflight"
 	"gonum.org/v1/gonum/mat"
 )
-
-type ParamMapping struct {
-	Task0Field  string `json:"task0Field"`              // Field name in Task0's input
-	ActionField string `json:"actionField"`             // Field name from original action params
-	Value       string `json:"originalValue,omitempty"` // Original value used to discover the mapping
-}
-
-type CacheEntry struct {
-	ID            string
-	Response      *openai.ChatCompletionResponse
-	ActionVector  *mat.VecDense
-	ServicesHash  string
-	Task0Input    json.RawMessage
-	ParamMappings []ParamMapping
-	Timestamp     time.Time
-	Action        string
-}
-
-type CacheResult struct {
-	Response      *openai.ChatCompletionResponse
-	ID            string
-	Task0Input    json.RawMessage
-	ParamMappings []ParamMapping
-	Hit           bool
-}
-
-type ProjectCache struct {
-	mu        sync.RWMutex
-	entries   []*CacheEntry
-	threshold float64
-	logger    zerolog.Logger
-}
-
-type VectorCache struct {
-	mu            sync.RWMutex
-	projectCaches map[string]*ProjectCache
-	embedder      *openai.Client
-	ttl           time.Duration
-	maxSize       int // Per project
-	group         singleflight.Group
-	logger        zerolog.Logger
-}
 
 func NewVectorCache(openAIKey string, maxSize int, ttl time.Duration, logger zerolog.Logger) *VectorCache {
 	return &VectorCache{
