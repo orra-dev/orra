@@ -178,68 +178,8 @@ func (p *ControlPlane) GetProjectIDForService(serviceID string) (string, error) 
 	return "", fmt.Errorf("no project found for service %s", serviceID)
 }
 
-func (p *ControlPlane) StopTaskWorker(orchestrationID string, taskID string) {
-	p.workerMu.Lock()
-	defer p.workerMu.Unlock()
-
-	if _, ok := p.logWorkers[orchestrationID]; !ok {
-		return
-	}
-
-	cancel, ok := p.logWorkers[orchestrationID][taskID]
-	if !ok {
-	}
-
-	cancel()
-}
-
-func (p *ControlPlane) CreateAndStartTaskWorker(orchestrationID string, task SubTask) {
-	p.workerMu.Lock()
-	defer p.workerMu.Unlock()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	p.logWorkers[orchestrationID][task.ID] = cancel
-
-	service, err := p.GetServiceByID(task.Service)
-	if err != nil {
-		p.Logger.Error().Err(err).
-			Str("taskID", task.ID).
-			Str("ServiceID", task.Service).
-			Msg("Failed to get service for task")
-		return
-	}
-
-	worker := NewTaskWorker(
-		service,
-		task.ID,
-		task.extractDependencies(),
-		p.LogManager)
-	go worker.Start(ctx, orchestrationID)
-}
-
-func (o *Orchestration) GetSubTasksFor(serviceID string) map[string]SubTask {
-	out := map[string]SubTask{}
-	for _, subTask := range o.Plan.Tasks {
-		if strings.EqualFold(subTask.Service, serviceID) {
-			out[subTask.ID] = SubTask{
-				ID:             subTask.ID,
-				Service:        subTask.Service,
-				ServiceDetails: subTask.ServiceDetails,
-				Input:          subTask.Input,
-				Status:         subTask.Status,
-				Error:          subTask.Error,
-			}
-		}
-	}
-	return out
-}
-
 func (o *Orchestration) Executable() bool {
 	return o.Status != NotActionable && o.Status != Failed
-}
-
-func (o *Orchestration) IsActive() bool {
-	return o.Status == Processing || o.Status == Paused
 }
 
 func (s *SubTask) extractDependencies() DependencyKeys {
