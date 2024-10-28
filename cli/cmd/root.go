@@ -4,11 +4,14 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/ezodude/orra/cli/internal/config"
 	"github.com/spf13/cobra"
 )
 
 type CliOpts struct {
+	Config     *config.Config
 	ConfigPath string
+	ProjectID  string // For project override via flag
 }
 
 func NewOrraCommand(opts *CliOpts) *cobra.Command {
@@ -21,25 +24,33 @@ func NewOrraCommand(opts *CliOpts) *cobra.Command {
 		Short: "Orra CLI for managing orchestration workflows",
 		Long: `orra manages Orra and orchestration workflows.
 Command line interface for interacting with Orra Control Plane.`,
-		Run: runHelp,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Skip config loading for version command
+			if cmd.Name() == "version" {
+				return nil
+			}
+
+			cfg, err := config.LoadOrInit(opts.ConfigPath)
+			if err != nil {
+				return fmt.Errorf("failed to initialize config: %w", err)
+			}
+			opts.Config = cfg
+			return nil
+		},
 	}
 
-	// Add global flags
+	// Global flags
 	cmd.PersistentFlags().StringVar(&opts.ConfigPath, "config", "", "config file (default is $HOME/.orra/config.json)")
+	cmd.PersistentFlags().StringVarP(&opts.ProjectID, "project", "p", "", "Project ID (overrides current project)")
 
 	// Add commands
 	cmd.AddCommand(newProjectsCmd(opts))
-	cmd.AddCommand(newAPIKeysCmd(opts))
 	cmd.AddCommand(newPsCmd(opts))
 	cmd.AddCommand(newInspectCmd(opts))
 	cmd.AddCommand(newLogsCmd(opts))
 	cmd.AddCommand(newVersionCmd(opts))
 
 	return cmd
-}
-
-func runHelp(cmd *cobra.Command, args []string) {
-	cmd.Help()
 }
 
 func Execute() {
