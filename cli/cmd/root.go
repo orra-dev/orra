@@ -10,6 +10,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	DefaultControlPlaneServerAddr = "http://localhost:8005"
+	CurrentMarker                 = "*"
+	ListMarker                    = "-"
+)
+
 type CliOpts struct {
 	Config     *config.Config
 	ConfigPath string
@@ -23,10 +29,14 @@ func NewOrraCommand(opts *CliOpts) *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "orra",
-		Short: "Orra CLI for managing orchestration workflows",
-		Long: `orra manages Orra and orchestration workflows.
-Command line interface for interacting with Orra Control Plane.`,
+		Use:           "orra",
+		SilenceErrors: true,
+		SilenceUsage:  true,
+		CompletionOptions: cobra.CompletionOptions{
+			HiddenDefaultCmd: true,
+		},
+		//Short: "Seamlessly manage and monitor your Orra-powered applications.",
+		Long: `Seamlessly manage and monitor your Orra-powered applications from the command line.`,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// Skip config loading for version command
 			if cmd.Name() == "version" {
@@ -45,27 +55,53 @@ Command line interface for interacting with Orra Control Plane.`,
 
 	// Global flags
 	cmd.PersistentFlags().StringVar(&opts.ConfigPath, "config", "", "config file (default is $HOME/.orra/config.json)")
-	cmd.PersistentFlags().StringVarP(&opts.ProjectID, "project", "p", "", "Project ID (overrides current project)")
+	cmd.PersistentFlags().StringVarP(&opts.ProjectID, "project", "p", "", "project Name (overrides current project)")
 
 	// Add commands
 	cmd.AddCommand(newProjectsCmd(opts))
+	cmd.AddCommand(newWebhooksCmd(opts))
+	cmd.AddCommand(newAPIKeysCmd(opts))
 	cmd.AddCommand(newPsCmd(opts))
 	cmd.AddCommand(newInspectCmd(opts))
 	cmd.AddCommand(newLogsCmd(opts))
 	cmd.AddCommand(newVersionCmd(opts))
+	cmd.AddCommand(newConfigCmd(opts))
 
 	return cmd
 }
 
 func Execute() {
 	opts := &CliOpts{
-		ApiClient: api.NewClient().Timeout(30 * time.Second),
+		ApiClient: api.NewClient().SetTimeout(30 * time.Second),
 	}
 
 	rootCmd := NewOrraCommand(opts)
 
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		handleCommandError(rootCmd, err)
 		os.Exit(1)
 	}
+}
+
+func getProjectName(opts *CliOpts) (string, error) {
+	var out string
+	if opts.ProjectID != "" {
+		out = opts.ProjectID
+	} else {
+		out = opts.Config.CurrentProject
+	}
+
+	if out == "" {
+		return "", fmt.Errorf("no project specified")
+	}
+	return out, nil
+}
+
+func contains(entries []string, v string) bool {
+	for _, e := range entries {
+		if e == v {
+			return true
+		}
+	}
+	return false
 }

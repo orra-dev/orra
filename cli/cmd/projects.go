@@ -3,7 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"net/url"
+	"strings"
 
 	"github.com/ezodude/orra/cli/internal/config"
 	"github.com/spf13/cobra"
@@ -27,62 +27,57 @@ func newProjectCreateCmd(opts *CliOpts) *cobra.Command {
 	var serverAddr string
 
 	cmd := &cobra.Command{
-		Use:   "create [name] --webhook [webhook-url]",
-		Short: "Create a new project",
+		Use:   "add [name]",
+		Short: "Add a new project",
+		Long:  `Add a new project so the control plane can orchestrate your app.`,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			projectName := args[0]
-			webhook, _ := cmd.Flags().GetString("webhook")
-
-			_, err := url.Parse(webhook)
-			if err != nil {
-				return fmt.Errorf("project name %s already exists", projectName)
+			if len(strings.TrimSpace(projectName)) == 0 {
+				return fmt.Errorf("provide a project name, e.g orra projects new sever-api-key")
 			}
 
 			if serverAddr == "" {
-				serverAddr = "http://localhost:8005"
+				serverAddr = DefaultControlPlaneServerAddr
 			}
 
-			// Check if project name already exists
 			if _, exists := opts.Config.Projects[projectName]; exists {
 				return fmt.Errorf("project name %s already exists", projectName)
 			}
 
-			// Create project in control plane
-			client := opts.ApiClient.BaseUrl(serverAddr)
+			// Create project in control plane (includes initial API key)
+			client := opts.ApiClient.SetBaseUrl(serverAddr)
 			ctx, cancel := context.WithTimeout(cmd.Context(), client.GetTimeout())
 			defer cancel()
 
-			project, err := client.CreateProject(ctx, webhook)
+			project, err := client.CreateProject(ctx)
 			if err != nil {
 				return fmt.Errorf("failed to create project: %w", err)
 			}
 
-			// Save project with user-friendly name mapping to control plane UUID
-			if err := config.SaveProject(opts.ConfigPath, projectName, project.ID, project.APIKey, serverAddr); err != nil {
-				return fmt.Errorf("failed to save project config: %w", err)
+			if err := config.SaveNewProject(opts.ConfigPath, projectName, project.ID, project.CliAPIKey, serverAddr); err != nil {
+				return fmt.Errorf("failed to save new project config: %w", err)
 			}
 
-			fmt.Printf("Project %s created successfully (ID: %s)\n", projectName, project.ID)
-			fmt.Printf("API Key: %s\n", project.APIKey)
+			fmt.Printf("Project %s created successfully\n\n", projectName)
+			fmt.Println("To orchestrate your app:")
+			fmt.Println("  orra webhooks add [valid webhook url]")
+			fmt.Println("  orra api-keys gen [api key name]")
 			return nil
 		},
 	}
 
-	cmd.Flags().String("webhook", "", "Webhook URL for project notifications")
 	cmd.Flags().StringVar(&serverAddr, "server", "", "Server address (default: http://localhost:8005)")
-	cmd.MarkFlagRequired("webhook")
-
 	return cmd
 }
 
 func newProjectListCmd(opts *CliOpts) *cobra.Command {
 	return &cobra.Command{
-		Use:   "list",
+		Use:   "ls",
 		Short: "List all projects",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(opts.Config.Projects) == 0 {
-				fmt.Println("No projects configured")
+				fmt.Println("No projects added yet")
 				return nil
 			}
 
@@ -90,7 +85,7 @@ func newProjectListCmd(opts *CliOpts) *cobra.Command {
 			for name, proj := range opts.Config.Projects {
 				current := " "
 				if name == opts.Config.CurrentProject {
-					current = "*"
+					current = CurrentMarker
 				}
 				fmt.Printf("%s %s\n  ID: %s\n  Server: %s\n", current, name, proj.ID, proj.ServerAddr)
 			}

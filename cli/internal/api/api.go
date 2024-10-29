@@ -9,11 +9,25 @@ import (
 	"github.com/carlmjohnson/requests"
 )
 
-// Project represents a project in the control plane
-type Project struct {
-	ID      string `json:"id"`
-	APIKey  string `json:"apiKey"`
-	Webhook string `json:"webhook"`
+// project represents a project in the control plane
+type project struct {
+	ID        string `json:"id"`
+	CliAPIKey string `json:"apiKey"`
+}
+
+type additionalAPIKey struct {
+	APIKey string `json:"apiKey"`
+}
+
+type webhook struct {
+	Url string `json:"url"`
+}
+
+// Client manages communication with the control plane API
+type Client struct {
+	baseURL    string
+	apiKey     string
+	httpClient *http.Client
 }
 
 // Orchestration represents an orchestration state
@@ -26,30 +40,23 @@ type Orchestration struct {
 	Results   []map[string]any `json:"results,omitempty"`
 }
 
-// Client manages communication with the control plane API
-type Client struct {
-	baseURL    string
-	apiKey     string
-	httpClient *http.Client
-}
-
 func NewClient() *Client {
 	return &Client{
 		httpClient: &http.Client{},
 	}
 }
 
-func (c *Client) BaseUrl(url string) *Client {
+func (c *Client) SetBaseUrl(url string) *Client {
 	c.baseURL = url
 	return c
 }
 
-func (c *Client) ApiKey(key string) *Client {
+func (c *Client) SetApiKey(key string) *Client {
 	c.apiKey = key
 	return c
 }
 
-func (c *Client) Timeout(t time.Duration) *Client {
+func (c *Client) SetTimeout(t time.Duration) *Client {
 	c.httpClient.Timeout = t
 	return c
 }
@@ -58,16 +65,15 @@ func (c *Client) GetTimeout() time.Duration {
 	return c.httpClient.Timeout
 }
 
-// CreateProject creates a new project in the control plane
-func (c *Client) CreateProject(ctx context.Context, webhook string) (*Project, error) {
-	var project Project
+func (c *Client) CreateProject(ctx context.Context) (*project, error) {
+	var project project
 
 	err := requests.
 		URL(c.baseURL).
 		Path("/register/project").
 		Method(http.MethodPost).
 		Client(c.httpClient).
-		BodyJSON(map[string]string{"webhook": webhook}).
+		BodyJSON(map[string]any{}).
 		ToJSON(&project).
 		Fetch(ctx)
 
@@ -76,6 +82,45 @@ func (c *Client) CreateProject(ctx context.Context, webhook string) (*Project, e
 	}
 
 	return &project, nil
+}
+
+func (c *Client) GenerateAdditionalApiKey(ctx context.Context) (*additionalAPIKey, error) {
+	var response additionalAPIKey
+
+	err := requests.
+		URL(c.baseURL).
+		Path("/apikeys").
+		Method(http.MethodPost).
+		Client(c.httpClient).
+		Header("Authorization", "Bearer "+c.apiKey).
+		ToJSON(&response).
+		Fetch(ctx)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate API key: %w", err)
+	}
+
+	return &response, nil
+}
+
+func (c *Client) AddWebhook(ctx context.Context, webhookUrl string) (*webhook, error) {
+	var response webhook
+
+	err := requests.
+		URL(c.baseURL).
+		Path("/webhooks").
+		Method(http.MethodPost).
+		Client(c.httpClient).
+		BodyJSON(webhook{Url: webhookUrl}).
+		Header("Authorization", "Bearer "+c.apiKey).
+		ToJSON(&response).
+		Fetch(ctx)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to add webhook [%s]: %w", webhookUrl, err)
+	}
+
+	return &response, nil
 }
 
 // ListOrchestrations retrieves all orchestrations for a project

@@ -7,23 +7,25 @@ import (
 	"path/filepath"
 )
 
-type Project struct {
-	ID         string `json:"id"` // Control plane's UUID
-	APIKey     string `json:"api_key"`
-	ServerAddr string `json:"server_addr"`
+type ProjectConfig struct {
+	ID         string            `json:"id"`
+	CliAuth    string            `json:"cli_auth"`
+	APIKeys    map[string]string `json:"api_key,omitempty"`
+	ServerAddr string            `json:"server_addr"`
+	Webhooks   []string          `json:"webhooks,omitempty"`
 }
 
 type Config struct {
-	CurrentProject string             `json:"current_project,omitempty"` // User-friendly name
-	Projects       map[string]Project `json:"projects"`                  // Map of name -> Project
+	CurrentProject string                   `json:"current_project,omitempty"` // User-friendly name
+	Projects       map[string]ProjectConfig `json:"projects,omitempty"`        // Map of name -> Project
 }
 
 const (
-	defaultServer     = "http://localhost:8005"
-	defaultConfigDir  = ".orra"
-	defaultConfigFile = "config.json"
-	dirPerm           = 0755 // rwxr-xr-x
-	filePerm          = 0666
+	defaultControlPlaneServer = "http://localhost:8005"
+	defaultConfigDir          = ".orra"
+	defaultConfigFile         = "config.json"
+	dirPerm                   = 0755 // rwxr-xr-x
+	filePerm                  = 0666
 )
 
 func getDefaultConfigPath() (string, error) {
@@ -51,7 +53,7 @@ func LoadOrInit(configPath string) (*Config, string, error) {
 	}
 
 	config := &Config{
-		Projects: make(map[string]Project),
+		Projects: make(map[string]ProjectConfig),
 	}
 
 	// Try to load existing config
@@ -70,7 +72,7 @@ func LoadOrInit(configPath string) (*Config, string, error) {
 }
 
 // GetProject returns the project configuration either by name or falls back to current project
-func GetProject(config *Config, projectName string) (*Project, string, error) {
+func GetProject(config *Config, projectName string) (*ProjectConfig, string, error) {
 	// If project name is provided, use it
 	if projectName != "" {
 		if proj, exists := config.Projects[projectName]; exists {
@@ -91,7 +93,7 @@ func GetProject(config *Config, projectName string) (*Project, string, error) {
 	return nil, "", fmt.Errorf("current project %s not found", config.CurrentProject)
 }
 
-func SaveProject(configPath, projectName, projectID, apiKey, serverAddr string) error {
+func SaveNewProject(configPath, projectName, projectID, cliAPIKey, serverAddr string) error {
 	if configPath == "" {
 		var err error
 		configPath, err = getDefaultConfigPath()
@@ -106,12 +108,13 @@ func SaveProject(configPath, projectName, projectID, apiKey, serverAddr string) 
 	}
 
 	if serverAddr == "" {
-		serverAddr = defaultServer
+		serverAddr = defaultControlPlaneServer
 	}
 
-	config.Projects[projectName] = Project{
+	config.Projects[projectName] = ProjectConfig{
 		ID:         projectID,
-		APIKey:     apiKey,
+		CliAuth:    cliAPIKey,
+		APIKeys:    map[string]string{},
 		ServerAddr: serverAddr,
 	}
 
@@ -125,6 +128,19 @@ func SaveProject(configPath, projectName, projectID, apiKey, serverAddr string) 
 
 func SaveConfig(path string, config *Config) error {
 	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("could not marshal config: %w", err)
+	}
+
+	if err := os.WriteFile(path, data, filePerm); err != nil {
+		return fmt.Errorf("could not write config file: %w", err)
+	}
+
+	return nil
+}
+
+func ResetConfig(path string) error {
+	data, err := json.MarshalIndent(Config{}, "", "  ")
 	if err != nil {
 		return fmt.Errorf("could not marshal config: %w", err)
 	}
