@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -16,7 +17,17 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 	p.orchestrationStoreMu.Lock()
 	defer p.orchestrationStoreMu.Unlock()
 
-	p.orchestrationStore[orchestration.ID] = orchestration
+	if err := p.validateWebhook(orchestration.ProjectID, orchestration.Webhook); err != nil {
+		wrappedErr := fmt.Errorf("invalid orchestration: %w", err)
+		p.Logger.Error().
+			Str("OrchestrationID", orchestration.ID).
+			Str("Webhook", orchestration.Webhook).
+			Err(wrappedErr)
+		orchestration.Status = Failed
+		orchestration.Error = []byte(wrappedErr.Error())
+		return
+	}
+
 	services, err := p.discoverProjectServices(orchestration.ProjectID)
 	if err != nil {
 		p.Logger.Error().
@@ -109,6 +120,7 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 		return
 	}
 
+	p.orchestrationStore[orchestration.ID] = orchestration
 	orchestration.Plan = onlyServicesCallingPlan
 	orchestration.taskZero = taskZeroInput
 }
@@ -235,6 +247,23 @@ func (p *ControlPlane) decomposeAction(orchestration *Orchestration, action stri
 	result.ProjectID = orchestration.ProjectID
 
 	return result, nil
+}
+
+func (p *ControlPlane) validateWebhook(projectID string, webhookUrl string) error {
+	if len(strings.TrimSpace(webhookUrl)) == 0 {
+		return fmt.Errorf("a webhook url is required to return orchestration results")
+	}
+
+	if _, err := url.ParseRequestURI(webhookUrl); err != nil {
+		return fmt.Errorf("webhook url %s is not valid: %w", webhookUrl, err)
+	}
+
+	project := p.projects[projectID]
+	if !contains(project.Webhooks, webhookUrl) {
+		return fmt.Errorf("webhook url %s not found in project %s", webhookUrl, projectID)
+	}
+
+	return nil
 }
 
 func (p *ControlPlane) validateInput(services []*ServiceInfo, subTasks []*SubTask) error {
@@ -407,11 +436,6 @@ func (p *ControlPlane) validateActionable(subTasks []*SubTask) error {
 }
 
 func (p *ControlPlane) triggerWebhook(orchestration *Orchestration) error {
-	project, ok := p.projects[orchestration.ProjectID]
-	if !ok {
-		return fmt.Errorf("project %s not found", orchestration.ProjectID)
-	}
-
 	var payload = struct {
 		OrchestrationID string            `json:"orchestrationId"`
 		Results         []json.RawMessage `json:"results"`
@@ -437,14 +461,14 @@ func (p *ControlPlane) triggerWebhook(orchestration *Orchestration) error {
 			Payload         string
 		}{
 			OrchestrationID: orchestration.ID,
-			ProjectID:       project.ID,
-			Webhook:         project.Webhook,
+			ProjectID:       orchestration.ProjectID,
+			Webhook:         orchestration.Webhook,
 			Payload:         string(jsonPayload),
 		}).
 		Msg("Triggering webhook")
 
 	// Create a new request
-	req, err := http.NewRequest("POST", project.Webhook, bytes.NewBuffer(jsonPayload))
+	req, err := http.NewRequest("POST", orchestration.Webhook, bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
