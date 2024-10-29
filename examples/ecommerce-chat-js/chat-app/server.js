@@ -10,6 +10,7 @@ dotenv.config({ path: '.env.local' });
 
 const ORRA_URL = process?.env?.ORRA_URL;
 const ORRA_API_KEY = process?.env?.ORRA_API_KEY;
+const ORRA_WEBHOOK_URL = process?.env?.ORRA_WEBHOOK_URL;
 const dev = process.env.NODE_ENV !== 'production';
 
 const app = next({ dev });
@@ -80,7 +81,8 @@ app.prepare().then(() => {
 							field: "productDescription",
 							value: productDescription,
 						}
-					]
+					],
+					webhook: ORRA_WEBHOOK_URL
 				};
 				const response = await axios.post(ORRA_URL, payload,
 					{
