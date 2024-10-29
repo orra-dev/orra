@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"time"
@@ -39,7 +40,8 @@ func NewApp(cfg Config, args []string) (*App, error) {
 
 func (app *App) configureRoutes() *App {
 	app.Router.HandleFunc("/register/project", app.RegisterProject).Methods("POST")
-	app.Router.HandleFunc("/apikey", app.APIKeyMiddleware(app.CreateApiKey)).Methods("POST")
+	app.Router.HandleFunc("/apikeys", app.APIKeyMiddleware(app.CreateAdditionalApiKey)).Methods("POST")
+	app.Router.HandleFunc("/webhooks", app.APIKeyMiddleware(app.AddWebhook)).Methods("POST")
 	app.Router.HandleFunc("/register/service", app.APIKeyMiddleware(app.RegisterService)).Methods("POST")
 	app.Router.HandleFunc("/orchestrations", app.APIKeyMiddleware(app.OrchestrationsHandler)).Methods("POST")
 	app.Router.HandleFunc("/register/agent", app.APIKeyMiddleware(app.RegisterAgent)).Methods("POST")
@@ -255,7 +257,7 @@ func (app *App) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (app *App) CreateApiKey(w http.ResponseWriter, r *http.Request) {
+func (app *App) CreateAdditionalApiKey(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Context().Value("api_key").(string)
 	project, err := app.Plane.GetProjectByApiKey(apiKey)
 	if err != nil {
@@ -263,18 +265,44 @@ func (app *App) CreateApiKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate new API key
 	newApiKey := uuid.New().String()
-
-	// Associate new API key with project
-	// Note: Would need to modify Project struct to support multiple API keys
 	project.AdditionalAPIKeys = append(project.AdditionalAPIKeys, newApiKey)
 
-	// Return the new key
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(map[string]string{
 		"apiKey": newApiKey,
 	}); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
+		return
+	}
+}
+
+func (app *App) AddWebhook(w http.ResponseWriter, r *http.Request) {
+	apiKey := r.Context().Value("api_key").(string)
+	project, err := app.Plane.GetProjectByApiKey(apiKey)
+	if err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
+		return
+	}
+
+	var webhook struct {
+		Url string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&webhook); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFail), err))
+		return
+	}
+
+	if _, err := url.ParseRequestURI(webhook.Url); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Validation, err))
+		return
+	}
+
+	project.Webhooks = append(project.Webhooks, webhook.Url)
+
+	// Return the new key
+	w.WriteHeader(http.StatusCreated)
+	if err := json.NewEncoder(w).Encode(webhook); err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
 		return
 	}

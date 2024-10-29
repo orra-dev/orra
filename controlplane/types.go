@@ -61,7 +61,7 @@ type Project struct {
 	ID                string   `json:"id"`
 	APIKey            string   `json:"apiKey"`
 	AdditionalAPIKeys []string `json:"additionalAPIKeys"`
-	Webhook           string   `json:"webhook"`
+	Webhooks          []string `json:"webhook"`
 }
 
 type OrchestrationState struct {
@@ -198,6 +198,7 @@ type Orchestration struct {
 	Status    Status              `json:"status"`
 	Error     json.RawMessage     `json:"error,omitempty"`
 	Timestamp time.Time           `json:"timestamp"`
+	Webhook   string              `json:"webhook"`
 	taskZero  json.RawMessage
 }
 
