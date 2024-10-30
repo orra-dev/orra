@@ -40,6 +40,21 @@ type Orchestration struct {
 	Results   []map[string]any `json:"results,omitempty"`
 }
 
+type OrchestrationView struct {
+	ID        string    `json:"id"`
+	Action    string    `json:"action"`
+	Status    string    `json:"status"`
+	Error     string    `json:"error,omitempty"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+type OrchestrationListView struct {
+	Pending    []OrchestrationView `json:"pending,omitempty"`
+	Processing []OrchestrationView `json:"processing,omitempty"`
+	Completed  []OrchestrationView `json:"completed,omitempty"`
+	Failed     []OrchestrationView `json:"failed,omitempty"`
+}
+
 func NewClient() *Client {
 	return &Client{
 		httpClient: &http.Client{},
@@ -124,8 +139,8 @@ func (c *Client) AddWebhook(ctx context.Context, webhookUrl string) (*webhook, e
 }
 
 // ListOrchestrations retrieves all orchestrations for a project
-func (c *Client) ListOrchestrations(ctx context.Context) ([]Orchestration, error) {
-	var orchestrations []Orchestration
+func (c *Client) ListOrchestrations(ctx context.Context) (*OrchestrationListView, error) {
+	var response OrchestrationListView
 
 	err := requests.
 		URL(c.baseURL).
@@ -133,14 +148,14 @@ func (c *Client) ListOrchestrations(ctx context.Context) ([]Orchestration, error
 		Method(http.MethodGet).
 		Client(c.httpClient).
 		Header("Authorization", "Bearer "+c.apiKey).
-		ToJSON(&orchestrations).
+		ToJSON(&response).
 		Fetch(ctx)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to list orchestrations: %w", err)
 	}
 
-	return orchestrations, nil
+	return &response, nil
 }
 
 // GetOrchestration retrieves a specific orchestration
