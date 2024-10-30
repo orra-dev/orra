@@ -24,6 +24,7 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 			Str("Webhook", orchestration.Webhook).
 			Err(wrappedErr)
 		orchestration.Status = Failed
+		orchestration.Timestamp = time.Now().UTC()
 		orchestration.Error = []byte(wrappedErr.Error())
 		return
 	}
@@ -35,6 +36,7 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 			Err(fmt.Errorf("error discovering services: %w", err))
 
 		orchestration.Status = Failed
+		orchestration.Timestamp = time.Now().UTC()
 		marshaledErr, _ := json.Marshal(err.Error())
 		orchestration.Error = marshaledErr
 		return
@@ -47,6 +49,7 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 			Str("OrchestrationID", orchestration.ID).
 			Err(wrappedErr)
 		orchestration.Status = Failed
+		orchestration.Timestamp = time.Now().UTC()
 		orchestration.Error = []byte(wrappedErr.Error())
 		return
 	}
@@ -58,6 +61,7 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 			Str("OrchestrationID", orchestration.ID).
 			Err(wrappedErr)
 		orchestration.Status = Failed
+		orchestration.Timestamp = time.Now().UTC()
 		orchestration.Error = []byte(wrappedErr.Error())
 		return
 	}
@@ -72,6 +76,7 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 			Err(fmt.Errorf("error decomposing action: %w", err))
 
 		orchestration.Status = Failed
+		orchestration.Timestamp = time.Now().UTC()
 		marshaledErr, _ := json.Marshal(fmt.Sprintf("Error decomposing action: %s", err.Error()))
 		orchestration.Error = marshaledErr
 		return
@@ -80,6 +85,7 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 	if err := p.validateActionable(callingPlan.Tasks); err != nil {
 		orchestration.Plan = callingPlan
 		orchestration.Status = NotActionable
+		orchestration.Timestamp = time.Now().UTC()
 		marshaledErr, _ := json.Marshal(err.Error())
 		orchestration.Error = marshaledErr
 		return
@@ -93,6 +99,7 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 
 		orchestration.Plan = callingPlan
 		orchestration.Status = Failed
+		orchestration.Timestamp = time.Now().UTC()
 		marshaledErr, _ := json.Marshal(fmt.Sprintf("Error locating task zero in calling plan"))
 		orchestration.Error = marshaledErr
 		return
@@ -101,6 +108,7 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 	taskZeroInput, err := json.Marshal(taskZero.Input)
 	if err != nil {
 		orchestration.Status = Failed
+		orchestration.Timestamp = time.Now().UTC()
 		marshaledErr, _ := json.Marshal(fmt.Sprintf("Failed to convert task zero into valid params: %v", err))
 		orchestration.Error = marshaledErr
 		return
@@ -108,6 +116,7 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 
 	if err = p.validateInput(services, onlyServicesCallingPlan.Tasks); err != nil {
 		orchestration.Status = Failed
+		orchestration.Timestamp = time.Now().UTC()
 		marshaledErr, _ := json.Marshal(fmt.Sprintf("Error validating plan input/output: %s", err.Error()))
 		orchestration.Error = marshaledErr
 		return
@@ -115,14 +124,17 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 
 	if err := p.addServiceDetails(services, onlyServicesCallingPlan.Tasks); err != nil {
 		orchestration.Status = Failed
+		orchestration.Timestamp = time.Now().UTC()
 		marshaledErr, _ := json.Marshal(fmt.Sprintf("Error adding service details to calling plan: %s", err.Error()))
 		orchestration.Error = marshaledErr
 		return
 	}
 
-	p.orchestrationStore[orchestration.ID] = orchestration
 	orchestration.Plan = onlyServicesCallingPlan
 	orchestration.taskZero = taskZeroInput
+	orchestration.Status = Pending
+	orchestration.Timestamp = time.Now().UTC()
+	p.orchestrationStore[orchestration.ID] = orchestration
 }
 
 func (p *ControlPlane) ExecuteOrchestration(orchestration *Orchestration) {
@@ -137,6 +149,7 @@ func (p *ControlPlane) ExecuteOrchestration(orchestration *Orchestration) {
 	p.Logger.Debug().Msgf("About to append initial entry to Log for orchestration %s", orchestration.ID)
 	log.Append(initialEntry)
 	orchestration.Status = Processing
+	orchestration.Timestamp = time.Now().UTC()
 }
 
 func (p *ControlPlane) FinalizeOrchestration(
@@ -153,6 +166,7 @@ func (p *ControlPlane) FinalizeOrchestration(
 	}
 
 	orchestration.Status = status
+	orchestration.Timestamp = time.Now().UTC()
 	orchestration.Error = reason
 	orchestration.Results = results
 
