@@ -13,10 +13,11 @@ import (
 )
 
 const (
-	symbolPending    = "○ " // Empty circle for pending
-	symbolProcessing = "◎ " // Dotted circle for processing
-	symbolCompleted  = "● " // Filled circle for completed
-	symbolFailed     = "✕ " // Cross for failed
+	symbolPending       = "○ " // Empty circle for pending
+	symbolProcessing    = "◎ " // Dotted circle for processing
+	symbolCompleted     = "● " // Filled circle for completed
+	symbolFailed        = "✕ " // Cross for failed
+	symbolNotActionable = "⊘ " // Prohibited circle for not actionable
 )
 
 type column struct {
@@ -52,7 +53,7 @@ func newPsCmd(opts *CliOpts) *cobra.Command {
 			baseColumns := []column{
 				{"ORCHESTRATION ID", func(o api.OrchestrationView) string { return o.ID }},
 				{"ACTION", func(o api.OrchestrationView) string { return o.Action }},
-				{"STATUS", func(o api.OrchestrationView) string { return formatStatus(o.Status) }},
+				{"STATUS", func(o api.OrchestrationView) string { return formatStatus(o.Status.String()) }},
 				{"CREATED", func(o api.OrchestrationView) string { return getRelativeTime(o.Timestamp) }},
 			}
 
@@ -83,11 +84,12 @@ func newPsCmd(opts *CliOpts) *cobra.Command {
 			_, _ = fmt.Fprintln(w, strings.Join(headers, "\t"))
 
 			// Combine and print all orchestrations
-			allOrchestrations := []api.OrchestrationView{}
+			var allOrchestrations []api.OrchestrationView
 			allOrchestrations = append(allOrchestrations, orchestrations.Pending...)
 			allOrchestrations = append(allOrchestrations, orchestrations.Processing...)
 			allOrchestrations = append(allOrchestrations, orchestrations.Completed...)
 			allOrchestrations = append(allOrchestrations, orchestrations.Failed...)
+			allOrchestrations = append(allOrchestrations, orchestrations.NotActionable...)
 
 			for _, o := range allOrchestrations {
 				values := make([]string, len(columns))
@@ -115,6 +117,8 @@ func formatStatus(status string) string {
 		return symbolCompleted + status
 	case "failed":
 		return symbolFailed + status
+	case "not actionable":
+		return symbolNotActionable + status
 	default:
 		return "  " + status // Double space to align with other symbols
 	}

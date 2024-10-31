@@ -15,10 +15,11 @@ type OrchestrationView struct {
 }
 
 type OrchestrationListView struct {
-	Pending    []OrchestrationView `json:"pending,omitempty"`
-	Processing []OrchestrationView `json:"processing,omitempty"`
-	Completed  []OrchestrationView `json:"completed,omitempty"`
-	Failed     []OrchestrationView `json:"failed,omitempty"`
+	Pending       []OrchestrationView `json:"pending,omitempty"`
+	Processing    []OrchestrationView `json:"processing,omitempty"`
+	Completed     []OrchestrationView `json:"completed,omitempty"`
+	Failed        []OrchestrationView `json:"failed,omitempty"`
+	NotActionable []OrchestrationView `json:"notActionable,omitempty"`
 }
 
 func (p *ControlPlane) GetOrchestrationList(projectID string) OrchestrationListView {
@@ -47,10 +48,11 @@ func (p *ControlPlane) GetOrchestrationList(projectID string) OrchestrationListV
 	}
 
 	return OrchestrationListView{
-		Pending:    grouped[Pending],
-		Processing: grouped[Processing],
-		Completed:  grouped[Completed],
-		Failed:     grouped[Failed],
+		Pending:       grouped[Pending],
+		Processing:    grouped[Processing],
+		Completed:     grouped[Completed],
+		Failed:        grouped[Failed],
+		NotActionable: grouped[NotActionable],
 	}
 }
 
@@ -70,5 +72,6 @@ func (p *ControlPlane) getProjectOrchestrations(projectID string) []*Orchestrati
 		return result[i].Timestamp.After(result[j].Timestamp)
 	})
 
+	p.Logger.Trace().Interface("orchestrations", result).Msg("orchestrations for lis view")
 	return result
 }

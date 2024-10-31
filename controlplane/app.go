@@ -196,11 +196,7 @@ func (app *App) OrchestrationsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orchestration.ID = app.Plane.GenerateOrchestrationKey()
-	orchestration.Status = Pending
-	orchestration.ProjectID = project.ID
-
-	app.Plane.PrepareOrchestration(&orchestration)
+	app.Plane.PrepareOrchestration(project.ID, &orchestration)
 
 	if !orchestration.Executable() {
 		app.Logger.

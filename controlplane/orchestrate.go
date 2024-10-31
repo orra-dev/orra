@@ -13,12 +13,15 @@ import (
 	"time"
 )
 
-func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
-	defer func() {
-		p.orchestrationStoreMu.Lock()
-		p.orchestrationStore[orchestration.ID] = orchestration
-		p.orchestrationStoreMu.Unlock()
-	}()
+func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orchestration) {
+	orchestration.ID = p.GenerateOrchestrationKey()
+	orchestration.Status = Pending
+	orchestration.Timestamp = time.Now().UTC()
+	orchestration.ProjectID = projectID
+
+	p.orchestrationStoreMu.Lock()
+	p.orchestrationStore[orchestration.ID] = orchestration
+	p.orchestrationStoreMu.Unlock()
 
 	if err := p.validateWebhook(orchestration.ProjectID, orchestration.Webhook); err != nil {
 		wrappedErr := fmt.Errorf("invalid orchestration: %w", err)
@@ -135,11 +138,12 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 
 	orchestration.Plan = onlyServicesCallingPlan
 	orchestration.taskZero = taskZeroInput
-	orchestration.Status = Pending
-	orchestration.Timestamp = time.Now().UTC()
 }
 
 func (p *ControlPlane) ExecuteOrchestration(orchestration *Orchestration) {
+	orchestration.Status = Processing
+	orchestration.Timestamp = time.Now().UTC()
+
 	p.Logger.Debug().Msgf("About to create Log for orchestration %s", orchestration.ID)
 	log := p.LogManager.PrepLogForOrchestration(orchestration.ProjectID, orchestration.ID, orchestration.Plan)
 
@@ -150,8 +154,6 @@ func (p *ControlPlane) ExecuteOrchestration(orchestration *Orchestration) {
 
 	p.Logger.Debug().Msgf("About to append initial entry to Log for orchestration %s", orchestration.ID)
 	log.Append(initialEntry)
-	orchestration.Status = Processing
-	orchestration.Timestamp = time.Now().UTC()
 }
 
 func (p *ControlPlane) FinalizeOrchestration(
@@ -445,7 +447,7 @@ func (p *ControlPlane) callingPlanMinusTaskZero(callingPlan *ServiceCallingPlan)
 func (p *ControlPlane) validateActionable(subTasks []*SubTask) error {
 	for _, subTask := range subTasks {
 		if strings.EqualFold(subTask.ID, "final") {
-			return fmt.Errorf("%s", subTask.Error)
+			return fmt.Errorf("%s", subTask.Input["error"])
 		}
 	}
 	return nil

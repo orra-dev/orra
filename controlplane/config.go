@@ -53,7 +53,7 @@ const (
 )
 
 func (s *Status) String() string {
-	return [...]string{"registered", "pending", "processing", "completed", "failed", "not-actionable", "paused"}[*s-1]
+	return [...]string{"registered", "pending", "processing", "completed", "failed", "not_actionable", "paused"}[*s-1]
 }
 
 func (s *Status) MarshalJSON() ([]byte, error) {
@@ -76,7 +76,7 @@ func (s *Status) UnmarshalJSON(data []byte) error {
 		*s = Completed
 	case "failed":
 		*s = Failed
-	case "not-actionable":
+	case "not_actionable":
 		*s = NotActionable
 	case "paused":
 		*s = Paused

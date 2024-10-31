@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/carlmjohnson/requests"
@@ -40,19 +41,31 @@ type Orchestration struct {
 	Results   []map[string]any `json:"results,omitempty"`
 }
 
+type Status string
+
+func (s Status) String() string {
+	var titled []string
+	for _, part := range strings.Split(string(s), "_") {
+		part = fmt.Sprintf("%s%s", strings.ToUpper(part[0:1]), part[1:])
+		titled = append(titled, part)
+	}
+	return strings.Join(titled, " ")
+}
+
 type OrchestrationView struct {
 	ID        string    `json:"id"`
 	Action    string    `json:"action"`
-	Status    string    `json:"status"`
+	Status    Status    `json:"status"`
 	Error     string    `json:"error,omitempty"`
 	Timestamp time.Time `json:"timestamp"`
 }
 
 type OrchestrationListView struct {
-	Pending    []OrchestrationView `json:"pending,omitempty"`
-	Processing []OrchestrationView `json:"processing,omitempty"`
-	Completed  []OrchestrationView `json:"completed,omitempty"`
-	Failed     []OrchestrationView `json:"failed,omitempty"`
+	Pending       []OrchestrationView `json:"pending,omitempty"`
+	Processing    []OrchestrationView `json:"processing,omitempty"`
+	Completed     []OrchestrationView `json:"completed,omitempty"`
+	Failed        []OrchestrationView `json:"failed,omitempty"`
+	NotActionable []OrchestrationView `json:"notActionable,omitempty"`
 }
 
 func NewClient() *Client {
