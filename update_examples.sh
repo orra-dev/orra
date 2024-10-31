@@ -11,27 +11,55 @@ STOP_SERVICES=false
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo "Options:"
-    echo "  -u, --update-env     Update environment variables"
-    echo "  -c, --clean-svc-keys Clean service key files"
-    echo "  -i, --install-npm    Reinstall npm packages"
-    echo "  -r, --run-services   Run example services"
-    echo "  -s, --stop-services  Stop all running example services"
-    echo "  -h, --help           Display this help message"
+    echo "  -u, --update-env      Update environment variables"
+    echo "  -k, --api-key KEY     Use existing API key instead of generating new one"
+    echo "  -w, --webhook URL     Webhook URL to use"
+    echo "  -c, --clean-svc-keys  Clean service keys"
+    echo "  -i, --install-npm     Reinstall npm packages"
+    echo "  -r, --run-services    Run services"
+    echo "  -s, --stop-services   Stop services"
+    echo "  -h, --help            Show this help message"
 }
 
 # Parse command line arguments
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         -u|--update-env) UPDATE_ENV=true ;;
+        -k|--api-key)
+            shift
+            EXTERNAL_API_KEY="$1"
+            ;;
+        -w|--webhook)
+            shift
+            WEBHOOK_URL="$1"
+            ;;
         -c|--clean-svc-keys) CLEAN_SVC_KEYS=true ;;
         -i|--install-npm) REINSTALL_NPM=true ;;
         -r|--run-services) RUN_SERVICES=true ;;
         -s|--stop-services) STOP_SERVICES=true ;;
-        -h|--help) usage; exit 0 ;;
+        -h|--help)
+            echo "Usage: $0 [-u|--update-env] [-k|--api-key KEY] [-w|--webhook URL] [-c|--clean-svc-keys] [-i|--install-npm] [-r|--run-services] [-s|--stop-services] [-h|--help]"
+            echo "  -u, --update-env      Update environment variables"
+            echo "  -k, --api-key KEY     Use existing API key instead of generating new one"
+            echo "  -w, --webhook URL     Webhook URL to use"
+            echo "  -c, --clean-svc-keys  Clean service keys"
+            echo "  -i, --install-npm     Reinstall npm packages"
+            echo "  -r, --run-services    Run services"
+            echo "  -s, --stop-services   Stop services"
+            echo "  -h, --help            Show this help message"
+            exit 0
+            ;;
         *) echo "Unknown parameter passed: $1"; usage; exit 1 ;;
     esac
     shift
 done
+
+# Validate required arguments when updating env
+if [ "$UPDATE_ENV" = true ] && [ -z "$WEBHOOK_URL" ]; then
+    echo "Error: Webhook URL (-w|--webhook) is required when updating environment variables"
+    usage
+    exit 1
+fi
 
 # Directory containing the examples
 EXAMPLES_DIR="./examples"
@@ -49,25 +77,33 @@ example_dirs=(
 if $UPDATE_ENV; then
     echo "Updating environment variables..."
 
-    # Run the curl command and capture the output
-    CURL_OUTPUT=$(curl -X POST http://localhost:8005/register/project \
-      -H "Content-Type: application/json" \
-      -d "{\"webhook\": \"${WEBHOOK_URL}\"}" | gojq .)
+    # Only call the API if no external API key is provided
+    if [ -z "$EXTERNAL_API_KEY" ]; then
+        echo "Registering new project..."
 
-    # Check if curl command was successful
-    # shellcheck disable=SC2181
-    if [ $? -ne 0 ]; then
-        echo "Error: Failed to register project. Curl command failed."
-        exit 1
-    fi
+        # Run the curl command and capture the output
+        CURL_OUTPUT=$(curl -X POST http://localhost:8005/register/project \
+          -H "Content-Type: application/json" \
+          -d "{\"webhook\": \"${WEBHOOK_URL}\"}" | gojq .)
 
-    # Extract API key from the curl output
-    API_KEY=$(echo "$CURL_OUTPUT" | gojq -r '.apiKey')
+        # Check if curl command was successful
+        # shellcheck disable=SC2181
+        if [ $? -ne 0 ]; then
+            echo "Error: Failed to register project. Curl command failed."
+            exit 1
+        fi
 
-    # Check if API_KEY and PROJECT_ID were extracted successfully
-    if [ -z "$API_KEY" ]; then
-        echo "Error: Failed to extract API key from the response."
-        exit 1
+        # Extract API key from the curl output
+        API_KEY=$(echo "$CURL_OUTPUT" | gojq -r '.apiKey')
+
+        # Check if API_KEY was extracted successfully
+        if [ -z "$API_KEY" ]; then
+            echo "Error: Failed to extract API key from the response."
+            exit 1
+        fi
+    else
+        echo "Using provided API key..."
+        API_KEY="$EXTERNAL_API_KEY"
     fi
 
     for dir in "${example_dirs[@]}"; do
@@ -80,7 +116,6 @@ if $UPDATE_ENV; then
                 # Use a temporary file for sed operations
                 temp_file=$(mktemp)
                 sed -e "s/^ORRA_API_KEY=.*/ORRA_API_KEY=$API_KEY/" \
-                    -e "s/^PROJECT_ID=.*/PROJECT_ID=$PROJECT_ID/" \
                     "$env_file" > "$temp_file"
                 mv "$temp_file" "$env_file"
                 echo "Updated $env_file"

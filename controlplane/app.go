@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/gilcrest/diygoapi/errs"
-	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/olahol/melody"
 	"github.com/rs/zerolog"
@@ -131,8 +130,8 @@ func (app *App) RegisterProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project.ID = uuid.New().String()
-	project.APIKey = uuid.New().String()
+	project.ID = app.Plane.GenerateProjectKey()
+	project.APIKey = app.Plane.GenerateAPIKey()
 
 	app.Plane.projects[project.ID] = &project
 
@@ -197,7 +196,7 @@ func (app *App) OrchestrationsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orchestration.ID = uuid.New().String()
+	orchestration.ID = app.Plane.GenerateOrchestrationKey()
 	orchestration.Status = Pending
 	orchestration.ProjectID = project.ID
 
@@ -266,7 +265,7 @@ func (app *App) CreateAdditionalApiKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newApiKey := uuid.New().String()
+	newApiKey := app.Plane.GenerateAPIKey()
 	project.AdditionalAPIKeys = append(project.AdditionalAPIKeys, newApiKey)
 
 	w.WriteHeader(http.StatusCreated)

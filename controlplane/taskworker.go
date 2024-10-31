@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/google/uuid"
+	"github.com/lithammer/shortuuid/v4"
 )
 
 var (
@@ -223,7 +223,7 @@ func (w *TaskWorker) checkServiceHealth() error {
 
 func (w *TaskWorker) tryExecute(ctx context.Context, orchestrationID string) (json.RawMessage, error) {
 	idempotencyKey := w.generateIdempotencyKey(orchestrationID)
-	executionID := uuid.New().String()
+	executionID := fmt.Sprintf("e_%s", shortuuid.New())
 
 	// Initialize or get existing execution
 	result, isNewExecution, err := w.Service.IdempotencyStore.InitializeExecution(idempotencyKey, executionID)
@@ -254,10 +254,10 @@ func (w *TaskWorker) tryExecute(ctx context.Context, orchestrationID string) (js
 	go w.renewLeaseWithHealthCheck(renewalCtx, idempotencyKey, executionID)
 
 	// Execute the actual task
-	return w.executeTask(ctx, orchestrationID, idempotencyKey)
+	return w.executeTask(ctx, orchestrationID, idempotencyKey, executionID)
 }
 
-func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string, key IdempotencyKey) (json.RawMessage, error) {
+func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string, key IdempotencyKey, executionID string) (json.RawMessage, error) {
 	input, err := mergeValueMapsToJson(w.logState.DependencyState)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal input: %w", err)
@@ -266,7 +266,7 @@ func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string, ke
 	task := &Task{
 		Type:            "task_request",
 		ID:              w.TaskID,
-		ExecutionID:     uuid.New().String(),
+		ExecutionID:     executionID,
 		IdempotencyKey:  key,
 		ServiceID:       w.Service.ID,
 		Input:           input,
