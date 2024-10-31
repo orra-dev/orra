@@ -29,7 +29,7 @@ func newPsCmd(opts *CliOpts) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "ps",
-		Short: "List orchestrations for a project",
+		Short: "List orchestrated actions for a project",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			proj, projectName, err := config.GetProject(opts.Config, opts.ProjectID)
 			if err != nil {
@@ -45,7 +45,7 @@ func newPsCmd(opts *CliOpts) *cobra.Command {
 
 			orchestrations, err := client.ListOrchestrations(ctx)
 			if err != nil {
-				return fmt.Errorf("failed to list orchestrations: %w", err)
+				return fmt.Errorf("failed to list orchestrated actions: %w", err)
 			}
 
 			// Define base columns (used in both views)
