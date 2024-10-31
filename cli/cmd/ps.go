@@ -49,6 +49,13 @@ func newPsCmd(opts *CliOpts) *cobra.Command {
 				return fmt.Errorf("failed to list orchestrated actions: %w", err)
 			}
 
+			fmt.Printf("Project: %s\nServer: %s\n\n", projectName, proj.ServerAddr)
+
+			if len(opts.Config.Projects) == 0 {
+				fmt.Println("No actions have been orchestrated yet")
+				return nil
+			}
+
 			// Define base columns (used in both views)
 			baseColumns := []column{
 				{"ORCHESTRATION ID", func(o api.OrchestrationView) string { return o.ID }},
@@ -67,8 +74,6 @@ func newPsCmd(opts *CliOpts) *cobra.Command {
 			} else {
 				columns = baseColumns
 			}
-
-			fmt.Printf("Project: %s\nServer: %s\n\n", projectName, proj.ServerAddr)
 
 			// Setup tabwriter
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 3, ' ', 0)
