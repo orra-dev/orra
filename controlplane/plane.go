@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lithammer/shortuuid/v4"
 	"github.com/rs/zerolog"
 )
 
@@ -64,7 +65,7 @@ func (p *ControlPlane) RegisterOrUpdateService(service *ServiceInfo) error {
 	}
 
 	if len(strings.TrimSpace(service.ID)) == 0 {
-		service.ID = p.generateServiceKey(service.ProjectID)
+		service.ID = p.GenerateServiceKey()
 		service.Version = 1
 		service.IdempotencyStore = NewIdempotencyStore(0)
 
@@ -162,11 +163,22 @@ func (p *ControlPlane) ServiceBelongsToProject(svcID, projectID string) bool {
 	return ok
 }
 
-func (p *ControlPlane) generateServiceKey(projectID string) string {
-	// Generate a unique key for the service
-	// This could be a UUID, a hash of project ID + timestamp, or any other method
-	// that ensures uniqueness within the project
-	return fmt.Sprintf("%s-%s", projectID, uuid.New().String())
+func (p *ControlPlane) GenerateProjectKey() string {
+	return fmt.Sprintf("p_%s", shortuuid.New())
+}
+
+func (p *ControlPlane) GenerateOrchestrationKey() string {
+	return fmt.Sprintf("o_%s", shortuuid.New())
+}
+
+func (p *ControlPlane) GenerateAPIKey() string {
+	key := fmt.Sprintf("%s-%s", uuid.New(), uuid.New())
+	hexString := strings.ReplaceAll(key, "-", "")
+	return fmt.Sprintf("sk-orra-v1-%s", hexString)
+}
+
+func (p *ControlPlane) GenerateServiceKey() string {
+	return fmt.Sprintf("s_%s", shortuuid.New())
 }
 
 func (p *ControlPlane) GetProjectIDForService(serviceID string) (string, error) {

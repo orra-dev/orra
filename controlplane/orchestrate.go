@@ -14,8 +14,11 @@ import (
 )
 
 func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
-	p.orchestrationStoreMu.Lock()
-	defer p.orchestrationStoreMu.Unlock()
+	defer func() {
+		p.orchestrationStoreMu.Lock()
+		p.orchestrationStore[orchestration.ID] = orchestration
+		p.orchestrationStoreMu.Unlock()
+	}()
 
 	if err := p.validateWebhook(orchestration.ProjectID, orchestration.Webhook); err != nil {
 		wrappedErr := fmt.Errorf("invalid orchestration: %w", err)
@@ -134,7 +137,6 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 	orchestration.taskZero = taskZeroInput
 	orchestration.Status = Pending
 	orchestration.Timestamp = time.Now().UTC()
-	p.orchestrationStore[orchestration.ID] = orchestration
 }
 
 func (p *ControlPlane) ExecuteOrchestration(orchestration *Orchestration) {
