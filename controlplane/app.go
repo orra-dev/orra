@@ -44,6 +44,7 @@ func (app *App) configureRoutes() *App {
 	app.Router.HandleFunc("/register/service", app.APIKeyMiddleware(app.RegisterService)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/orchestrations", app.APIKeyMiddleware(app.OrchestrationsHandler)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/orchestrations", app.APIKeyMiddleware(app.ListOrchestrationsHandler)).Methods(http.MethodGet)
+	app.Router.HandleFunc("/orchestrations/inspections/{id}", app.APIKeyMiddleware(app.OrchestrationInspectionHandler)).Methods(http.MethodGet)
 	app.Router.HandleFunc("/register/agent", app.APIKeyMiddleware(app.RegisterAgent)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/ws", app.HandleWebSocket)
 	return app
@@ -317,6 +318,47 @@ func (app *App) ListOrchestrationsHandler(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(orchestrationList); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Internal, err))
+		return
+	}
+}
+
+func (app *App) OrchestrationInspectionHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	apiKey := r.Context().Value("api_key").(string)
+	project, err := app.Plane.GetProjectByApiKey(apiKey)
+	if err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
+		return
+	}
+
+	orchestrationID := vars["id"]
+
+	if !app.Plane.OrchestrationBelongsToProject(orchestrationID, project.ID) {
+		err := fmt.Errorf("unknown orchestration")
+		app.Logger.
+			Error().
+			Str("ProjectID", project.ID).
+			Str("OrchestrationID", orchestrationID).
+			Msg("Orchestration not found for the given project")
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unauthorized, err))
+		return
+	}
+
+	inspection, err := app.Plane.InspectOrchestration(orchestrationID)
+	if err != nil {
+		app.Logger.
+			Error().
+			Err(err).
+			Str("OrchestrationID", orchestrationID).
+			Msg("Failed to inspect orchestration")
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(inspection); err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Internal, err))
 		return
 	}

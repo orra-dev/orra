@@ -110,13 +110,13 @@ func (r *ResultAggregator) processEntry(entry LogEntry, orchestrationID string) 
 	r.LogManager.Logger.Debug().
 		Msgf("All result aggregator dependencies have been processed for orchestration: %s", orchestrationID)
 
-	if err := r.LogManager.MarkTaskCompleted(orchestrationID, entry.ID()); err != nil {
-		return r.LogManager.AppendFailureToLog(orchestrationID, ResultAggregatorID, ResultAggregatorID, err.Error())
+	if err := r.LogManager.MarkTaskCompleted(orchestrationID, entry.ID(), time.Now().UTC()); err != nil {
+		return r.LogManager.AppendFailureToLog(orchestrationID, ResultAggregatorID, ResultAggregatorID, err.Error(), 0)
 	}
 
 	completed, err := r.LogManager.MarkOrchestrationCompleted(orchestrationID)
 	if err != nil {
-		return r.LogManager.AppendFailureToLog(orchestrationID, ResultAggregatorID, ResultAggregatorID, err.Error())
+		return r.LogManager.AppendFailureToLog(orchestrationID, ResultAggregatorID, ResultAggregatorID, err.Error(), 0)
 	}
 	results := r.logState.DependencyState.SortedValues()
 

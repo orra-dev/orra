@@ -215,7 +215,7 @@ func (c *VectorCache) getWithRetry(ctx context.Context,
 	}
 
 	sanitizedAsJson := sanitizeJSONOutput(llmResp.Choices[0].Message.Content)
-	c.logger.Debug().RawJSON("Cache Miss Plan", []byte(sanitizedAsJson)).Msg("")
+	c.logger.Trace().RawJSON("Cache Miss Plan", []byte(sanitizedAsJson)).Msg("")
 	task0Input, err := extractTask0Input(sanitizedAsJson)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract task0 input: %w", err)

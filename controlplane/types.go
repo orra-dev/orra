@@ -138,6 +138,16 @@ type TaskWorker struct {
 	consecutiveErrs int       // Track consecutive failures
 }
 
+type TaskStatusEvent struct {
+	ID              string    `json:"id"`
+	OrchestrationID string    `json:"orchestrationId"`
+	TaskID          string    `json:"taskId"`
+	Status          Status    `json:"status"`
+	Timestamp       time.Time `json:"timestamp"`
+	ServiceID       string    `json:"serviceId,omitempty"`
+	Error           string    `json:"error,omitempty"`
+}
+
 type Task struct {
 	Type            string          `json:"type"`
 	ID              string          `json:"id"`

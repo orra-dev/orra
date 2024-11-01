@@ -163,6 +163,18 @@ func (p *ControlPlane) ServiceBelongsToProject(svcID, projectID string) bool {
 	return ok
 }
 
+func (p *ControlPlane) OrchestrationBelongsToProject(orchestrationID, projectID string) bool {
+	p.orchestrationStoreMu.RLock()
+	defer p.orchestrationStoreMu.RUnlock()
+
+	orchestration, exists := p.orchestrationStore[orchestrationID]
+	if !exists {
+		return false
+	}
+
+	return orchestration.ProjectID == projectID
+}
+
 func (p *ControlPlane) GenerateProjectKey() string {
 	return fmt.Sprintf("p_%s", shortuuid.New())
 }

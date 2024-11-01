@@ -43,7 +43,7 @@ func Load() (Config, error) {
 type Status int
 
 const (
-	Registered Status = iota + 1
+	Registered Status = iota
 	Pending
 	Processing
 	Completed
@@ -52,11 +52,28 @@ const (
 	Paused
 )
 
-func (s *Status) String() string {
-	return [...]string{"registered", "pending", "processing", "completed", "failed", "not_actionable", "paused"}[*s-1]
+func (s Status) String() string {
+	switch s {
+	case Registered:
+		return "registered"
+	case Pending:
+		return "pending"
+	case Processing:
+		return "processing"
+	case Completed:
+		return "completed"
+	case Failed:
+		return "failed"
+	case NotActionable:
+		return "not_actionable"
+	case Paused:
+		return "paused"
+	default:
+		return ""
+	}
 }
 
-func (s *Status) MarshalJSON() ([]byte, error) {
+func (s Status) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.String())
 }
 
@@ -81,7 +98,7 @@ func (s *Status) UnmarshalJSON(data []byte) error {
 	case "paused":
 		*s = Paused
 	default:
-		return fmt.Errorf("invalid Status: %+v", s)
+		return fmt.Errorf("invalid Status: %s", s)
 	}
 	return nil
 }
@@ -93,11 +110,17 @@ const (
 	Service
 )
 
-func (st *ServiceType) String() string {
-	return [...]string{"agent", "service"}[*st]
+func (st ServiceType) String() string {
+	switch st {
+	case Agent:
+		return "agent"
+	case Service:
+		return "service"
+	}
+	return ""
 }
 
-func (st *ServiceType) MarshalJSON() ([]byte, error) {
+func (st ServiceType) MarshalJSON() ([]byte, error) {
 	return json.Marshal(st.String())
 }
 
