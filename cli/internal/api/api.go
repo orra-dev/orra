@@ -210,3 +210,11 @@ func (c *Client) GetOrchestrationLogs(ctx context.Context, id string) ([]map[str
 
 	return logs, nil
 }
+
+func (v OrchestrationListView) Empty() bool {
+	return len(v.Pending) == 0 &&
+		len(v.Processing) == 0 &&
+		len(v.Completed) == 0 &&
+		len(v.Failed) == 0 &&
+		len(v.NotActionable) == 0
+}

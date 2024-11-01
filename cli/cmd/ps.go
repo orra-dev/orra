@@ -51,7 +51,7 @@ func newPsCmd(opts *CliOpts) *cobra.Command {
 
 			fmt.Printf("Project: %s\nServer: %s\n\n", projectName, proj.ServerAddr)
 
-			if len(opts.Config.Projects) == 0 {
+			if orchestrations.Empty() {
 				fmt.Println("No actions have been orchestrated yet")
 				return nil
 			}
