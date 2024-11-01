@@ -32,7 +32,7 @@ type OrchestrationInspectResponse struct {
 	Action    string                `json:"action"`
 	Timestamp time.Time             `json:"timestamp"`
 	Error     json.RawMessage       `json:"error,omitempty"`
-	Tasks     []TaskInspectResponse `json:"tasks"`
+	Tasks     []TaskInspectResponse `json:"tasks,omitempty"`
 	Results   []json.RawMessage     `json:"results,omitempty"`
 	Duration  time.Duration         `json:"duration"` // Time since orchestration started
 }
@@ -116,6 +116,18 @@ func (p *ControlPlane) InspectOrchestration(orchestrationID string) (*Orchestrat
 	orchestration, err := p.getOrchestration(orchestrationID)
 	if err != nil {
 		return nil, err
+	}
+
+	if orchestration.Status == NotActionable {
+		// Return inspection with only the error information
+		return &OrchestrationInspectResponse{
+			ID:        orchestration.ID,
+			Status:    NotActionable,
+			Action:    orchestration.Action.Content,
+			Timestamp: orchestration.Timestamp,
+			Error:     orchestration.Error,
+			Duration:  time.Since(orchestration.Timestamp),
+		}, nil
 	}
 
 	// Build lookup maps for constructing the response

@@ -49,7 +49,7 @@ func (ts *TestState) setupBase() {
 	}
 
 	// Create base orchestration
-	orch := &Orchestration{
+	o := &Orchestration{
 		ID:        "o_test",
 		ProjectID: "p_test",
 		Action: Action{
@@ -71,23 +71,23 @@ func (ts *TestState) setupBase() {
 			},
 		},
 	}
-	ts.orchestrationID = orch.ID
+	ts.orchestrationID = o.ID
 
 	// Setup log manager
 	ts.plane.LogManager = NewLogManager(context.Background(), time.Hour, ts.plane)
-	ts.plane.LogManager.PrepLogForOrchestration(orch.ProjectID, orch.ID, orch.Plan)
+	ts.plane.LogManager.PrepLogForOrchestration(o.ProjectID, o.ID, o.Plan)
 
 	// Initialize orchestration state
-	ts.plane.LogManager.orchestrations[orch.ID] = &OrchestrationState{
-		ID:            orch.ID,
-		ProjectID:     orch.ProjectID,
-		Plan:          orch.Plan,
+	ts.plane.LogManager.orchestrations[o.ID] = &OrchestrationState{
+		ID:            o.ID,
+		ProjectID:     o.ProjectID,
+		Plan:          o.Plan,
 		TasksStatuses: make(map[string]Status),
 		CreatedAt:     ts.baseTime,
 		LastUpdated:   ts.baseTime,
 	}
 
-	ts.plane.orchestrationStore[orch.ID] = orch
+	ts.plane.orchestrationStore[o.ID] = o
 }
 
 // Helper to add a task state transition
@@ -223,4 +223,54 @@ func TestInspectOrchestration(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to resolve task0 references")
 	})
+}
+
+func TestInspectOrchestration_NotActionable(t *testing.T) {
+	ts := newTestSetup()
+	ts.setupBase()
+
+	// Update the test orchestration to be NotActionable
+	orchestration := ts.plane.orchestrationStore[ts.orchestrationID]
+	orchestration.Status = NotActionable
+	orchestration.Error = json.RawMessage(`"Cannot process order: No payment service available"`)
+	// Add a "final" task that explains why it's not actionable
+	orchestration.Plan = &ServiceCallingPlan{
+		Tasks: []*SubTask{
+			{
+				ID: "final",
+				Input: map[string]interface{}{
+					"error": "Cannot process order: No payment service available",
+				},
+			},
+		},
+	}
+
+	// Test inspection
+	resp, err := ts.plane.InspectOrchestration(ts.orchestrationID)
+	require.NoError(t, err)
+
+	// Verify response
+	assert.Equal(t, ts.orchestrationID, resp.ID)
+	assert.Equal(t, NotActionable, resp.Status)
+	assert.Equal(t, "Echo a message", resp.Action)
+	assert.Equal(t, "\"Cannot process order: No payment service available\"", string(resp.Error))
+	assert.Empty(t, resp.Tasks)
+}
+
+func TestInspectOrchestration_NotActionableWithoutTasks(t *testing.T) {
+	ts := newTestSetup()
+	ts.setupBase()
+
+	// Create NotActionable orchestration without any tasks
+	orchestration := ts.plane.orchestrationStore[ts.orchestrationID]
+	orchestration.Status = NotActionable
+	orchestration.Error = json.RawMessage(`"Invalid action: unsupported operation"`)
+	orchestration.Plan = &ServiceCallingPlan{Tasks: []*SubTask{}}
+
+	resp, err := ts.plane.InspectOrchestration(ts.orchestrationID)
+	require.NoError(t, err)
+
+	assert.Equal(t, NotActionable, resp.Status)
+	assert.Equal(t, "\"Invalid action: unsupported operation\"", string(resp.Error))
+	assert.Empty(t, resp.Tasks)
 }
