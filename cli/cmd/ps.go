@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/ezodude/orra/cli/internal/api"
@@ -20,11 +19,6 @@ const (
 	symbolNotActionable = "⊘ " // Prohibited circle for not actionable
 	symbolPaused        = "⏸ " // Pause icon for paused
 )
-
-type column struct {
-	header string
-	value  func(o api.OrchestrationView) string
-}
 
 func newPsCmd(opts *CliOpts) *cobra.Command {
 	var wide bool
@@ -50,60 +44,60 @@ func newPsCmd(opts *CliOpts) *cobra.Command {
 				return fmt.Errorf("failed to list orchestrated actions: %w", err)
 			}
 
-			fmt.Printf("Project: %s\nServer: %s\n\n", projectName, proj.ServerAddr)
+			// Project Info Section
+			fmt.Printf("Project: %s\nServer:  %s\n", projectName, proj.ServerAddr)
 
-			if orchestrations.Empty() {
-				fmt.Println("No actions have been orchestrated yet")
+			if len(opts.Config.Projects) == 0 {
+				fmt.Println("\nNo actions have been orchestrated yet")
 				return nil
 			}
 
-			// Define base columns (used in both views)
-			baseColumns := []column{
-				{"ORCHESTRATION ID", func(o api.OrchestrationView) string { return o.ID }},
-				{"ACTION", func(o api.OrchestrationView) string { return o.Action }},
-				{"STATUS", func(o api.OrchestrationView) string { return formatStatus(o.Status.String()) }},
-				{"CREATED", func(o api.OrchestrationView) string { return getRelativeTime(o.Timestamp) }},
+			// Define columns based on view mode
+			columns := []column{
+				{"ID", func(o api.OrchestrationView) string { return o.ID }, 25},
+				{"ACTION", func(o api.OrchestrationView) string { return truncateString(o.Action, 34) }, 36},
+				{"STATUS", func(o api.OrchestrationView) string { return formatStatus(o.Status.String()) }, 18},
+				{"CREATED", func(o api.OrchestrationView) string { return getRelativeTime(o.Timestamp) }, 10},
 			}
 
-			// Add ERROR column for wide view
-			var columns []column
 			if wide {
-				columns = append(baseColumns, column{
+				columns = append(columns, column{
 					"ERROR",
-					func(o api.OrchestrationView) string { return formatError(o.Error) },
+					func(o api.OrchestrationView) string { return truncateString(formatListError(o.Error), 50) },
+					52,
 				})
-			} else {
-				columns = baseColumns
 			}
 
-			// Setup tabwriter
-			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 3, ' ', 0)
-			defer func(w *tabwriter.Writer) {
-				_ = w.Flush()
-			}(w)
-
-			// Print headers
-			headers := make([]string, len(columns))
-			for i, col := range columns {
-				headers[i] = col.header
-			}
-			_, _ = fmt.Fprintln(w, strings.Join(headers, "\t"))
-
-			// Combine and print all orchestrations
+			// Prepare all orchestrations in order: Processing, Pending, Completed, Failed, NotActionable
 			var allOrchestrations []api.OrchestrationView
-			allOrchestrations = append(allOrchestrations, orchestrations.Pending...)
 			allOrchestrations = append(allOrchestrations, orchestrations.Processing...)
+			allOrchestrations = append(allOrchestrations, orchestrations.Pending...)
 			allOrchestrations = append(allOrchestrations, orchestrations.Completed...)
 			allOrchestrations = append(allOrchestrations, orchestrations.Failed...)
 			allOrchestrations = append(allOrchestrations, orchestrations.NotActionable...)
 
+			if len(allOrchestrations) == 0 {
+				fmt.Println("\nNo orchestrations found")
+				return nil
+			}
+
+			// Print table with new styling
+			fmt.Printf("\n┌─ Orchestrations\n")
+
+			// Header
+			headerFmt := buildFormatString(columns)
+			fmt.Printf("│ "+headerFmt+"\n", toInterfaceSlice(getHeaders(columns))...)
+			fmt.Printf("│ %s\n", strings.Repeat("─", calculateLineWidth(columns)))
+
+			// Rows
 			for _, o := range allOrchestrations {
-				values := make([]string, len(columns))
+				values := make([]interface{}, len(columns))
 				for i, col := range columns {
 					values[i] = col.value(o)
 				}
-				_, _ = fmt.Fprintln(w, strings.Join(values, "\t"))
+				fmt.Printf("│ "+headerFmt+"\n", values...)
 			}
+			fmt.Printf("└─────\n")
 
 			return nil
 		},
@@ -111,6 +105,58 @@ func newPsCmd(opts *CliOpts) *cobra.Command {
 
 	cmd.Flags().BoolVarP(&wide, "wide", "w", false, "Show more details including errors")
 	return cmd
+}
+
+type column struct {
+	header string
+	value  func(o api.OrchestrationView) string
+	width  int
+}
+
+func truncateString(s string, length int) string {
+	if len(s) <= length {
+		return s
+	}
+	return s[:length-3] + "..."
+}
+
+func calculateLineWidth(columns []column) int {
+	width := len(columns) + 1 // Account for spacing between columns
+	for _, col := range columns {
+		width += col.width
+	}
+	return width
+}
+
+func buildFormatString(columns []column) string {
+	formats := make([]string, len(columns))
+	for i, col := range columns {
+		formats[i] = fmt.Sprintf("%%-%ds", col.width)
+	}
+	return strings.Join(formats, " ")
+}
+
+func getHeaders(columns []column) []string {
+	headers := make([]string, len(columns))
+	for i, col := range columns {
+		headers[i] = col.header
+	}
+	return headers
+}
+
+func toInterfaceSlice(s []string) []interface{} {
+	is := make([]interface{}, len(s))
+	for i, v := range s {
+		is[i] = v
+	}
+	return is
+}
+
+func formatListError(err string) string {
+	if err == "" {
+		return "─"
+	}
+	return err
 }
 
 func formatStatus(status string) string {

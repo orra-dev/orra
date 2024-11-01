@@ -105,13 +105,3 @@ func contains(entries []string, v string) bool {
 	}
 	return false
 }
-
-func formatError(err string) string {
-	if err == "" {
-		return "<none>"
-	}
-	if len(err) > 50 {
-		return err[:47] + "..."
-	}
-	return err
-}
