@@ -18,6 +18,7 @@ const (
 	symbolCompleted     = "● " // Filled circle for completed
 	symbolFailed        = "✕ " // Cross for failed
 	symbolNotActionable = "⊘ " // Prohibited circle for not actionable
+	symbolPaused        = "⏸ " // Pause icon for paused
 )
 
 type column struct {
@@ -118,6 +119,8 @@ func formatStatus(status string) string {
 		return symbolPending + status
 	case "processing":
 		return symbolProcessing + status
+	case "paused":
+		return symbolPaused + status
 	case "completed":
 		return symbolCompleted + status
 	case "failed":
@@ -127,16 +130,6 @@ func formatStatus(status string) string {
 	default:
 		return "  " + status // Double space to align with other symbols
 	}
-}
-
-func formatError(err string) string {
-	if err == "" {
-		return "<none>"
-	}
-	if len(err) > 50 {
-		return err[:47] + "..."
-	}
-	return err
 }
 
 func getRelativeTime(t time.Time) string {

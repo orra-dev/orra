@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -10,17 +11,16 @@ import (
 	"github.com/carlmjohnson/requests"
 )
 
-// project represents a project in the control plane
-type project struct {
+type Project struct {
 	ID        string `json:"id"`
 	CliAPIKey string `json:"apiKey"`
 }
 
-type additionalAPIKey struct {
+type AdditionalAPIKey struct {
 	APIKey string `json:"apiKey"`
 }
 
-type webhook struct {
+type Webhook struct {
 	Url string `json:"url"`
 }
 
@@ -68,6 +68,42 @@ type OrchestrationListView struct {
 	NotActionable []OrchestrationView `json:"notActionable,omitempty"`
 }
 
+// OrchestrationInspectResponse represents the detailed inspection view of an orchestration
+type OrchestrationInspectResponse struct {
+	ID        string                `json:"id"`
+	Status    Status                `json:"status"`
+	Action    string                `json:"action"`
+	Timestamp time.Time             `json:"timestamp"`
+	Error     json.RawMessage       `json:"error,omitempty"`
+	Tasks     []TaskInspectResponse `json:"tasks,omitempty"`
+	Results   []json.RawMessage     `json:"results,omitempty"`
+	Duration  time.Duration         `json:"duration"`
+}
+
+// TaskInspectResponse represents the detailed view of a task within an orchestration
+type TaskInspectResponse struct {
+	ID            string            `json:"id"`
+	ServiceID     string            `json:"serviceId"`
+	ServiceName   string            `json:"serviceName"`
+	Status        Status            `json:"status"`
+	StatusHistory []TaskStatusEvent `json:"statusHistory"`
+	Input         json.RawMessage   `json:"input,omitempty"`
+	Output        json.RawMessage   `json:"output,omitempty"`
+	Error         string            `json:"error,omitempty"`
+	Duration      time.Duration     `json:"duration"`
+}
+
+// TaskStatusEvent represents a status change in a task's history
+type TaskStatusEvent struct {
+	ID              string    `json:"id"`
+	OrchestrationID string    `json:"orchestrationId"`
+	TaskID          string    `json:"taskId"`
+	Status          Status    `json:"status"`
+	Timestamp       time.Time `json:"timestamp"`
+	ServiceID       string    `json:"serviceId,omitempty"`
+	Error           string    `json:"error,omitempty"`
+}
+
 func NewClient() *Client {
 	return &Client{
 		httpClient: &http.Client{},
@@ -93,8 +129,8 @@ func (c *Client) GetTimeout() time.Duration {
 	return c.httpClient.Timeout
 }
 
-func (c *Client) CreateProject(ctx context.Context) (*project, error) {
-	var project project
+func (c *Client) CreateProject(ctx context.Context) (*Project, error) {
+	var project Project
 
 	err := requests.
 		URL(c.baseURL).
@@ -112,8 +148,8 @@ func (c *Client) CreateProject(ctx context.Context) (*project, error) {
 	return &project, nil
 }
 
-func (c *Client) GenerateAdditionalApiKey(ctx context.Context) (*additionalAPIKey, error) {
-	var response additionalAPIKey
+func (c *Client) GenerateAdditionalApiKey(ctx context.Context) (*AdditionalAPIKey, error) {
+	var response AdditionalAPIKey
 
 	err := requests.
 		URL(c.baseURL).
@@ -131,15 +167,15 @@ func (c *Client) GenerateAdditionalApiKey(ctx context.Context) (*additionalAPIKe
 	return &response, nil
 }
 
-func (c *Client) AddWebhook(ctx context.Context, webhookUrl string) (*webhook, error) {
-	var response webhook
+func (c *Client) AddWebhook(ctx context.Context, webhookUrl string) (*Webhook, error) {
+	var response Webhook
 
 	err := requests.
 		URL(c.baseURL).
 		Path("/webhooks").
 		Method(http.MethodPost).
 		Client(c.httpClient).
-		BodyJSON(webhook{Url: webhookUrl}).
+		BodyJSON(Webhook{Url: webhookUrl}).
 		Header("Authorization", "Bearer "+c.apiKey).
 		ToJSON(&response).
 		Fetch(ctx)
@@ -171,24 +207,23 @@ func (c *Client) ListOrchestrations(ctx context.Context) (*OrchestrationListView
 	return &response, nil
 }
 
-// GetOrchestration retrieves a specific orchestration
-func (c *Client) GetOrchestration(ctx context.Context, id string) (*Orchestration, error) {
-	var orchestration Orchestration
+func (c *Client) GetOrchestrationInspection(ctx context.Context, id string) (*OrchestrationInspectResponse, error) {
+	var inspection OrchestrationInspectResponse
 
 	err := requests.
 		URL(c.baseURL).
-		Pathf("/orchestrations/%s", id).
+		Pathf("/orchestrations/inspections/%s", id).
 		Method(http.MethodGet).
 		Client(c.httpClient).
 		Header("Authorization", "Bearer "+c.apiKey).
-		ToJSON(&orchestration).
+		ToJSON(&inspection).
 		Fetch(ctx)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to get orchestration: %w", err)
+		return nil, fmt.Errorf("failed to get orchestration inspection: %w", err)
 	}
 
-	return &orchestration, nil
+	return &inspection, nil
 }
 
 // GetOrchestrationLogs retrieves logs for a specific orchestration
