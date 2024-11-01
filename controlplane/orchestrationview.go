@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -53,6 +54,8 @@ type taskLookupMaps struct {
 	taskOutputs  map[string]json.RawMessage
 	taskStatuses map[string][]TaskStatusEvent
 }
+
+type task0Values map[string]interface{}
 
 func (p *ControlPlane) GetOrchestrationList(projectID string) OrchestrationListView {
 	// Get orchestrations for this project
@@ -298,9 +301,33 @@ func (p *ControlPlane) buildSingleTaskResponse(
 		taskResp.Duration = history[len(history)-1].Timestamp.Sub(history[0].Timestamp)
 	}
 
-	// Add input/output
-	if err := setTaskIO(&taskResp, task, lookupMaps.taskOutputs); err != nil {
-		return TaskInspectResponse{}, err
+	// Extract task0 values for reference resolution
+	task0Vals, err := extractTask0Values(orchestration.taskZero)
+	if err != nil {
+		return TaskInspectResponse{}, fmt.Errorf("failed to extract task0 values: %w", err)
+	}
+
+	// Create a copy of the input map for resolution
+	inputCopy := make(map[string]interface{})
+	for k, v := range task.Input {
+		inputCopy[k] = v
+	}
+
+	// Resolve task0 references in the copy
+	if err := resolveTask0RefsInMap(inputCopy, task0Vals); err != nil {
+		return TaskInspectResponse{}, fmt.Errorf("failed to resolve task0 references: %w", err)
+	}
+
+	// Marshal resolved input
+	resolvedInput, err := json.Marshal(inputCopy)
+	if err != nil {
+		return TaskInspectResponse{}, fmt.Errorf("error marshaling resolved input: %w", err)
+	}
+	taskResp.Input = resolvedInput
+
+	// Add output if available
+	if output, ok := lookupMaps.taskOutputs[task.ID]; ok {
+		taskResp.Output = output
 	}
 
 	// Set error if present in last status
@@ -311,16 +338,55 @@ func (p *ControlPlane) buildSingleTaskResponse(
 	return taskResp, nil
 }
 
-func setTaskIO(taskResp *TaskInspectResponse, task *SubTask, outputs map[string]json.RawMessage) error {
-	inputJSON, err := json.Marshal(task.Input)
-	if err != nil {
-		return fmt.Errorf("error marshaling task input: %w", err)
+func extractTask0Values(taskZeroJSON json.RawMessage) (task0Values, error) {
+	var values task0Values
+	if err := json.Unmarshal(taskZeroJSON, &values); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal task0 values: %w", err)
 	}
-	taskResp.Input = inputJSON
+	return values, nil
+}
 
-	if output, ok := outputs[task.ID]; ok {
-		taskResp.Output = output
+func resolveTask0Ref(ref string, task0Vals task0Values) (interface{}, error) {
+	// Extract field name from reference (e.g., "$task0.message" -> "message")
+	matches := DependencyPattern.FindStringSubmatch(ref)
+	if len(matches) != 2 || matches[1] != TaskZero {
+		return ref, nil // Not a task0 reference
 	}
 
+	field := strings.TrimPrefix(ref, "$task0.")
+	value, ok := task0Vals[field]
+	if !ok {
+		return nil, fmt.Errorf("task0 field not found: %s", field)
+	}
+	return value, nil
+}
+
+func resolveTask0RefsInMap(input map[string]interface{}, task0Vals task0Values) error {
+	for key, value := range input {
+		switch v := value.(type) {
+		case string:
+			if strings.HasPrefix(v, "$task0.") {
+				resolved, err := resolveTask0Ref(v, task0Vals)
+				if err != nil {
+					return err
+				}
+				input[key] = resolved
+			}
+		case map[string]interface{}:
+			if err := resolveTask0RefsInMap(v, task0Vals); err != nil {
+				return err
+			}
+		case []interface{}:
+			for i, item := range v {
+				if strItem, ok := item.(string); ok && strings.HasPrefix(strItem, "$task0.") {
+					resolved, err := resolveTask0Ref(strItem, task0Vals)
+					if err != nil {
+						return err
+					}
+					v[i] = resolved
+				}
+			}
+		}
+	}
 	return nil
 }
