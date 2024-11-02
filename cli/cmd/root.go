@@ -35,8 +35,7 @@ func NewOrraCommand(opts *CliOpts) *cobra.Command {
 		CompletionOptions: cobra.CompletionOptions{
 			HiddenDefaultCmd: true,
 		},
-		//Short: "Seamlessly manage and monitor your Orra-powered applications.",
-		Long: `Seamlessly manage and monitor your Orra-powered applications from the command line.`,
+		Long: `🪡 Seamlessly manage and monitor your Orra-powered applications.`,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// Skip config loading for version command
 			if cmd.Name() == "version" {
