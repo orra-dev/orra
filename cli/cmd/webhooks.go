@@ -27,8 +27,8 @@ func newWebhooksCmd(opts *CliOpts) *cobra.Command {
 func newWebhookAddCmd(opts *CliOpts) *cobra.Command {
 	return &cobra.Command{
 		Use:   "add [webhook url]",
-		Short: "add a webhook to the project",
-		Long:  "add a webhook to the project so you can receive orchestration results.",
+		Short: "Add a webhook to the project",
+		Long:  "Add a webhook to the project so you can receive orchestration results.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			projectName, err := getProjectName(opts)
