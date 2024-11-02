@@ -300,11 +300,20 @@ func (p *ControlPlane) buildSingleTaskResponse(
 ) (TaskInspectResponse, error) {
 	history := lookupMaps.taskStatuses[task.ID]
 
+	// Get the final status from the history instead of the task status
+	var finalStatus Status
+	if len(history) > 0 {
+		finalStatus = history[len(history)-1].Status
+	} else {
+		// Fallback to orchestration state tracking if no history
+		finalStatus = p.LogManager.orchestrations[orchestration.ID].TasksStatuses[task.ID]
+	}
+
 	taskResp := TaskInspectResponse{
 		ID:            task.ID,
 		ServiceID:     task.Service,
 		ServiceName:   lookupMaps.serviceNames[task.Service],
-		Status:        p.LogManager.orchestrations[orchestration.ID].TasksStatuses[task.ID],
+		Status:        finalStatus, // Use the determined final status
 		StatusHistory: history,
 	}
 
