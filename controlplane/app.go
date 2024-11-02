@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"time"
 
 	"github.com/gilcrest/diygoapi/errs"
-	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/olahol/melody"
 	"github.com/rs/zerolog"
@@ -38,10 +38,14 @@ func NewApp(cfg Config, args []string) (*App, error) {
 }
 
 func (app *App) configureRoutes() *App {
-	app.Router.HandleFunc("/register/project", app.RegisterProject).Methods("POST")
-	app.Router.HandleFunc("/register/service", app.APIKeyMiddleware(app.RegisterService)).Methods("POST")
-	app.Router.HandleFunc("/orchestrations", app.APIKeyMiddleware(app.OrchestrationsHandler)).Methods("POST")
-	app.Router.HandleFunc("/register/agent", app.APIKeyMiddleware(app.RegisterAgent)).Methods("POST")
+	app.Router.HandleFunc("/register/project", app.RegisterProject).Methods(http.MethodPost)
+	app.Router.HandleFunc("/apikeys", app.APIKeyMiddleware(app.CreateAdditionalApiKey)).Methods(http.MethodPost)
+	app.Router.HandleFunc("/webhooks", app.APIKeyMiddleware(app.AddWebhook)).Methods(http.MethodPost)
+	app.Router.HandleFunc("/register/service", app.APIKeyMiddleware(app.RegisterService)).Methods(http.MethodPost)
+	app.Router.HandleFunc("/orchestrations", app.APIKeyMiddleware(app.OrchestrationsHandler)).Methods(http.MethodPost)
+	app.Router.HandleFunc("/orchestrations", app.APIKeyMiddleware(app.ListOrchestrationsHandler)).Methods(http.MethodGet)
+	app.Router.HandleFunc("/orchestrations/inspections/{id}", app.APIKeyMiddleware(app.OrchestrationInspectionHandler)).Methods(http.MethodGet)
+	app.Router.HandleFunc("/register/agent", app.APIKeyMiddleware(app.RegisterAgent)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/ws", app.HandleWebSocket)
 	return app
 }
@@ -127,8 +131,8 @@ func (app *App) RegisterProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project.ID = uuid.New().String()
-	project.APIKey = uuid.New().String()
+	project.ID = app.Plane.GenerateProjectKey()
+	project.APIKey = app.Plane.GenerateAPIKey()
 
 	app.Plane.projects[project.ID] = &project
 
@@ -193,11 +197,7 @@ func (app *App) OrchestrationsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orchestration.ID = uuid.New().String()
-	orchestration.Status = Pending
-	orchestration.ProjectID = project.ID
-
-	app.Plane.PrepareOrchestration(&orchestration)
+	app.Plane.PrepareOrchestration(project.ID, &orchestration)
 
 	if !orchestration.Executable() {
 		app.Logger.
@@ -250,6 +250,116 @@ func (app *App) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	if err := app.Plane.WebSocketManager.melody.HandleRequest(w, r); err != nil {
 		app.Logger.Error().Str("serviceID", serviceID).Msg("Failed to handle request using the WebSocket")
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
+		return
+	}
+}
+
+func (app *App) CreateAdditionalApiKey(w http.ResponseWriter, r *http.Request) {
+	apiKey := r.Context().Value("api_key").(string)
+	project, err := app.Plane.GetProjectByApiKey(apiKey)
+	if err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
+		return
+	}
+
+	newApiKey := app.Plane.GenerateAPIKey()
+	project.AdditionalAPIKeys = append(project.AdditionalAPIKeys, newApiKey)
+
+	w.WriteHeader(http.StatusCreated)
+	if err := json.NewEncoder(w).Encode(map[string]string{
+		"apiKey": newApiKey,
+	}); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
+		return
+	}
+}
+
+func (app *App) AddWebhook(w http.ResponseWriter, r *http.Request) {
+	apiKey := r.Context().Value("api_key").(string)
+	project, err := app.Plane.GetProjectByApiKey(apiKey)
+	if err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
+		return
+	}
+
+	var webhook struct {
+		Url string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&webhook); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFail), err))
+		return
+	}
+
+	if _, err := url.ParseRequestURI(webhook.Url); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Validation, err))
+		return
+	}
+
+	project.Webhooks = append(project.Webhooks, webhook.Url)
+
+	// Return the new key
+	w.WriteHeader(http.StatusCreated)
+	if err := json.NewEncoder(w).Encode(webhook); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
+		return
+	}
+}
+
+func (app *App) ListOrchestrationsHandler(w http.ResponseWriter, r *http.Request) {
+	apiKey := r.Context().Value("api_key").(string)
+	project, err := app.Plane.GetProjectByApiKey(apiKey)
+	if err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
+		return
+	}
+
+	orchestrationList := app.Plane.GetOrchestrationList(project.ID)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(orchestrationList); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Internal, err))
+		return
+	}
+}
+
+func (app *App) OrchestrationInspectionHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	apiKey := r.Context().Value("api_key").(string)
+	project, err := app.Plane.GetProjectByApiKey(apiKey)
+	if err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
+		return
+	}
+
+	orchestrationID := vars["id"]
+
+	if !app.Plane.OrchestrationBelongsToProject(orchestrationID, project.ID) {
+		err := fmt.Errorf("unknown orchestration")
+		app.Logger.
+			Error().
+			Str("ProjectID", project.ID).
+			Str("OrchestrationID", orchestrationID).
+			Msg("Orchestration not found for the given project")
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unauthorized, err))
+		return
+	}
+
+	inspection, err := app.Plane.InspectOrchestration(orchestrationID)
+	if err != nil {
+		app.Logger.
+			Error().
+			Err(err).
+			Str("OrchestrationID", orchestrationID).
+			Msg("Failed to inspect orchestration")
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(inspection); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Internal, err))
 		return
 	}
 }

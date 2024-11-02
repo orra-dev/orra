@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lithammer/shortuuid/v4"
 	"github.com/rs/zerolog"
 )
 
@@ -64,7 +65,7 @@ func (p *ControlPlane) RegisterOrUpdateService(service *ServiceInfo) error {
 	}
 
 	if len(strings.TrimSpace(service.ID)) == 0 {
-		service.ID = p.generateServiceKey(service.ProjectID)
+		service.ID = p.GenerateServiceKey()
 		service.Version = 1
 		service.IdempotencyStore = NewIdempotencyStore(0)
 
@@ -133,16 +134,21 @@ func (p *ControlPlane) GetServiceName(projectID string, serviceID string) (strin
 }
 
 func (p *ControlPlane) GetProjectByApiKey(key string) (*Project, error) {
-	apiKeyToProjectID := make(map[string]string)
-	for id, project := range p.projects {
-		apiKeyToProjectID[project.APIKey] = id
+	for _, project := range p.projects {
+		if project.APIKey == key || contains(project.AdditionalAPIKeys, key) {
+			return project, nil
+		}
 	}
+	return nil, fmt.Errorf("no project found with the given API key: %s", key)
+}
 
-	if projectID, exists := apiKeyToProjectID[key]; exists {
-		return p.projects[projectID], nil
-	} else {
-		return nil, fmt.Errorf("no project found with the given API key: %s", key)
+func contains(entries []string, v string) bool {
+	for _, e := range entries {
+		if e == v {
+			return true
+		}
 	}
+	return false
 }
 
 func (p *ControlPlane) ServiceBelongsToProject(svcID, projectID string) bool {
@@ -157,11 +163,34 @@ func (p *ControlPlane) ServiceBelongsToProject(svcID, projectID string) bool {
 	return ok
 }
 
-func (p *ControlPlane) generateServiceKey(projectID string) string {
-	// Generate a unique key for the service
-	// This could be a UUID, a hash of project ID + timestamp, or any other method
-	// that ensures uniqueness within the project
-	return fmt.Sprintf("%s-%s", projectID, uuid.New().String())
+func (p *ControlPlane) OrchestrationBelongsToProject(orchestrationID, projectID string) bool {
+	p.orchestrationStoreMu.RLock()
+	defer p.orchestrationStoreMu.RUnlock()
+
+	orchestration, exists := p.orchestrationStore[orchestrationID]
+	if !exists {
+		return false
+	}
+
+	return orchestration.ProjectID == projectID
+}
+
+func (p *ControlPlane) GenerateProjectKey() string {
+	return fmt.Sprintf("p_%s", shortuuid.New())
+}
+
+func (p *ControlPlane) GenerateOrchestrationKey() string {
+	return fmt.Sprintf("o_%s", shortuuid.New())
+}
+
+func (p *ControlPlane) GenerateAPIKey() string {
+	key := fmt.Sprintf("%s-%s", uuid.New(), uuid.New())
+	hexString := strings.ReplaceAll(key, "-", "")
+	return fmt.Sprintf("sk-orra-v1-%s", hexString)
+}
+
+func (p *ControlPlane) GenerateServiceKey() string {
+	return fmt.Sprintf("s_%s", shortuuid.New())
 }
 
 func (p *ControlPlane) GetProjectIDForService(serviceID string) (string, error) {

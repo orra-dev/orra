@@ -215,7 +215,7 @@ func (c *VectorCache) getWithRetry(ctx context.Context,
 	}
 
 	sanitizedAsJson := sanitizeJSONOutput(llmResp.Choices[0].Message.Content)
-	c.logger.Debug().RawJSON("Cache Miss Plan", []byte(sanitizedAsJson)).Msg("")
+	c.logger.Trace().RawJSON("Cache Miss Plan", []byte(sanitizedAsJson)).Msg("")
 	task0Input, err := extractTask0Input(sanitizedAsJson)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract task0 input: %w", err)
@@ -239,9 +239,8 @@ func (c *VectorCache) getWithRetry(ctx context.Context,
 	}
 
 	// Create new cache entry
-	id := uuid.New().String()
 	entry := &CacheEntry{
-		ID:            id,
+		ID:            uuid.New().String(),
 		Response:      &llmResp,
 		ActionVector:  actionEmbedding,
 		ServicesHash:  servicesHash,
@@ -261,7 +260,7 @@ func (c *VectorCache) getWithRetry(ctx context.Context,
 	pc.mu.Unlock()
 
 	return &CacheResult{
-		ID:         id,
+		ID:         entry.ID,
 		Response:   &llmResp,
 		Task0Input: task0Input,
 		Hit:        false,

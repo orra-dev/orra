@@ -58,9 +58,10 @@ type WebSocketManager struct {
 }
 
 type Project struct {
-	ID      string `json:"id"`
-	APIKey  string `json:"apiKey"`
-	Webhook string `json:"webhook"`
+	ID                string   `json:"id"`
+	APIKey            string   `json:"apiKey"`
+	AdditionalAPIKeys []string `json:"additionalAPIKeys"`
+	Webhooks          []string `json:"webhook"`
 }
 
 type OrchestrationState struct {
@@ -137,6 +138,16 @@ type TaskWorker struct {
 	consecutiveErrs int       // Track consecutive failures
 }
 
+type TaskStatusEvent struct {
+	ID              string    `json:"id"`
+	OrchestrationID string    `json:"orchestrationId"`
+	TaskID          string    `json:"taskId"`
+	Status          Status    `json:"status"`
+	Timestamp       time.Time `json:"timestamp"`
+	ServiceID       string    `json:"serviceId,omitempty"`
+	Error           string    `json:"error,omitempty"`
+}
+
 type Task struct {
 	Type            string          `json:"type"`
 	ID              string          `json:"id"`
@@ -197,6 +208,7 @@ type Orchestration struct {
 	Status    Status              `json:"status"`
 	Error     json.RawMessage     `json:"error,omitempty"`
 	Timestamp time.Time           `json:"timestamp"`
+	Webhook   string              `json:"webhook"`
 	taskZero  json.RawMessage
 }
 

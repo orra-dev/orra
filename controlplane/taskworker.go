@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/google/uuid"
+	"github.com/lithammer/shortuuid/v4"
 )
 
 var (
@@ -135,22 +135,42 @@ func (w *TaskWorker) processEntry(ctx context.Context, entry LogEntry, orchestra
 		return nil
 	}
 
+	processingTs := time.Now().UTC()
+	if err := w.LogManager.AppendTaskStatusEvent(orchestrationID, w.TaskID, w.Service.ID, Processing, nil, processingTs, w.consecutiveErrs); err != nil {
+		return err
+	}
+	if err := w.LogManager.MarkTask(orchestrationID, w.TaskID, Processing, processingTs); err != nil {
+		return err
+	}
+
 	// Execute our task
 	output, err := w.executeTaskWithRetry(ctx, orchestrationID)
 	if err != nil {
 		w.LogManager.Logger.Error().Err(err).Msgf("Cannot execute task %s for orchestration %s", w.TaskID, orchestrationID)
-		return w.LogManager.AppendFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error())
+		failedTs := time.Now().UTC()
+		if err := w.LogManager.AppendTaskStatusEvent(orchestrationID, w.TaskID, w.Service.ID, Failed, err, failedTs, w.consecutiveErrs); err != nil {
+			return err
+		}
+		if err := w.LogManager.MarkTask(orchestrationID, w.TaskID, Failed, failedTs); err != nil {
+			return err
+		}
+		return w.LogManager.AppendFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error(), w.consecutiveErrs)
 	}
 
 	// Mark this entry as processed
 	w.logState.Processed[entry.ID()] = true
 
-	if err := w.LogManager.MarkTaskCompleted(orchestrationID, entry.ID()); err != nil {
-		w.LogManager.Logger.Error().Err(err).Msgf("Cannot mark task %s completed for orchestration %s", w.TaskID, orchestrationID)
-		return w.LogManager.AppendFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error())
+	completedTs := time.Now().UTC()
+	if err = w.LogManager.AppendTaskStatusEvent(orchestrationID, w.TaskID, w.Service.ID, Completed, nil, completedTs, w.consecutiveErrs); err != nil {
+		return err
 	}
 
-	w.LogManager.AppendToLog(orchestrationID, "task_output", w.TaskID, output, w.Service.ID)
+	if err := w.LogManager.MarkTaskCompleted(orchestrationID, entry.ID(), completedTs); err != nil {
+		w.LogManager.Logger.Error().Err(err).Msgf("Cannot mark task %s completed for orchestration %s", w.TaskID, orchestrationID)
+		return w.LogManager.AppendFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error(), w.consecutiveErrs)
+	}
+
+	w.LogManager.AppendToLog(orchestrationID, "task_output", w.TaskID, output, w.Service.ID, w.consecutiveErrs)
 	return nil
 }
 
@@ -160,7 +180,7 @@ func (w *TaskWorker) executeTaskWithRetry(ctx context.Context, orchestrationID s
 
 	operation := func() error {
 		// Check service health and respect MaxServiceDowntime
-		if err := w.checkServiceHealth(); err != nil {
+		if err := w.checkServiceHealth(orchestrationID); err != nil {
 			return err // Returns RetryableError or permanent error if timeout exceeded
 		}
 
@@ -200,7 +220,7 @@ func (w *TaskWorker) executeTaskWithRetry(ctx context.Context, orchestrationID s
 	return result, nil
 }
 
-func (w *TaskWorker) checkServiceHealth() error {
+func (w *TaskWorker) checkServiceHealth(orchestrationID string) error {
 	if w.isServiceHealthy() {
 		// Reset pause tracking when service is healthy
 		w.pauseStart = time.Time{}
@@ -209,7 +229,18 @@ func (w *TaskWorker) checkServiceHealth() error {
 
 	// Start tracking pause time if not already tracking
 	if w.pauseStart.IsZero() {
-		w.pauseStart = time.Now()
+		w.pauseStart = time.Now().UTC()
+		if err := w.LogManager.AppendTaskStatusEvent(
+			orchestrationID,
+			w.TaskID,
+			w.Service.ID,
+			Paused,
+			fmt.Errorf("service %s is not healthy", w.Service.ID),
+			w.pauseStart,
+			w.consecutiveErrs,
+		); err != nil {
+			w.LogManager.Logger.Error().Err(err).Msg("Failed to append paused status")
+		}
 	}
 
 	// Check if we've exceeded MaxServiceDowntime
@@ -223,7 +254,7 @@ func (w *TaskWorker) checkServiceHealth() error {
 
 func (w *TaskWorker) tryExecute(ctx context.Context, orchestrationID string) (json.RawMessage, error) {
 	idempotencyKey := w.generateIdempotencyKey(orchestrationID)
-	executionID := uuid.New().String()
+	executionID := fmt.Sprintf("e_%s", shortuuid.New())
 
 	// Initialize or get existing execution
 	result, isNewExecution, err := w.Service.IdempotencyStore.InitializeExecution(idempotencyKey, executionID)
@@ -254,10 +285,10 @@ func (w *TaskWorker) tryExecute(ctx context.Context, orchestrationID string) (js
 	go w.renewLeaseWithHealthCheck(renewalCtx, idempotencyKey, executionID)
 
 	// Execute the actual task
-	return w.executeTask(ctx, orchestrationID, idempotencyKey)
+	return w.executeTask(ctx, orchestrationID, idempotencyKey, executionID)
 }
 
-func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string, key IdempotencyKey) (json.RawMessage, error) {
+func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string, key IdempotencyKey, executionID string) (json.RawMessage, error) {
 	input, err := mergeValueMapsToJson(w.logState.DependencyState)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal input: %w", err)
@@ -266,7 +297,7 @@ func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string, ke
 	task := &Task{
 		Type:            "task_request",
 		ID:              w.TaskID,
-		ExecutionID:     uuid.New().String(),
+		ExecutionID:     executionID,
 		IdempotencyKey:  key,
 		ServiceID:       w.Service.ID,
 		Input:           input,

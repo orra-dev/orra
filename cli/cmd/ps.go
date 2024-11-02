@@ -1,0 +1,193 @@
+package cmd
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/ezodude/orra/cli/internal/api"
+	"github.com/ezodude/orra/cli/internal/config"
+	"github.com/spf13/cobra"
+)
+
+const (
+	symbolPending       = "○ " // Empty circle for pending
+	symbolProcessing    = "◎ " // Dotted circle for processing
+	symbolCompleted     = "● " // Filled circle for completed
+	symbolFailed        = "✕ " // Cross for failed
+	symbolNotActionable = "⊘ " // Prohibited circle for not actionable
+	symbolPaused        = "⏸ " // Pause icon for paused
+)
+
+func newPsCmd(opts *CliOpts) *cobra.Command {
+	var wide bool
+
+	cmd := &cobra.Command{
+		Use:   "ps",
+		Short: "List orchestrated actions for a project",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			proj, projectName, err := config.GetProject(opts.Config, opts.ProjectID)
+			if err != nil {
+				return err
+			}
+
+			client := opts.ApiClient.
+				SetBaseUrl(proj.ServerAddr).
+				SetApiKey(proj.CliAuth)
+
+			ctx, cancel := context.WithTimeout(cmd.Context(), client.GetTimeout())
+			defer cancel()
+
+			orchestrations, err := client.ListOrchestrations(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to list orchestrated actions: %w", err)
+			}
+
+			// Project Info Section
+			fmt.Printf("Project: %s\nServer:  %s\n", projectName, proj.ServerAddr)
+
+			if len(opts.Config.Projects) == 0 {
+				fmt.Println("\nNo actions have been orchestrated yet")
+				return nil
+			}
+
+			// Define columns based on view mode
+			columns := []column{
+				{"ID", func(o api.OrchestrationView) string { return o.ID }, 25},
+				{"ACTION", func(o api.OrchestrationView) string { return truncateString(o.Action, 34) }, 36},
+				{"STATUS", func(o api.OrchestrationView) string { return formatStatus(o.Status.String()) }, 18},
+				{"CREATED", func(o api.OrchestrationView) string { return getRelativeTime(o.Timestamp) }, 10},
+			}
+
+			if wide {
+				columns = append(columns, column{
+					"ERROR",
+					func(o api.OrchestrationView) string { return truncateString(formatListError(o.Error), 50) },
+					52,
+				})
+			}
+
+			// Prepare all orchestrations in order: Processing, Pending, Completed, Failed, NotActionable
+			var allOrchestrations []api.OrchestrationView
+			allOrchestrations = append(allOrchestrations, orchestrations.Processing...)
+			allOrchestrations = append(allOrchestrations, orchestrations.Pending...)
+			allOrchestrations = append(allOrchestrations, orchestrations.Completed...)
+			allOrchestrations = append(allOrchestrations, orchestrations.Failed...)
+			allOrchestrations = append(allOrchestrations, orchestrations.NotActionable...)
+
+			if len(allOrchestrations) == 0 {
+				fmt.Println("\nNo orchestrations found")
+				return nil
+			}
+
+			// Print table with new styling
+			fmt.Printf("\n┌─ Orchestrations\n")
+
+			// Header
+			headerFmt := buildFormatString(columns)
+			fmt.Printf("│ "+headerFmt+"\n", toInterfaceSlice(getHeaders(columns))...)
+			fmt.Printf("│ %s\n", strings.Repeat("─", calculateLineWidth(columns)))
+
+			// Rows
+			for _, o := range allOrchestrations {
+				values := make([]interface{}, len(columns))
+				for i, col := range columns {
+					values[i] = col.value(o)
+				}
+				fmt.Printf("│ "+headerFmt+"\n", values...)
+			}
+			fmt.Printf("└─────\n")
+
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVarP(&wide, "wide", "w", false, "Show more details including errors")
+	return cmd
+}
+
+type column struct {
+	header string
+	value  func(o api.OrchestrationView) string
+	width  int
+}
+
+func truncateString(s string, length int) string {
+	if len(s) <= length {
+		return s
+	}
+	return s[:length-3] + "..."
+}
+
+func calculateLineWidth(columns []column) int {
+	width := len(columns) + 1 // Account for spacing between columns
+	for _, col := range columns {
+		width += col.width
+	}
+	return width
+}
+
+func buildFormatString(columns []column) string {
+	formats := make([]string, len(columns))
+	for i, col := range columns {
+		formats[i] = fmt.Sprintf("%%-%ds", col.width)
+	}
+	return strings.Join(formats, " ")
+}
+
+func getHeaders(columns []column) []string {
+	headers := make([]string, len(columns))
+	for i, col := range columns {
+		headers[i] = col.header
+	}
+	return headers
+}
+
+func toInterfaceSlice(s []string) []interface{} {
+	is := make([]interface{}, len(s))
+	for i, v := range s {
+		is[i] = v
+	}
+	return is
+}
+
+func formatListError(err string) string {
+	if err == "" {
+		return "─"
+	}
+	return err
+}
+
+func formatStatus(status string) string {
+	switch strings.ToLower(status) {
+	case "pending":
+		return symbolPending + status
+	case "processing":
+		return symbolProcessing + status
+	case "paused":
+		return symbolPaused + status
+	case "completed":
+		return symbolCompleted + status
+	case "failed":
+		return symbolFailed + status
+	case "not actionable":
+		return symbolNotActionable + status
+	default:
+		return "  " + status // Double space to align with other symbols
+	}
+}
+
+func getRelativeTime(t time.Time) string {
+	duration := time.Since(t)
+	switch {
+	case duration < time.Minute:
+		return "just now"
+	case duration < time.Hour:
+		return fmt.Sprintf("%dm", int(duration.Minutes()))
+	case duration < 24*time.Hour:
+		return fmt.Sprintf("%dh", int(duration.Hours()))
+	default:
+		return fmt.Sprintf("%dd", int(duration.Hours()/24))
+	}
+}

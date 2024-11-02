@@ -7,16 +7,34 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
 )
 
-func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
-	p.orchestrationStoreMu.Lock()
-	defer p.orchestrationStoreMu.Unlock()
+func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orchestration) {
+	orchestration.ID = p.GenerateOrchestrationKey()
+	orchestration.Status = Pending
+	orchestration.Timestamp = time.Now().UTC()
+	orchestration.ProjectID = projectID
 
+	p.orchestrationStoreMu.Lock()
 	p.orchestrationStore[orchestration.ID] = orchestration
+	p.orchestrationStoreMu.Unlock()
+
+	if err := p.validateWebhook(orchestration.ProjectID, orchestration.Webhook); err != nil {
+		wrappedErr := fmt.Errorf("invalid orchestration: %w", err)
+		p.Logger.Error().
+			Str("OrchestrationID", orchestration.ID).
+			Str("Webhook", orchestration.Webhook).
+			Err(wrappedErr)
+		orchestration.Status = Failed
+		orchestration.Timestamp = time.Now().UTC()
+		orchestration.Error = []byte(wrappedErr.Error())
+		return
+	}
+
 	services, err := p.discoverProjectServices(orchestration.ProjectID)
 	if err != nil {
 		p.Logger.Error().
@@ -24,6 +42,7 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 			Err(fmt.Errorf("error discovering services: %w", err))
 
 		orchestration.Status = Failed
+		orchestration.Timestamp = time.Now().UTC()
 		marshaledErr, _ := json.Marshal(err.Error())
 		orchestration.Error = marshaledErr
 		return
@@ -36,6 +55,7 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 			Str("OrchestrationID", orchestration.ID).
 			Err(wrappedErr)
 		orchestration.Status = Failed
+		orchestration.Timestamp = time.Now().UTC()
 		orchestration.Error = []byte(wrappedErr.Error())
 		return
 	}
@@ -47,6 +67,7 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 			Str("OrchestrationID", orchestration.ID).
 			Err(wrappedErr)
 		orchestration.Status = Failed
+		orchestration.Timestamp = time.Now().UTC()
 		orchestration.Error = []byte(wrappedErr.Error())
 		return
 	}
@@ -61,6 +82,7 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 			Err(fmt.Errorf("error decomposing action: %w", err))
 
 		orchestration.Status = Failed
+		orchestration.Timestamp = time.Now().UTC()
 		marshaledErr, _ := json.Marshal(fmt.Sprintf("Error decomposing action: %s", err.Error()))
 		orchestration.Error = marshaledErr
 		return
@@ -69,6 +91,7 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 	if err := p.validateActionable(callingPlan.Tasks); err != nil {
 		orchestration.Plan = callingPlan
 		orchestration.Status = NotActionable
+		orchestration.Timestamp = time.Now().UTC()
 		marshaledErr, _ := json.Marshal(err.Error())
 		orchestration.Error = marshaledErr
 		return
@@ -82,6 +105,7 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 
 		orchestration.Plan = callingPlan
 		orchestration.Status = Failed
+		orchestration.Timestamp = time.Now().UTC()
 		marshaledErr, _ := json.Marshal(fmt.Sprintf("Error locating task zero in calling plan"))
 		orchestration.Error = marshaledErr
 		return
@@ -90,6 +114,7 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 	taskZeroInput, err := json.Marshal(taskZero.Input)
 	if err != nil {
 		orchestration.Status = Failed
+		orchestration.Timestamp = time.Now().UTC()
 		marshaledErr, _ := json.Marshal(fmt.Sprintf("Failed to convert task zero into valid params: %v", err))
 		orchestration.Error = marshaledErr
 		return
@@ -97,6 +122,7 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 
 	if err = p.validateInput(services, onlyServicesCallingPlan.Tasks); err != nil {
 		orchestration.Status = Failed
+		orchestration.Timestamp = time.Now().UTC()
 		marshaledErr, _ := json.Marshal(fmt.Sprintf("Error validating plan input/output: %s", err.Error()))
 		orchestration.Error = marshaledErr
 		return
@@ -104,6 +130,7 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 
 	if err := p.addServiceDetails(services, onlyServicesCallingPlan.Tasks); err != nil {
 		orchestration.Status = Failed
+		orchestration.Timestamp = time.Now().UTC()
 		marshaledErr, _ := json.Marshal(fmt.Sprintf("Error adding service details to calling plan: %s", err.Error()))
 		orchestration.Error = marshaledErr
 		return
@@ -114,6 +141,9 @@ func (p *ControlPlane) PrepareOrchestration(orchestration *Orchestration) {
 }
 
 func (p *ControlPlane) ExecuteOrchestration(orchestration *Orchestration) {
+	orchestration.Status = Processing
+	orchestration.Timestamp = time.Now().UTC()
+
 	p.Logger.Debug().Msgf("About to create Log for orchestration %s", orchestration.ID)
 	log := p.LogManager.PrepLogForOrchestration(orchestration.ProjectID, orchestration.ID, orchestration.Plan)
 
@@ -124,7 +154,6 @@ func (p *ControlPlane) ExecuteOrchestration(orchestration *Orchestration) {
 
 	p.Logger.Debug().Msgf("About to append initial entry to Log for orchestration %s", orchestration.ID)
 	log.Append(initialEntry)
-	orchestration.Status = Processing
 }
 
 func (p *ControlPlane) FinalizeOrchestration(
@@ -141,6 +170,7 @@ func (p *ControlPlane) FinalizeOrchestration(
 	}
 
 	orchestration.Status = status
+	orchestration.Timestamp = time.Now().UTC()
 	orchestration.Error = reason
 	orchestration.Results = results
 
@@ -235,6 +265,23 @@ func (p *ControlPlane) decomposeAction(orchestration *Orchestration, action stri
 	result.ProjectID = orchestration.ProjectID
 
 	return result, nil
+}
+
+func (p *ControlPlane) validateWebhook(projectID string, webhookUrl string) error {
+	if len(strings.TrimSpace(webhookUrl)) == 0 {
+		return fmt.Errorf("a webhook url is required to return orchestration results")
+	}
+
+	if _, err := url.ParseRequestURI(webhookUrl); err != nil {
+		return fmt.Errorf("webhook url %s is not valid: %w", webhookUrl, err)
+	}
+
+	project := p.projects[projectID]
+	if !contains(project.Webhooks, webhookUrl) {
+		return fmt.Errorf("webhook url %s not found in project %s", webhookUrl, projectID)
+	}
+
+	return nil
 }
 
 func (p *ControlPlane) validateInput(services []*ServiceInfo, subTasks []*SubTask) error {
@@ -400,18 +447,13 @@ func (p *ControlPlane) callingPlanMinusTaskZero(callingPlan *ServiceCallingPlan)
 func (p *ControlPlane) validateActionable(subTasks []*SubTask) error {
 	for _, subTask := range subTasks {
 		if strings.EqualFold(subTask.ID, "final") {
-			return fmt.Errorf("%s", subTask.Error)
+			return fmt.Errorf("%s", subTask.Input["error"])
 		}
 	}
 	return nil
 }
 
 func (p *ControlPlane) triggerWebhook(orchestration *Orchestration) error {
-	project, ok := p.projects[orchestration.ProjectID]
-	if !ok {
-		return fmt.Errorf("project %s not found", orchestration.ProjectID)
-	}
-
 	var payload = struct {
 		OrchestrationID string            `json:"orchestrationId"`
 		Results         []json.RawMessage `json:"results"`
@@ -437,14 +479,14 @@ func (p *ControlPlane) triggerWebhook(orchestration *Orchestration) error {
 			Payload         string
 		}{
 			OrchestrationID: orchestration.ID,
-			ProjectID:       project.ID,
-			Webhook:         project.Webhook,
+			ProjectID:       orchestration.ProjectID,
+			Webhook:         orchestration.Webhook,
 			Payload:         string(jsonPayload),
 		}).
 		Msg("Triggering webhook")
 
 	// Create a new request
-	req, err := http.NewRequest("POST", project.Webhook, bytes.NewBuffer(jsonPayload))
+	req, err := http.NewRequest("POST", orchestration.Webhook, bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
