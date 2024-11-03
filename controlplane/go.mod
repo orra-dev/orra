@@ -13,7 +13,7 @@ require (
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/rs/zerolog v1.33.0
 	github.com/sashabaranov/go-openai v1.32.3
-	github.com/stretchr/testify v1.8.0
+	github.com/stretchr/testify v1.9.0
 	github.com/vrischmann/envconfig v1.3.0
 	golang.org/x/sync v0.8.0
 	gonum.org/v1/gonum v0.15.1
