@@ -79,7 +79,7 @@ USER appuser
 COPY --from=build /bin/control-plane /bin/
 
 # Expose the port that the application listens on.
-EXPOSE 8080
+EXPOSE 8005
 
 # What the container should run when it is started.
 ENTRYPOINT [ "/bin/control-plane" ]

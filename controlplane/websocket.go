@@ -1,7 +1,6 @@
 package main
 
 import (
-	"container/list"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -20,7 +19,6 @@ func NewWebSocketManager(logger zerolog.Logger) *WebSocketManager {
 		melody:            m,
 		logger:            logger,
 		connMap:           make(map[string]*melody.Session),
-		messageQueues:     make(map[string]*WebSocketMessageQueue),
 		messageExpiration: time.Hour * 24, // Keep messages for 24 hours
 		pingInterval:      m.Config.PingPeriod,
 		pongWait:          m.Config.PongWait,
@@ -220,27 +218,6 @@ func (wsm *WebSocketManager) UpdateServiceHealth(serviceID string, isHealthy boo
 	wsm.healthMu.Lock()
 	wsm.serviceHealth[serviceID] = isHealthy
 	wsm.healthMu.Unlock()
-}
-
-// CleanupExpiredMessages cleans up expired messages
-func (wsm *WebSocketManager) CleanupExpiredMessages() {
-	wsm.messageQueuesMu.RLock()
-	defer wsm.messageQueuesMu.RUnlock()
-
-	for serviceID, queue := range wsm.messageQueues {
-		queue.mu.Lock()
-		var next *list.Element
-		for e := queue.Front(); e != nil; e = next {
-			next = e.Next()
-			msg := e.Value.(*WebSocketQueuedMessage)
-			if time.Since(msg.Time) > wsm.messageExpiration {
-				queue.Remove(e)
-			}
-		}
-		queue.mu.Unlock()
-
-		wsm.logger.Debug().Str("serviceID", serviceID).Int("queueLength", queue.Len()).Msg("Cleaned up expired messages")
-	}
 }
 
 func (wsm *WebSocketManager) IsServiceHealthy(serviceID string) bool {

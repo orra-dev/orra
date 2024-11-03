@@ -1,0 +1,242 @@
+name: Release Management
+
+on:
+  push:
+    tags:
+      - 'cli-v*.*.*'       # e.g. cli-v0.1.0
+      - 'cp-v*.*.*'        # e.g. cp-v0.1.0
+      - 'sdk-v*.*.*'       # e.g. sdk-v0.1.0
+      - 'v*.*.*'          # For full release
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_type: ${{ steps.release_type.outputs.type }}
+      version: ${{ steps.version.outputs.version }}
+      has_cli: ${{ steps.check_changelog.outputs.has_cli }}
+      has_controlplane: ${{ steps.check_changelog.outputs.has_controlplane }}
+      has_sdk: ${{ steps.check_changelog.outputs.has_sdk }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine release type and version
+        id: release_type
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          if [[ $TAG == cli-v* ]]; then
+            echo "type=cli" >> $GITHUB_OUTPUT
+            echo "version=${TAG#cli-v}" >> $GITHUB_OUTPUT
+          elif [[ $TAG == cp-v* ]]; then
+            echo "type=controlplane" >> $GITHUB_OUTPUT
+            echo "version=${TAG#cp-v}" >> $GITHUB_OUTPUT
+          elif [[ $TAG == sdk-v* ]]; then
+            echo "type=sdk" >> $GITHUB_OUTPUT
+            echo "version=${TAG#sdk-v}" >> $GITHUB_OUTPUT
+          else
+            echo "type=full" >> $GITHUB_OUTPUT
+            echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check for changelog files
+        id: check_changelog
+        run: |
+          VERSION=${{ steps.release_type.outputs.version }}
+          RELEASE_TYPE=${{ steps.release_type.outputs.type }}
+          
+          check_changelog() {
+            local component=$1
+            local version=$2
+            if [ -f "releases/${component}/versions/${version}.md" ]; then
+              echo "has_${component}=true" >> $GITHUB_OUTPUT
+            else
+              echo "has_${component}=false" >> $GITHUB_OUTPUT
+            fi
+          }
+          
+          if [ "$RELEASE_TYPE" = "full" ]; then
+            # Check all components for changes
+            check_changelog "cli" "$VERSION"
+            check_changelog "controlplane" "$VERSION"
+            check_changelog "sdk" "$VERSION"
+          elif [ "$RELEASE_TYPE" = "cli" ]; then
+            check_changelog "cli" "$VERSION"
+          elif [ "$RELEASE_TYPE" = "controlplane" ]; then
+            check_changelog "controlplane" "$VERSION"
+          elif [ "$RELEASE_TYPE" = "sdk" ]; then
+            check_changelog "sdk" "$VERSION"
+          fi
+
+  build-cli:
+    needs: prepare-release
+    if: |
+      needs.prepare-release.outputs.has_cli == 'true' && 
+      (needs.prepare-release.outputs.release_type == 'cli' || needs.prepare-release.outputs.release_type == 'full')
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            binary: orra
+          - os: darwin
+            arch: amd64
+            binary: orra
+          - os: darwin
+            arch: arm64
+            binary: orra
+          - os: windows
+            arch: amd64
+            binary: orra.exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Build CLI binary
+        run: |
+          cd cli
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o ../dist/${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}
+
+      - name: Generate checksum
+        run: |
+          cd dist
+          sha256sum ${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }} > ${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}.sha256
+
+      - name: Upload binary artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: cli-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            dist/${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}
+            dist/${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}.sha256
+
+  create-release:
+    needs: [prepare-release, build-cli]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        if: needs.prepare-release.outputs.has_cli == 'true'
+
+      - name: Prepare release notes
+        run: |
+          VERSION=${{ needs.prepare-release.outputs.version }}
+          RELEASE_TYPE=${{ needs.prepare-release.outputs.release_type }}
+          
+          if [ "$RELEASE_TYPE" = "full" ]; then
+            echo "# Release v${VERSION}" > RELEASE_NOTES.md
+          else
+            echo "# ${RELEASE_TYPE} v${VERSION}" > RELEASE_NOTES.md
+          fi
+          echo "" >> RELEASE_NOTES.md
+          
+          add_component_notes() {
+            local component=$1
+            local version=$2
+            if [ -f "releases/${component}/versions/${version}.md" ]; then
+              cat "releases/${component}/versions/${version}.md" >> RELEASE_NOTES.md
+              echo "" >> RELEASE_NOTES.md
+            fi
+          }
+          
+          if [ "$RELEASE_TYPE" = "full" ]; then
+            [ "${{ needs.prepare-release.outputs.has_cli }}" = "true" ] && add_component_notes "cli" "$VERSION"
+            [ "${{ needs.prepare-release.outputs.has_controlplane }}" = "true" ] && add_component_notes "controlplane" "$VERSION"
+            [ "${{ needs.prepare-release.outputs.has_sdk }}" = "true" ] && add_component_notes "sdks" "$VERSION"
+          else
+            add_component_notes "$RELEASE_TYPE" "$VERSION"
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            cli-*/*
+          body_path: RELEASE_NOTES.md
+          draft: true
+          prerelease: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  generate-changelogs:
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main  # Or your default branch
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+      - name: Generate CLI changelog
+        if: needs.prepare-release.outputs.has_cli == 'true'
+        run: |
+          echo "# CLI Changelog" > releases/cli/CHANGELOG.md
+          echo "" >> releases/cli/CHANGELOG.md
+          find releases/cli/versions -name "*.md" -type f | sort -r | while read -r file; do
+            cat "$file" >> releases/cli/CHANGELOG.md
+            echo "" >> releases/cli/CHANGELOG.md
+          done
+
+      - name: Generate Control Plane changelog
+        if: needs.prepare-release.outputs.has_controlplane == 'true'
+        run: |
+          echo "# Control Plane Changelog" > releases/controlplane/CHANGELOG.md
+          echo "" >> releases/controlplane/CHANGELOG.md
+          find releases/controlplane/versions -name "*.md" -type f | sort -r | while read -r file; do
+            cat "$file" >> releases/controlplane/CHANGELOG.md
+            echo "" >> releases/controlplane/CHANGELOG.md
+          done
+
+      - name: Generate SDK changelog
+        if: needs.prepare-release.outputs.has_sdk == 'true'
+        run: |
+          echo "# SDK Changelog" > releases/sdks/CHANGELOG.md
+          echo "" >> releases/sdks/CHANGELOG.md
+          find releases/sdks/versions -name "*.md" -type f | sort -r | while read -r file; do
+            cat "$file" >> releases/sdks/CHANGELOG.md
+            echo "" >> releases/sdks/CHANGELOG.md
+          done
+
+      - name: Commit updated changelogs
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            VERSION="${{ needs.prepare-release.outputs.version }}"
+            git add releases/*/CHANGELOG.md
+            git commit -m "docs: update changelogs for version ${VERSION} [skip ci]"
+          
+            # Create changelog update branch
+            git checkout -b changelog-update-${VERSION}
+            git push origin changelog-update-${VERSION}
+          
+            # Create Pull Request
+            gh pr create \
+              --title "docs: update changelogs for version ${VERSION}" \
+              --body "Automated changelog updates for version ${VERSION}" \
+              --label "documentation" \
+              --base main \
+              --head changelog-update-${VERSION}
+          else
+            echo "No changelog updates needed"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload changelog artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: changelogs
+          path: releases/**/CHANGELOG.md

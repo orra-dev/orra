@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lithammer/shortuuid/v4"
@@ -31,23 +30,7 @@ func (p *ControlPlane) Initialise(ctx context.Context,
 	p.Logger = Logger
 	p.WebSocketManager = wsManager
 	p.VectorCache = vCache
-	p.TidyWebSocketArtefacts(ctx)
 	p.VectorCache.StartCleanup(ctx)
-}
-
-func (p *ControlPlane) TidyWebSocketArtefacts(ctx context.Context) {
-	go func() {
-		ticker := time.NewTicker(1 * time.Hour)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				p.WebSocketManager.CleanupExpiredMessages()
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
 }
 
 func (p *ControlPlane) RegisterOrUpdateService(service *ServiceInfo) error {
