@@ -46,11 +46,3 @@ jobs:
         run: |
           cd controlplane && go test ./... -race -coverprofile=coverage.txt -covermode=atomic
           cd ../cli && go test ./... -race -coverprofile=coverage.txt -covermode=atomic
-
-      - name: Upload coverage reports
-        uses: codecov/codecov-action@v3
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./controlplane/coverage.txt,./cli/coverage.txt
-          flags: unittests
-          fail_ci_if_error: true
