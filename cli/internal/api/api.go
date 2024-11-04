@@ -33,12 +33,20 @@ type Client struct {
 
 // Orchestration represents an orchestration state
 type Orchestration struct {
-	ID        string           `json:"id"`
-	Status    string           `json:"status"`
-	Action    string           `json:"action"`
-	Timestamp time.Time        `json:"timestamp"`
-	Error     map[string]any   `json:"error,omitempty"`
-	Results   []map[string]any `json:"results,omitempty"`
+	ID        string            `json:"id"`
+	Results   []json.RawMessage `json:"results"`
+	Error     json.RawMessage   `json:"error,omitempty"`
+	Status    string            `json:"status"`
+	Timestamp time.Time         `json:"timestamp"`
+	Webhook   string            `json:"webhook"`
+}
+
+type OrchestrationRequest struct {
+	Action struct {
+		Content string
+	} `json:"action"`
+	Data    []map[string]string `json:"data"`
+	Webhook string              `json:"webhook"`
 }
 
 type Status string
@@ -226,24 +234,24 @@ func (c *Client) GetOrchestrationInspection(ctx context.Context, id string) (*Or
 	return &inspection, nil
 }
 
-// GetOrchestrationLogs retrieves logs for a specific orchestration
-func (c *Client) GetOrchestrationLogs(ctx context.Context, id string) ([]map[string]any, error) {
-	var logs []map[string]any
+func (c *Client) CreateOrchestration(ctx context.Context, or OrchestrationRequest) (*Orchestration, error) {
+	var response *Orchestration
 
 	err := requests.
 		URL(c.baseURL).
-		Pathf("/orchestrations/%s/logs", id).
-		Method(http.MethodGet).
+		Path("/orchestrations").
+		Method(http.MethodPost).
 		Client(c.httpClient).
+		BodyJSON(or).
 		Header("Authorization", "Bearer "+c.apiKey).
-		ToJSON(&logs).
+		ToJSON(&response).
 		Fetch(ctx)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to get orchestration logs: %w", err)
+		return nil, fmt.Errorf("failed to create orchestration for action [%s]: %w", or.Action.Content, err)
 	}
 
-	return logs, nil
+	return response, nil
 }
 
 func (v OrchestrationListView) Empty() bool {
