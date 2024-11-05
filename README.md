@@ -54,8 +54,8 @@ service.
 
 This is a simple but powerful setup that demonstrates Orra's key capabilities:
 
-- Dynamic orchestration
-- Resilient execution
+- __Dynamic orchestration__: no entangled task routing logic.
+- __Resilient execution__: everything works no matter what.
 
 ### 1. Configure Your Workspace
 
