@@ -11,9 +11,9 @@ Our current release is codenamed "Narwal". This release brings the ✨Alpha✨ v
 
 ### Prerequisites
 
-- Docker and Docker Compose - For running the control plane
-- Node.js 18+ and npm - For running example services
-- An OpenAI API key - For LLM-powered orchestration
+- [Docker](https://docs.docker.com/desktop/) and [Docker Compose](https://docs.docker.com/compose/install/) - For running the control plane
+- [Node.js 18+](https://nodejs.org/en/download/package-manager) - For running example services
+- An [OpenAI API key](https://platform.openai.com/docs/quickstart) - For LLM-powered orchestration
 
 ### 1. Install Orra CLI
 
