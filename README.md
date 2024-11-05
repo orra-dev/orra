@@ -7,6 +7,8 @@ multi-agent applications. Developers can stop re-inventing the wheel and focus o
 
 Our current release is codenamed "Narwal". This release brings the ✨Alpha✨ version of Orra's orchestration capabilities.
 
+![Our Narwhal](releases/images/0.1.0/narwhal.jpeg)
+
 ## Install
 
 ### Prerequisites
@@ -49,10 +51,10 @@ docker-compose up -d
 
 ## Quick Start
 
-In this guide, you'll set up a dynamically orchestrated app using Orra! The app echos provided values using an Echo JS
-based service.
+In this guide, you'll set up a dynamically orchestrated app using Orra! The app echos values using an Echo JS based
+service.
 
-It's a simple but powerful setup that demonstrates Orra's key capabilities:
+This is a simple but powerful setup that demonstrates Orra's key capabilities:
 
 - Dynamic orchestration
 - Resilient execution
