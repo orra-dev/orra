@@ -63,7 +63,7 @@ It's a simple but powerful setup that demonstrates Orra's key capabilities:
 # Create a new project
 orra projects add my-orra-project
 
-# Register the webhook
+# Register a webhook
 orra webhooks add http://localhost:8080/webhook
 
 # Create an API key for your services
@@ -73,7 +73,7 @@ orra api-keys gen service-key
 Open a new terminal window or tab, and run a webhook server
 
 ```shell
-# Start a test webhook server (the test subcommand helps you test your Orra setup)
+# Start the webhook as a server using the verify subcommand (verify includes helpers to verify your Orra setup)
 orra verify webhooks start http://localhost:8080/webhook
 ```
 
@@ -82,7 +82,7 @@ orra verify webhooks start http://localhost:8080/webhook
 Open a new terminal window or tab to run the Echo service.
 
 ```shell
-ORRA_API_KEY=<value of API key created earlier>
+ORRA_API_KEY='<value of API key created earlier>'
 ORRA_URL=http://localhost:8005
 
 cd examples/echo-js
@@ -97,7 +97,7 @@ Our Echo service might seem simple, but it's perfect for demonstrating Orra's ma
 1. Send your first message:
 
 ```shell
-orra test tell 'Echo this secret message' --data message:'🎯 Target acquired!'
+orra verify tell 'Echo this secret message' --data message:'🎯 Target acquired!'
 ```
 
 Watch the magic happen:
@@ -113,7 +113,7 @@ Watch the magic happen:
 # STOP THE ECHO SERVICE (Ctrl+C in its terminal)
 
 # Send another message
-orra test tell 'Echo the rescue signal' --data message:'🆘 Send help!'
+orra verify tell 'Echo the rescue signal' --data message:'🆘 Send help!'
 
 # Check what's happening
 orra inspect -d <orchestration-id>
@@ -138,7 +138,7 @@ code needed.
 
 You've just experienced:
 
-- Dynamic orchestration using AI
+- Dynamic orchestration using AI - no messy task routing logic insight
 - Automatic service health monitoring
 - Built-in resilient execution
 - Real-time status tracking
