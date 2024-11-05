@@ -1,9 +1,9 @@
-# 🪡Orra (Alpha)
+# 🪡Orra
 
 Stop wrestling with brittle agent orchestration. Orra dynamically orchestrates your multi-agent applications using LLMs,
 providing built-in reliability and performance features that typically take months to build yourself.
 
-## Current Release: Narwal 🐋🦄
+## Current Release: Narwal 🐋🦄 (Alpha)
 
 Our current release is codenamed "Narwal". This release brings the ✨Alpha✨ version of Orra's orchestration capabilities.
 
