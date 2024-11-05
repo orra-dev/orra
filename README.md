@@ -160,60 +160,42 @@ You've just experienced:
 The best part? This same pattern works for complex multi-service and multi-agent scenarios. Orra handles the complexity
 while you focus on building your application.
 
-## Alpha Release Features
+## Alpha Features & Limitations
 
-### Dynamic Orchestration
+### Available Now
 
 * LLM-powered task decomposition and routing
+* In-memory execution tracking with exactly-once guarantees
+* Smart service health handling with execution pausing and heartbeat monitoring
+* Short-term retries with exponential backoff (up to 5 attempts)
+* Simple JavaScript SDK with TypeScript support
+* CLI for Orra-powered projects management
 * Automatic parallel execution optimization
 * Built-in service discovery
 
-### Alpha Reliability Features
+### Current Limitations
 
-* Automatic retries with exponential backoff
-* Service health monitoring
-* In-memory execution tracking
-* Exactly-once execution
-* Smart service health handling:
-    * WebSocket heartbeat monitoring
-    * Automatic pause on outages (up to 30-minute recovery)
-    * Short-term retries with exponential backoff (up to 5 attempts)
-* Retryable vs permanent failure classification
-* Basic logging for debugging
+1. **Storage**: All state is in-memory and will be lost on control plane restart
+2. **Deployment**: Single-instance only, designed for local development
+3. **Recovery**: Limited to individual service recovery
+4. **SDKs**: JavaScript/TypeScript only
 
-### Developer Experience
+### Coming Soon
 
-* Simple JavaScript SDK
-* CLI for Orra-powered applications management
-* Local development environment
-* Clear error messages
-
-## Coming Soon
-
-- Persistent storage (currently in-memory only)
-- Additional language SDKs
-- Streaming for task processing
-- Distributed deployment support
-- Continuously adjust Agent workflows during runtime
-- Resource Reallocation based on performance and changing needs
-- Rate limiting and backpressure
-- Production deployment guides
-- Enhanced monitoring and observability
-- and many more planned
-
-## Documentation
-
-- 🎓 Getting Started
-- 📚 JavaScript SDK
-- 🛠️ CLI Guide
-- 🔬 Alpha Limitations
+* Persistent storage
+* Additional language SDKs
+* Streaming for task processing
+* Continuous adjustment of Agent workflows during runtime
+* Resource Reallocation based on performance and changing needs
+* Distributed deployment
+.. and many more planned
 
 ## Examples
 
-- 📱 Chat Application - E-commerce customer service with a delivery specialised agent
-- 🔄 Echo Service - Simple example showing core concepts
+- 📱 [Chat Application](examples/ecommerce-chat-js) - E-commerce customer service with a delivery specialised agent
+- 🔄 [Echo Service](examples/echo-js) - Simple example showing core concepts
 
-## Alpha Testing Community
+## Join Our Alpha Testing Community
 
 **We're looking for developers who:**
 
@@ -222,22 +204,10 @@ while you focus on building your application.
 - Are comfortable working with Alpha software
 - Can provide feedback on real-world use cases
 
-**Join us**
+**Connect With Us:**
 
 - GitHub Discussions - Share your experience and ideas
 - Office Hours - Weekly calls with the team
-
-## Current Limitations
-
-1. **Storage**: All state is in-memory and will be lost on control plane restart
-2. **Deployment**: Single-instance only, designed for local development
-3. **Recovery**: Limited to individual service recovery, no cross-instance failover
-4. **SDKs**: JavaScript/TypeScript only for now
-5. **Monitoring**: Basic logging, extended observability coming soon
-
-## Contributing
-
-We welcome feedback and contributions! See our contributing guide for details.
 
 ## License
 
