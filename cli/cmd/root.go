@@ -63,7 +63,7 @@ func NewOrraCommand(opts *CliOpts) *cobra.Command {
 	cmd.AddCommand(newPsCmd(opts))
 	cmd.AddCommand(newInspectCmd(opts))
 	//cmd.AddCommand(newLogsCmd(opts))
-	cmd.AddCommand(newTestCmd(opts))
+	cmd.AddCommand(newVerifyCmd(opts))
 	cmd.AddCommand(newVersionCmd(opts))
 	cmd.AddCommand(newConfigCmd(opts))
 

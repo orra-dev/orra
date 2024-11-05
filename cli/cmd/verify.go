@@ -18,22 +18,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newTestCmd(opts *CliOpts) *cobra.Command {
+func newVerifyCmd(opts *CliOpts) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "test",
-		Short: "Test your Orra setup",
+		Use:   "verify",
+		Short: "Verify your Orra setup",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
 		},
 	}
 
-	cmd.AddCommand(newTestTellCmd(opts))
-	cmd.AddCommand(newTestWebhooksCmd(opts))
+	cmd.AddCommand(newVerifyTellCmd(opts))
+	cmd.AddCommand(newVerifyWebhooksCmd(opts))
 
 	return cmd
 }
 
-func newTestTellCmd(opts *CliOpts) *cobra.Command {
+func newVerifyTellCmd(opts *CliOpts) *cobra.Command {
 	var (
 		data       []string
 		webhookUrl string
@@ -42,8 +42,8 @@ func newTestTellCmd(opts *CliOpts) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "tell [action]",
-		Short: "Tell Orra to orchestrate an action with parameters",
-		Long:  "Tell Orra to orchestrate an action with at least one parameter",
+		Short: "Tell Orra to orchestrate an action with data parameters",
+		Long:  "Tell Orra to orchestrate an action with at least one data parameter",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			action := args[0]
@@ -100,8 +100,9 @@ func newTestTellCmd(opts *CliOpts) *cobra.Command {
 			fmt.Printf("3. Orchestrating available services\n\n")
 
 			fmt.Printf("Available commands:\n")
-			fmt.Printf("- View execution progress:    orra inspect %s\n", orchestration.ID)
-			fmt.Printf("- List all orchestrations:    orra ps\n")
+			fmt.Printf("- View progress:                orra inspect %s\n", orchestration.ID)
+			fmt.Printf("- View full progress details:   orra inspect -d %s\n", orchestration.ID)
+			fmt.Printf("- List all orchestrations:      orra ps\n")
 
 			fmt.Printf("Tip: Keep an eye on your webhook server to see the results!\n")
 			return nil
@@ -130,22 +131,22 @@ func convertToActionParams(params []string) ([]map[string]string, error) {
 	return actionParams, nil
 }
 
-func newTestWebhooksCmd(opts *CliOpts) *cobra.Command {
+func newVerifyWebhooksCmd(opts *CliOpts) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "webhooks",
-		Short: "Manage test webhooks",
+		Short: "Manage verify webhooks",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
 		},
 	}
 
-	cmd.AddCommand(newTestWebhooksStartCmd(opts))
-	//cmd.AddCommand(newTestWebhooksStopCmd(opts))
+	cmd.AddCommand(newVerifyWebhooksStartCmd(opts))
+	//cmd.AddCommand(newVerifyWebhooksStopCmd(opts))
 
 	return cmd
 }
 
-// WebhookServer maintains state of running test webhooks
+// WebhookServer maintains state of running verify webhooks
 type WebhookServer struct {
 	server *http.Server
 	done   chan bool
@@ -156,10 +157,10 @@ var (
 	webhooksMutex   sync.Mutex
 )
 
-func newTestWebhooksStartCmd(opts *CliOpts) *cobra.Command {
+func newVerifyWebhooksStartCmd(opts *CliOpts) *cobra.Command {
 	return &cobra.Command{
 		Use:   "start [webhook-url]",
-		Short: "Start a test webhook server",
+		Short: "Start a verify webhook server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			webhookURL := args[0]
@@ -260,7 +261,7 @@ func newTestWebhooksStartCmd(opts *CliOpts) *cobra.Command {
 	}
 }
 
-//func newTestWebhooksStopCmd(opts *CliOpts) *cobra.Command {
+//func newVerifyWebhooksStopCmd(opts *CliOpts) *cobra.Command {
 //	return &cobra.Command{
 //		Use:   "stop",
 //		Short: "Stop all test webhook servers",
