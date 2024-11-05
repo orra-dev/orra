@@ -3,10 +3,149 @@
 Orra is a language-agnostic LLM powered orchestration platform. It provides building blocks to build reliable and fast
 multi-agent applications. Developers can stop re-inventing the wheel and focus on adding customer value.
 
-## Upcoming Release: Narwal 🐋🦄
+## Current Release: Narwal 🐋🦄
 
-Our next release, codenamed "Narwal", is currently under development on the `narwal` branch. This release will bring the
-✨Alpha✨ version of Orra's orchestration capabilities.
+Our current release is codenamed "Narwal". This release brings the ✨Alpha✨ version of Orra's orchestration capabilities.
+
+## Install
+
+### Prerequisites
+
+- [Docker](https://docs.docker.com/desktop/) and [Docker Compose](https://docs.docker.com/compose/install/) - For running the control plane
+- [Node.js 18+](https://nodejs.org/en/download/package-manager) - For running example services
+- An [OpenAI API key](https://platform.openai.com/docs/quickstart) - For LLM-powered orchestration
+
+### 1. Install Orra CLI
+
+Download the latest CLI binary for your platform from our releases page.
+
+```shell
+# macOS
+curl -L https://github.com/ezodude/orra/releases/download/v0.1.0-narwhal/orra-macos -o /usr/local/bin/orra
+chmod +x /usr/local/bin/orra
+
+# Linux
+curl -L https://github.com/ezodude/orra/releases/download/v0.1.0-narwhal/orra-linux -o /usr/local/bin/orra
+chmod +x /usr/local/bin/orra
+
+# Verify installation
+orra version
+```
+
+### 2. Get Orra Running
+
+Clone the repository and start the control plane:
+
+```shell
+git clone https://github.com/ezodude/orra.git
+cd orra/controlplane
+
+# Set your OpenAI API key
+echo "OPENAI_API_KEY=your-key-here" > .env
+
+# Start the control plane
+docker-compose up -d
+```
+
+## Quick Start
+
+Build your first AI-orchestrated application! We'll use our [Echo service](examples/echo-js) example to show you the
+magic of intelligent service orchestration.
+
+While simple, it showcases Orra's capabilities:
+
+- **Dynamic orchestration**: AI analyzes your instructions and creates execution plans - no manual routing needed.
+- **Resilient execution**: Service interruptions, retries, and recovery handled automatically - zero special handling code.
+
+### 1. Configure Your Workspace
+
+```shell
+# Create a new project
+orra projects add my-orra-project
+
+# Register a webhook
+orra webhooks add http://localhost:8080/webhook
+
+# Create an API key for your services
+orra api-keys gen service-key
+```
+
+Open a new terminal window or tab, and run a webhook server
+
+```shell
+# Start the webhook as a server using the verify subcommand (verify includes helpers to verify your Orra setup)
+orra verify webhooks start http://localhost:8080/webhook
+```
+
+### 2. Start the Example Echo Service
+
+Open a new terminal window or tab to run the Echo service (orchestrated using the [JS SDK](sdks/js)).
+
+```shell
+ORRA_API_KEY='<value of API key created earlier>'
+ORRA_URL=http://localhost:8005
+
+cd examples/echo-js
+npm install
+npm run dev
+```
+
+### 3. Demonstrating Orra
+
+Let's create a fun sequence:
+
+__Send your first message__
+
+```shell
+orra verify tell 'Echo this secret message' --data message:'🎯 Target acquired!'
+```
+
+Watch the magic happen:
+
+- Orra analyzes your action using AI
+- Creates an execution plan
+- Orchestrates the service
+- Delivers results to your webhook
+
+__Let's break things (intentionally)__
+
+```shell
+# STOP THE ECHO SERVICE (Ctrl+C in its terminal)
+
+# Send another message
+orra verify tell 'Echo the rescue signal' --data message:'🆘 Send help!'
+
+# Check what's happening
+orra inspect -d <orchestration-id>
+```
+
+You'll see Orra patiently waiting, monitoring the service's health.
+
+__Restore the service and watch recovery__
+
+```shell
+# Restart the Echo service (in its terminal)
+npm run dev
+
+# Check the orchestration again
+orra inspect -d <orchestration-id>
+```
+
+Marvel as your message completes its journey! This demonstrates Orra's built-in resilience - no special error handling
+code needed.
+
+### What Just Happened?
+
+You've just experienced:
+
+- 🤖 Dynamic orchestration using AI
+- ⛑️ Automatic service health monitoring ️
+- 🦾 Built-in resilient execution
+- 🔮 Real-time status tracking
+- 🪝 Webhook result delivery 
+
+The best part? This same pattern works for complex multi-service and multi-agent scenarios. Orra handles the complexity
+while you focus on building your application.
 
 ## Key Benefits
 
@@ -42,52 +181,6 @@ management:
     - Implements intelligent error handling and recovery
     - Reallocates resources flexibly based on performance and changing needs
 
-## Installation
-
-**Orra is in Alpha**. The core component is the control plane which is run as a server. It is available for Self-hosting
-in Single User mode. We do not recommend running it in production yet.
-
-You need to
-have [Git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git), [Docker](https://docs.docker.com/desktop/)
-and [Docker Compose](https://docs.docker.com/compose/install/) installed before you start.
-
-1. Clone the repo.
-    ```shell
-      git clone https://github.com/ezodude/orra
-    ```
-2. Navigate to the control plane's root folder and run the control plane.
-    ```shell
-      cd control-plane
-      cp env-example .env 
-      docker compose up -d
-    ```
-3. Download the relevant Orra CLI binary and add it your path.
-    ```shell
-      mv orra /user/local/bin/.
-    ```
-4. Login with the CLI and follow the instructions
-    ```shell
-      orra login
-    ```
-
-## Using the Orra CLI
-
-Run commands to set up projects, inspect orchestrations and generate API keys using the Orra command-line tool.
-
-```shell
-orra --help
-# orra manages Orra and orchestration workflows. 
-# Usage:  orra [OPTIONS] COMMAND
-# projects    Add and manage projects
-# webhooks    Add and manage webhooks for a project
-# api-keys    Add and manage API keys for a project
-# ps          List orchestrations for a project
-# inspect     Return information of an orchestration
-# logs        Fetch the logs for an orchestration
-# login       Log in to a registry
-# logout      Log out from a registry
-# version     Print the client and server version information
-```
 
 ## Getting started with orchestration
 
@@ -109,11 +202,11 @@ containers for optimal performance.
    ```
 2. Add a webhook to accept orchestration results.
    ```shell
-      orra webhooks add --url "http://localhost:3000/webhooks/orra" -p new-orra-project
+      orra webhooks add "http://localhost:3000/webhooks/orra"
    ```
 3. Generate an API key to authenticate and orchestrate tasks. The new API key is required for use in Orra SDKs.
    ```shell
-      orra api-keys add --name 'My API Key' -p new-orra-project
+      orra api-keys gen my-api-key'
    ```
 
 ### Setup Agents and services for orchestration

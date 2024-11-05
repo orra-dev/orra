@@ -96,21 +96,22 @@ func (lm *LogManager) MarkTask(orchestrationID, taskID string, s Status, timesta
 	return nil
 }
 
-func (lm *LogManager) MarkOrchestrationCompleted(orchestrationID string) (Status, error) {
+func (lm *LogManager) MarkOrchestrationCompleted(orchestrationID string) Status {
 	return lm.MarkOrchestration(orchestrationID, Completed, nil)
 }
 
-func (lm *LogManager) MarkOrchestrationFailed(orchestrationID string, reason json.RawMessage) (Status, error) {
-	return lm.MarkOrchestration(orchestrationID, Failed, reason)
+func (lm *LogManager) MarkOrchestrationFailed(orchestrationID string, reason string) Status {
+	return lm.MarkOrchestration(orchestrationID, Failed, []byte(reason))
 }
 
-func (lm *LogManager) MarkOrchestration(orchestrationID string, s Status, reason json.RawMessage) (Status, error) {
+func (lm *LogManager) MarkOrchestration(orchestrationID string, s Status, reason json.RawMessage) Status {
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 
 	state, ok := lm.orchestrations[orchestrationID]
 	if !ok {
-		return state.Status, fmt.Errorf("orchestration %s has no associated state", orchestrationID)
+		lm.Logger.Debug().Str("OrchestrationID", orchestrationID).Msg("orchestration has no associated state in log")
+		return state.Status
 	}
 
 	if reason != nil {
@@ -119,12 +120,12 @@ func (lm *LogManager) MarkOrchestration(orchestrationID string, s Status, reason
 	state.Status = s
 	state.LastUpdated = time.Now().UTC()
 
-	return state.Status, nil
+	return state.Status
 }
 
-func (lm *LogManager) AppendToLog(orchestrationID, entryType, id string, reason json.RawMessage, producerID string, attemptNo int) {
+func (lm *LogManager) AppendToLog(orchestrationID, entryType, id string, value json.RawMessage, producerID string, attemptNo int) {
 	// Create a new log entry for our task's output
-	newEntry := NewLogEntry(entryType, id, reason, producerID, attemptNo)
+	newEntry := NewLogEntry(entryType, id, value, producerID, attemptNo)
 
 	log, exists := lm.logs[orchestrationID]
 	if !exists {
@@ -137,16 +138,22 @@ func (lm *LogManager) AppendToLog(orchestrationID, entryType, id string, reason 
 	log.Append(newEntry)
 }
 
-func (lm *LogManager) AppendFailureToLog(orchestrationID, id, producerID, reason string, attemptNo int) error {
+func (lm *LogManager) AppendFailureToLog(orchestrationID, id, producerID, failure string, attemptNo int, skipWebhook bool) error {
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 
-	reasonData, err := json.Marshal(reason)
-	if err != nil {
-		return fmt.Errorf("failed to marshal reason for log entry: %w", err)
+	var f = LoggedFailure{
+		Failure:     failure,
+		SkipWebhook: skipWebhook,
 	}
 
-	lm.AppendToLog(orchestrationID, "task_failure", id, reasonData, producerID, attemptNo)
+	value, err := json.Marshal(f)
+	if err != nil {
+		return fmt.Errorf("failed to marshal failure for log entry: %w", err)
+	}
+
+	failureID := fmt.Sprintf("fail_%s_%s", strings.ToLower(id), shortuuid.New())
+	lm.AppendToLog(orchestrationID, "task_failure", failureID, value, producerID, attemptNo)
 	return nil
 }
 
@@ -188,15 +195,16 @@ func (lm *LogManager) AppendTaskStatusEvent(
 	return nil
 }
 
-func (lm *LogManager) FinalizeOrchestration(orchestrationID string, status Status, reason, result json.RawMessage) error {
+func (lm *LogManager) FinalizeOrchestration(
+	orchestrationID string,
+	status Status,
+	reason, result json.RawMessage,
+	skipWebhook bool,
+) error {
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 
-	if err := lm.controlPlane.FinalizeOrchestration(orchestrationID, status, reason, []json.RawMessage{result}); err != nil {
-		return err
-	}
-
-	return nil
+	return lm.controlPlane.FinalizeOrchestration(orchestrationID, status, reason, []json.RawMessage{result}, skipWebhook)
 }
 
 func NewLog() *Log {

@@ -160,7 +160,9 @@ func (p *ControlPlane) FinalizeOrchestration(
 	orchestrationID string,
 	status Status,
 	reason json.RawMessage,
-	results []json.RawMessage) error {
+	results []json.RawMessage,
+	skipWebhook bool,
+) error {
 	p.orchestrationStoreMu.Lock()
 	defer p.orchestrationStoreMu.Unlock()
 
@@ -178,11 +180,13 @@ func (p *ControlPlane) FinalizeOrchestration(
 		Str("OrchestrationID", orchestration.ID).
 		Msgf("About to FinalizeOrchestration with status: %s", orchestration.Status.String())
 
-	p.cleanupLogWorkers(orchestration.ID)
-
-	if err := p.triggerWebhook(orchestration); err != nil {
-		return fmt.Errorf("failed to trigger webhook for orchestration %s: %w", orchestration.ID, err)
+	if !skipWebhook {
+		if err := p.triggerWebhook(orchestration); err != nil {
+			return fmt.Errorf("failed to trigger webhook for orchestration %s: %w", orchestration.ID, err)
+		}
 	}
+
+	p.cleanupLogWorkers(orchestration.ID)
 
 	return nil
 }

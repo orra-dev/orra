@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 )
 
@@ -38,11 +39,10 @@ func (r *ResultAggregator) Start(ctx context.Context, orchestrationID string) {
 			if err := r.processEntry(entry, orchestrationID); err != nil {
 				r.LogManager.Logger.
 					Error().
+					Err(err).
+					Str("orchestrationID", orchestrationID).
 					Interface("entry", entry).
-					Msgf(
-						"Result aggregator failed to process entry for orchestration: %s",
-						orchestrationID,
-					)
+					Msg("Result aggregator failed to process entry for orchestration")
 				return
 			}
 		case <-ctx.Done():
@@ -111,14 +111,30 @@ func (r *ResultAggregator) processEntry(entry LogEntry, orchestrationID string) 
 		Msgf("All result aggregator dependencies have been processed for orchestration: %s", orchestrationID)
 
 	if err := r.LogManager.MarkTaskCompleted(orchestrationID, entry.ID(), time.Now().UTC()); err != nil {
-		return r.LogManager.AppendFailureToLog(orchestrationID, ResultAggregatorID, ResultAggregatorID, err.Error(), 0)
+		return r.LogManager.AppendFailureToLog(
+			orchestrationID,
+			ResultAggregatorID,
+			ResultAggregatorID,
+			err.Error(),
+			0,
+			false,
+		)
 	}
 
-	completed, err := r.LogManager.MarkOrchestrationCompleted(orchestrationID)
-	if err != nil {
-		return r.LogManager.AppendFailureToLog(orchestrationID, ResultAggregatorID, ResultAggregatorID, err.Error(), 0)
-	}
+	completed := r.LogManager.MarkOrchestrationCompleted(orchestrationID)
 	results := r.logState.DependencyState.SortedValues()
 
-	return r.LogManager.FinalizeOrchestration(orchestrationID, completed, nil, results[len(results)-1])
+	if err := r.LogManager.FinalizeOrchestration(orchestrationID, completed, nil, results[len(results)-1], false); err != nil {
+		skipWebhook := strings.Contains(err.Error(), "failed to trigger webhook")
+		return r.LogManager.AppendFailureToLog(
+			orchestrationID,
+			ResultAggregatorID,
+			ResultAggregatorID,
+			err.Error(),
+			0,
+			skipWebhook,
+		)
+	}
+
+	return nil
 }

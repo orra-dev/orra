@@ -73,12 +73,10 @@ func (w *TaskWorker) Start(ctx context.Context, orchestrationID string) {
 			if err := w.processEntry(ctx, entry, orchestrationID); err != nil {
 				w.LogManager.Logger.
 					Error().
+					Err(err).
+					Str("orchestrationID", orchestrationID).
 					Interface("entry", entry).
-					Msgf(
-						"Task worker %s failed to process entry for orchestration: %s",
-						w.TaskID,
-						orchestrationID,
-					)
+					Msgf("Task worker %s failed to process entry for orchestration", w.TaskID)
 				return
 			}
 		case <-ctx.Done():
@@ -154,7 +152,7 @@ func (w *TaskWorker) processEntry(ctx context.Context, entry LogEntry, orchestra
 		if err := w.LogManager.MarkTask(orchestrationID, w.TaskID, Failed, failedTs); err != nil {
 			return err
 		}
-		return w.LogManager.AppendFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error(), w.consecutiveErrs)
+		return w.LogManager.AppendFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error(), w.consecutiveErrs, false)
 	}
 
 	// Mark this entry as processed
@@ -167,7 +165,7 @@ func (w *TaskWorker) processEntry(ctx context.Context, entry LogEntry, orchestra
 
 	if err := w.LogManager.MarkTaskCompleted(orchestrationID, entry.ID(), completedTs); err != nil {
 		w.LogManager.Logger.Error().Err(err).Msgf("Cannot mark task %s completed for orchestration %s", w.TaskID, orchestrationID)
-		return w.LogManager.AppendFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error(), w.consecutiveErrs)
+		return w.LogManager.AppendFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error(), w.consecutiveErrs, false)
 	}
 
 	w.LogManager.AppendToLog(orchestrationID, "task_output", w.TaskID, output, w.Service.ID, w.consecutiveErrs)
