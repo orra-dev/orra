@@ -3,10 +3,149 @@
 Orra is a language-agnostic LLM powered orchestration platform. It provides building blocks to build reliable and fast
 multi-agent applications. Developers can stop re-inventing the wheel and focus on adding customer value.
 
-## Upcoming Release: Narwal 🐋🦄
+## Current Release: Narwal 🐋🦄
 
-Our next release, codenamed "Narwal", is currently under development on the `narwal` branch. This release will bring the
-✨Alpha✨ version of Orra's orchestration capabilities.
+Our current release is codenamed "Narwal". This release brings the ✨Alpha✨ version of Orra's orchestration capabilities.
+
+## Install
+
+### Prerequisites
+
+- Docker and Docker Compose - For running the control plane
+- Node.js 18+ and npm - For running example services
+- An OpenAI API key - For LLM-powered orchestration
+
+### 1. Install Orra CLI
+
+Download the latest CLI binary for your platform from our releases page.
+
+```shell
+# macOS
+curl -L https://github.com/ezodude/orra/releases/download/v0.1.0-narwhal/orra-macos -o /usr/local/bin/orra
+chmod +x /usr/local/bin/orra
+
+# Linux
+curl -L https://github.com/ezodude/orra/releases/download/v0.1.0-narwhal/orra-linux -o /usr/local/bin/orra
+chmod +x /usr/local/bin/orra
+
+# Verify installation
+orra version
+```
+
+### 2. Get Orra Running
+
+Clone the repository and start the control plane:
+
+```shell
+git clone https://github.com/ezodude/orra.git
+cd orra/controlplane
+
+# Set your OpenAI API key
+echo "OPENAI_API_KEY=your-key-here" > .env
+
+# Start the control plane
+docker-compose up -d
+```
+
+## Quick Start
+
+In this guide, you'll set up a dynamically orchestrated app using Orra! The app echos provided values using an Echo JS
+based service.
+
+It's a simple but powerful setup that demonstrates Orra's key capabilities:
+
+- Dynamic orchestration
+- Resilient execution
+
+### 1. Configure Your Workspace
+
+```shell
+# Create a new project
+orra projects add my-orra-project
+
+# Register the webhook
+orra webhooks add http://localhost:8080/webhook
+
+# Create an API key for your services
+orra api-keys gen service-key
+```
+
+Open a new terminal window or tab, and run a webhook server
+
+```shell
+# Start a test webhook server (the test subcommand helps you test your Orra setup)
+orra verify webhooks start http://localhost:8080/webhook
+```
+
+### 2. Start the Example Echo Service
+
+Open a new terminal window or tab to run the Echo service.
+
+```shell
+ORRA_API_KEY=<value of API key created earlier>
+ORRA_URL=http://localhost:8005
+
+cd examples/echo-js
+npm install
+npm run dev
+```
+
+### Demonstrating Orra
+
+Our Echo service might seem simple, but it's perfect for demonstrating Orra's magic. Let's create a fun sequence:
+
+1. Send your first message:
+
+```shell
+orra test tell 'Echo this secret message' --data message:'🎯 Target acquired!'
+```
+
+Watch the magic happen:
+
+- Orra analyzes your action using AI
+- Creates an execution plan
+- Orchestrates the service
+- Delivers results to your webhook
+
+2. Let's break things (intentionally):
+
+```shell
+# STOP THE ECHO SERVICE (Ctrl+C in its terminal)
+
+# Send another message
+orra test tell 'Echo the rescue signal' --data message:'🆘 Send help!'
+
+# Check what's happening
+orra inspect -d <orchestration-id>
+```
+
+You'll see Orra patiently waiting, monitoring the service's health.
+
+3. Restore the service and watch recovery:
+
+```shell
+# Restart the Echo service (in its terminal)
+npm run dev
+
+# Check the orchestration again
+orra inspect -d <orchestration-id>
+```
+
+Marvel as your message completes its journey! This demonstrates Orra's built-in resilience - no special error handling
+code needed.
+
+### What Just Happened?
+
+You've just experienced:
+
+- Dynamic orchestration using AI
+- Automatic service health monitoring
+- Built-in resilient execution
+- Real-time status tracking
+- Webhook result delivery
+
+The best part? This same pattern works for complex multi-service and multi-agent scenarios. Orra handles the complexity
+while you focus on building your application.
 
 ## Key Benefits
 
