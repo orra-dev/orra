@@ -54,7 +54,7 @@ an [Echo JS](examples/echo-js) based service.
 
 This is a simple but powerful setup that demonstrates Orra's key capabilities:
 
-- __Dynamic orchestration__: no entangled task routing logic.
+- __Dynamic orchestration__: no complex task routing logic required.
 - __Resilient execution__: everything works no matter what.
 
 ### 1. Configure Your Workspace
@@ -94,7 +94,7 @@ npm run dev
 
 Our Echo service might seem simple, but it's perfect for demonstrating Orra's magic. Let's create a fun sequence:
 
-1. Send your first message:
+__Send your first message__
 
 ```shell
 orra verify tell 'Echo this secret message' --data message:'🎯 Target acquired!'
@@ -107,7 +107,7 @@ Watch the magic happen:
 - Orchestrates the service
 - Delivers results to your webhook
 
-2. Let's break things (intentionally):
+__Let's break things (intentionally)__
 
 ```shell
 # STOP THE ECHO SERVICE (Ctrl+C in its terminal)
@@ -121,7 +121,7 @@ orra inspect -d <orchestration-id>
 
 You'll see Orra patiently waiting, monitoring the service's health.
 
-3. Restore the service and watch recovery:
+__Restore the service and watch recovery__
 
 ```shell
 # Restart the Echo service (in its terminal)
@@ -138,7 +138,7 @@ code needed.
 
 You've just experienced:
 
-- Dynamic orchestration using AI - no messy task routing logic insight
+- Dynamic orchestration using AI
 - Automatic service health monitoring
 - Built-in resilient execution
 - Real-time status tracking
