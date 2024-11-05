@@ -1,7 +1,7 @@
 # 🪡Orra
 
-Stop wrestling with brittle agent orchestration. Orra dynamically orchestrates your multi-agent applications using LLMs,
-providing built-in reliability and performance features that typically take months to build yourself.
+Build production-ready multi-agent applications without the complexity. Orra uses LLMs to dynamically orchestrate your
+services and agents, handling reliability and performance so you can focus on building features that matter.
 
 ## Current Release: Narwal 🐋🦄 (Alpha)
 
@@ -188,7 +188,7 @@ while you focus on building your application.
 * Continuous adjustment of Agent workflows during runtime
 * Resource Reallocation based on performance and changing needs
 * Distributed deployment
-.. and many more planned
+  .. and many more planned
 
 ## Examples
 
