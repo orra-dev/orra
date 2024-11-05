@@ -49,8 +49,8 @@ docker-compose up -d
 
 ## Quick Start
 
-In this guide, you'll set up a dynamically orchestrated app using Orra! The app echos values using an Echo JS based
-service.
+In this guide, you'll set up a dynamically orchestrated app using Orra! The app echos values using
+an [Echo JS](examples/echo-js) based service.
 
 This is a simple but powerful setup that demonstrates Orra's key capabilities:
 
