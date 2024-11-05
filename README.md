@@ -7,11 +7,23 @@ multi-agent applications. Developers can stop re-inventing the wheel and focus o
 
 Our current release is codenamed "Narwal". This release brings the ✨Alpha✨ version of Orra's orchestration capabilities.
 
+## Why Orra
+
+- **Dynamic LLM Orchestration**: Stop hard-coding agent workflows. Orra automatically creates and adapts execution plans
+  based on your agents' plus services' capabilities and real-time context.
+
+- **Production-Ready Reliability**: Built-in fault tolerance with automatic retries, health checks, and stateful
+  execution tracking. No more building your own reliability layer.
+
+- **High-Throughput Performance**: Parallel execution, efficient task routing, and smart caching ensure your multi-agent
+  apps stay responsive under load.
+
 ## Install
 
 ### Prerequisites
 
-- [Docker](https://docs.docker.com/desktop/) and [Docker Compose](https://docs.docker.com/compose/install/) - For running the control plane
+- [Docker](https://docs.docker.com/desktop/) and [Docker Compose](https://docs.docker.com/compose/install/) - For
+  running the control plane
 - [Node.js 18+](https://nodejs.org/en/download/package-manager) - For running example services
 - An [OpenAI API key](https://platform.openai.com/docs/quickstart) - For LLM-powered orchestration
 
@@ -55,7 +67,8 @@ magic of intelligent service orchestration.
 While simple, it showcases Orra's capabilities:
 
 - **Dynamic orchestration**: AI analyzes your instructions and creates execution plans - no manual routing needed.
-- **Resilient execution**: Service interruptions, retries, and recovery handled automatically - zero special handling code.
+- **Resilient execution**: Service interruptions, retries, and recovery handled automatically - zero special handling
+  code.
 
 ### 1. Configure Your Workspace
 
@@ -142,7 +155,7 @@ You've just experienced:
 - ⛑️ Automatic service health monitoring ️
 - 🦾 Built-in resilient execution
 - 🔮 Real-time status tracking
-- 🪝 Webhook result delivery 
+- 🪝 Webhook result delivery
 
 The best part? This same pattern works for complex multi-service and multi-agent scenarios. Orra handles the complexity
 while you focus on building your application.
@@ -180,7 +193,6 @@ management:
     - Optimizes task sequences in real-time
     - Implements intelligent error handling and recovery
     - Reallocates resources flexibly based on performance and changing needs
-
 
 ## Getting started with orchestration
 
