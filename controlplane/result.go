@@ -38,11 +38,10 @@ func (r *ResultAggregator) Start(ctx context.Context, orchestrationID string) {
 			if err := r.processEntry(entry, orchestrationID); err != nil {
 				r.LogManager.Logger.
 					Error().
+					Err(err).
+					Str("orchestrationID", orchestrationID).
 					Interface("entry", entry).
-					Msgf(
-						"Result aggregator failed to process entry for orchestration: %s",
-						orchestrationID,
-					)
+					Msg("Result aggregator failed to process entry for orchestration")
 				return
 			}
 		case <-ctx.Done():

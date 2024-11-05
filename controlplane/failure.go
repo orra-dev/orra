@@ -36,11 +36,10 @@ func (f *FailureTracker) Start(ctx context.Context, orchestrationID string) {
 			if err := f.processEntry(entry, orchestrationID); err != nil {
 				f.LogManager.Logger.
 					Error().
+					Err(err).
+					Str("orchestrationID", orchestrationID).
 					Interface("entry", entry).
-					Msgf(
-						"Failure tracker failed to process entry for orchestration: %s",
-						orchestrationID,
-					)
+					Msg("Failure tracker failed to process entry for orchestration.")
 				return
 			}
 		case <-ctx.Done():

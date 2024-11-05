@@ -73,12 +73,10 @@ func (w *TaskWorker) Start(ctx context.Context, orchestrationID string) {
 			if err := w.processEntry(ctx, entry, orchestrationID); err != nil {
 				w.LogManager.Logger.
 					Error().
+					Err(err).
+					Str("orchestrationID", orchestrationID).
 					Interface("entry", entry).
-					Msgf(
-						"Task worker %s failed to process entry for orchestration: %s",
-						w.TaskID,
-						orchestrationID,
-					)
+					Msgf("Task worker %s failed to process entry for orchestration", w.TaskID)
 				return
 			}
 		case <-ctx.Done():
