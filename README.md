@@ -181,52 +181,6 @@ management:
     - Implements intelligent error handling and recovery
     - Reallocates resources flexibly based on performance and changing needs
 
-## Installation
-
-**Orra is in Alpha**. The core component is the control plane which is run as a server. It is available for Self-hosting
-in Single User mode. We do not recommend running it in production yet.
-
-You need to
-have [Git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git), [Docker](https://docs.docker.com/desktop/)
-and [Docker Compose](https://docs.docker.com/compose/install/) installed before you start.
-
-1. Clone the repo.
-    ```shell
-      git clone https://github.com/ezodude/orra
-    ```
-2. Navigate to the control plane's root folder and run the control plane.
-    ```shell
-      cd control-plane
-      cp env-example .env 
-      docker compose up -d
-    ```
-3. Download the relevant Orra CLI binary and add it your path.
-    ```shell
-      mv orra /user/local/bin/.
-    ```
-4. Login with the CLI and follow the instructions
-    ```shell
-      orra login
-    ```
-
-## Using the Orra CLI
-
-Run commands to set up projects, inspect orchestrations and generate API keys using the Orra command-line tool.
-
-```shell
-orra --help
-# orra manages Orra and orchestration workflows. 
-# Usage:  orra [OPTIONS] COMMAND
-# projects    Add and manage projects
-# webhooks    Add and manage webhooks for a project
-# api-keys    Add and manage API keys for a project
-# ps          List orchestrations for a project
-# inspect     Return information of an orchestration
-# logs        Fetch the logs for an orchestration
-# login       Log in to a registry
-# logout      Log out from a registry
-# version     Print the client and server version information
-```
 
 ## Getting started with orchestration
 
@@ -248,11 +202,11 @@ containers for optimal performance.
    ```
 2. Add a webhook to accept orchestration results.
    ```shell
-      orra webhooks add --url "http://localhost:3000/webhooks/orra" -p new-orra-project
+      orra webhooks add "http://localhost:3000/webhooks/orra"
    ```
 3. Generate an API key to authenticate and orchestrate tasks. The new API key is required for use in Orra SDKs.
    ```shell
-      orra api-keys add --name 'My API Key' -p new-orra-project
+      orra api-keys gen my-api-key'
    ```
 
 ### Setup Agents and services for orchestration
