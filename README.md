@@ -79,7 +79,7 @@ orra verify webhooks start http://localhost:8080/webhook
 
 ### 2. Start the Example Echo Service
 
-Open a new terminal window or tab to run the Echo service.
+Open a new terminal window or tab to run the Echo service (orchestrated using the [JS SDK](sdks/js)).
 
 ```shell
 ORRA_API_KEY='<value of API key created earlier>'
