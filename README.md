@@ -188,10 +188,6 @@ while you focus on building your application.
 * Local development environment
 * Clear error messages
 
-[!NOTE]
-During Alpha, all state is stored in memory. The control plane should be treated as ephemeral - data will be lost on
-restart. Perfect for development and testing!
-
 ## Coming Soon
 
 - Persistent storage (currently in-memory only)
@@ -204,3 +200,45 @@ restart. Perfect for development and testing!
 - Production deployment guides
 - Enhanced monitoring and observability
 - and many more planned
+
+## Documentation
+
+- 🎓 Getting Started
+- 📚 JavaScript SDK
+- 🛠️ CLI Guide
+- 🔬 Alpha Limitations
+
+## Examples
+
+- 📱 Chat Application - E-commerce customer service with a delivery specialised agent
+- 🔄 Echo Service - Simple example showing core concepts
+
+## Alpha Testing Community
+
+We're looking for developers who:
+
+- Are building multi-agent applications
+- Want to help shape Orra's development
+- Are comfortable working with Alpha software
+- Can provide feedback on real-world use cases
+
+Join us:
+
+- GitHub Discussions - Share your experience and ideas
+- Office Hours - Weekly calls with the team
+
+## Current Limitations
+
+- Storage: All state is in-memory and will be lost on control plane restart
+- Deployment: Single-instance only, designed for local development
+- Recovery: Limited to individual service recovery, no cross-instance failover
+- SDKs: JavaScript/TypeScript only for now
+- Monitoring: Basic logging, extended observability coming soon
+
+## Contributing
+
+We welcome feedback and contributions! See our contributing guide for details.
+
+## License
+
+Orra is MPL-2.0 licensed.
