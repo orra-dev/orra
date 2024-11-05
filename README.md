@@ -215,25 +215,25 @@ while you focus on building your application.
 
 ## Alpha Testing Community
 
-We're looking for developers who:
+**We're looking for developers who:**
 
 - Are building multi-agent applications
 - Want to help shape Orra's development
 - Are comfortable working with Alpha software
 - Can provide feedback on real-world use cases
 
-Join us:
+**Join us**
 
 - GitHub Discussions - Share your experience and ideas
 - Office Hours - Weekly calls with the team
 
 ## Current Limitations
 
-- Storage: All state is in-memory and will be lost on control plane restart
-- Deployment: Single-instance only, designed for local development
-- Recovery: Limited to individual service recovery, no cross-instance failover
-- SDKs: JavaScript/TypeScript only for now
-- Monitoring: Basic logging, extended observability coming soon
+1. **Storage**: All state is in-memory and will be lost on control plane restart
+2. **Deployment**: Single-instance only, designed for local development
+3. **Recovery**: Limited to individual service recovery, no cross-instance failover
+4. **SDKs**: JavaScript/TypeScript only for now
+5. **Monitoring**: Basic logging, extended observability coming soon
 
 ## Contributing
 
