@@ -50,7 +50,7 @@ docker-compose up -d
 ## Quick Start
 
 In this guide, you'll set up a dynamically orchestrated app using Orra! The app echos values using
-an [Echo JS](examples/echo-js) based service.
+an [Echo JS](examples/echo-js) based service that uses Orra JS SDK for inter service communication.
 
 This is a simple but powerful setup that demonstrates Orra's key capabilities:
 
@@ -90,7 +90,7 @@ npm install
 npm run dev
 ```
 
-### Demonstrating Orra
+### 3. Demonstrating Orra
 
 Our Echo service might seem simple, but it's perfect for demonstrating Orra's magic. Let's create a fun sequence:
 
