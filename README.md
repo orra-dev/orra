@@ -49,13 +49,13 @@ docker-compose up -d
 
 ## Quick Start
 
-In this guide, you'll set up a dynamically orchestrated app using Orra! The app echos values using
-an [Echo JS](examples/echo-js) based service that uses Orra JS SDK for inter service communication.
+Build your first AI-orchestrated application! We'll use our [Echo service](examples/echo-js) example to show you the
+magic of intelligent service orchestration.
 
-This is a simple but powerful setup that demonstrates Orra's key capabilities:
+While simple, it showcases Orra's capabilities:
 
-- __Dynamic orchestration__: no complex task routing logic required.
-- __Resilient execution__: everything works no matter what.
+- **Dynamic orchestration**: AI analyzes your instructions and creates execution plans - no manual routing needed.
+- **Resilient execution**: Service interruptions, retries, and recovery handled automatically - zero special handling code.
 
 ### 1. Configure Your Workspace
 
@@ -92,7 +92,7 @@ npm run dev
 
 ### 3. Demonstrating Orra
 
-Our Echo service might seem simple, but it's perfect for demonstrating Orra's magic. Let's create a fun sequence:
+Let's create a fun sequence:
 
 __Send your first message__
 
