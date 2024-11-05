@@ -138,11 +138,11 @@ code needed.
 
 You've just experienced:
 
-- Dynamic orchestration using AI
-- Automatic service health monitoring
-- Built-in resilient execution
-- Real-time status tracking
-- Webhook result delivery
+- Dynamic orchestration using AI 🤖
+- Automatic service health monitoring ⛑️
+- Built-in resilient execution 🦾
+- Real-time status tracking 🔮
+- Webhook result delivery 🪝
 
 The best part? This same pattern works for complex multi-service and multi-agent scenarios. Orra handles the complexity
 while you focus on building your application.
