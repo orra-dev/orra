@@ -1,7 +1,7 @@
-# 🪡Orra
+# 🪡Orra (Alpha)
 
-Orra is a language-agnostic LLM powered orchestration platform. It provides building blocks to build reliable and fast
-multi-agent applications. Developers can stop re-inventing the wheel and focus on adding customer value.
+Stop wrestling with brittle agent orchestration. Orra dynamically orchestrates your multi-agent applications using LLMs,
+providing built-in reliability and performance features that typically take months to build yourself.
 
 ## Current Release: Narwal 🐋🦄
 
@@ -175,9 +175,9 @@ while you focus on building your application.
 * In-memory execution tracking
 * Exactly-once execution
 * Smart service health handling:
-  * WebSocket heartbeat monitoring
-  * Automatic pause on outages (up to 30-minute recovery)
-  * Short-term retries with exponential backoff (up to 5 attempts)
+    * WebSocket heartbeat monitoring
+    * Automatic pause on outages (up to 30-minute recovery)
+    * Short-term retries with exponential backoff (up to 5 attempts)
 * Retryable vs permanent failure classification
 * Basic logging for debugging
 
