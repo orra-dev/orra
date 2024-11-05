@@ -36,11 +36,6 @@ type WebSocketMessageQueue struct {
 	mu sync.Mutex
 }
 
-type WebSocketQueuedMessage struct {
-	Message json.RawMessage
-	Time    time.Time
-}
-
 type ServiceFinder func(serviceID string) (*ServiceInfo, error)
 
 type WebSocketManager struct {
@@ -125,6 +120,11 @@ type ResultAggregator struct {
 type FailureTracker struct {
 	LogManager *LogManager
 	logState   *LogState
+}
+
+type LoggedFailure struct {
+	Failure     string `json:"failure"`
+	SkipWebhook bool   `json:"skipWebhook"`
 }
 
 type TaskWorker struct {

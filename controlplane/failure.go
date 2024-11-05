@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 )
 
@@ -90,27 +92,40 @@ func (f *FailureTracker) processEntry(entry LogEntry, orchestrationID string) er
 	// Mark this entry as processed
 	f.logState.Processed[entry.ID()] = true
 
+	var failure LoggedFailure
+	if err := json.Unmarshal(entry.Value(), &failure); err != nil {
+		return fmt.Errorf("failure tracker failed to unmarshal entry: %w", err)
+	}
+
 	var errorPayload = struct {
-		Id              string          `json:"id"`
-		ProducerID      string          `json:"producer"`
-		OrchestrationID string          `json:"orchestration"`
-		Error           json.RawMessage `json:"error"`
+		Id              string `json:"id"`
+		ProducerID      string `json:"producer"`
+		OrchestrationID string `json:"orchestration"`
+		Error           string `json:"error"`
 	}{
 		Id:              entry.ID(),
 		ProducerID:      entry.ProducerID(),
 		OrchestrationID: orchestrationID,
-		Error:           entry.Value(),
+		Error:           failure.Failure,
 	}
 
 	reason, err := json.Marshal(errorPayload)
 	if err != nil {
-		return err
+		return fmt.Errorf("failure tracker failed to marshal error payload: %w", err)
 	}
 
-	failed, err := f.LogManager.MarkOrchestrationFailed(orchestrationID, reason)
-	if err != nil {
-		return err
-	}
+	failed := f.LogManager.MarkOrchestrationFailed(orchestrationID, failure.Failure)
 
-	return f.LogManager.FinalizeOrchestration(orchestrationID, failed, reason, nil)
+	if err := f.LogManager.FinalizeOrchestration(orchestrationID, failed, reason, nil, failure.SkipWebhook); err != nil {
+		isWebHookErr := strings.Contains(err.Error(), "failed to trigger webhook")
+		return f.LogManager.AppendFailureToLog(
+			orchestrationID,
+			FailureTrackerID,
+			FailureTrackerID,
+			fmt.Errorf("%s:%w", failure.Failure, err).Error(),
+			0,
+			isWebHookErr,
+		)
+	}
+	return nil
 }
