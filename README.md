@@ -7,8 +7,6 @@ multi-agent applications. Developers can stop re-inventing the wheel and focus o
 
 Our current release is codenamed "Narwal". This release brings the ✨Alpha✨ version of Orra's orchestration capabilities.
 
-![Our Narwhal](releases/images/0.1.0/narwhal.jpeg)
-
 ## Install
 
 ### Prerequisites
