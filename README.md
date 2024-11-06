@@ -18,6 +18,18 @@ Our current release is codenamed "Narwal". This release brings the ✨Alpha✨ v
 - **High-Throughput Performance**: Parallel execution, efficient task routing, and smart caching ensure your multi-agent
   apps stay responsive under load.
 
+## The Multi-Agent Development Reality
+
+If you're building multi-agent applications, this probably sounds familiar:
+
+**Production Reliability**: Your agents work perfectly in demos, but in production they're brittle. One hiccup in a chain of agent calls and everything falls apart.
+
+**Workflow Hell**: Your code is a maze of hard-wired sequences between agents and services. Adding a new integration or changing a workflow means rewriting orchestration logic, updating schemas, and praying you didn't break existing flows.
+
+**Scaling Pains**: Scaling beyond a few concurrent users means juggling queues, caches, and distributed state across agents and backend services. What started as "just a few agents talking to each other" has become a distributed systems problem.
+
+Orra adds powerful orchestration to your agents and services. No rewrites, no infrastructure headaches - just predictable, scalable execution.
+
 ## Install
 
 ### Prerequisites
