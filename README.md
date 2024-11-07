@@ -39,6 +39,8 @@ Orra adds powerful orchestration to your agents and services. No rewrites, no in
 - [Node.js 18+](https://nodejs.org/en/download/package-manager) - For running example services
 - An [OpenAI API key](https://platform.openai.com/docs/quickstart) - For LLM-powered orchestration
 
+> **Note**: The control plane currently runs in-memory. If restarting, follow our [Reset Guide](docs/reset-control-plane.md).
+
 ### 1. Install Orra CLI
 
 Download the latest CLI binary for your platform from our releases page.
@@ -70,7 +72,7 @@ cd orra/controlplane
 echo "OPENAI_API_KEY=your-key-here" > .env
 
 # Start the control plane
-docker-compose up -d
+docker compose up --build
 ```
 
 ## Quick Start

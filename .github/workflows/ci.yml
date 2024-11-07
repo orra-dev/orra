@@ -52,13 +52,13 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build Control Plane
-        run: cd controlplane && docker-compose build
+        run: cd controlplane && docker compose build
 
       - name: Run Integration Tests
         run: |
-          cd controlplane && docker-compose up -d
+          cd controlplane && docker compose up --build -d
           # Add integration test commands here
-          docker-compose down
+          docker compose down
 
   security-scan:
     runs-on: ubuntu-latest
