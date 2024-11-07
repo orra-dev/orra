@@ -27,13 +27,13 @@ func newVerifyCmd(opts *CliOpts) *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(newVerifyTellCmd(opts))
+	cmd.AddCommand(newVerifyRunCmd(opts))
 	cmd.AddCommand(newVerifyWebhooksCmd(opts))
 
 	return cmd
 }
 
-func newVerifyTellCmd(opts *CliOpts) *cobra.Command {
+func newVerifyRunCmd(opts *CliOpts) *cobra.Command {
 	var (
 		data       []string
 		webhookUrl string
@@ -41,10 +41,11 @@ func newVerifyTellCmd(opts *CliOpts) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "tell [action]",
-		Short: "Tell Orra to orchestrate an action with data parameters",
-		Long:  "Tell Orra to orchestrate an action with at least one data parameter",
-		Args:  cobra.ExactArgs(1),
+		Use:   "run [action]",
+		Short: "Orchestrate an action with any data parameters",
+		Long: `Orchestrate an action with any data parameters to dynamically 
+execute the required project services`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			action := args[0]
 
@@ -110,8 +111,10 @@ func newVerifyTellCmd(opts *CliOpts) *cobra.Command {
 	}
 
 	cmd.Flags().StringSliceVarP(&data, "data", "d", []string{}, "Data to supplement action in format param:value")
-	cmd.Flags().StringVarP(&webhookUrl, "webhook", "w", "", "Webhook url (defaults to first configured webhook)")
-	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress extra explanation (defaults to false)")
+	cmd.Flags().StringVarP(&webhookUrl, "webhook", "w", "", `Webhook url to accept results 
+(defaults to first configured webhook)`)
+	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, `Suppress extra explanation
+(defaults to false)`)
 
 	return cmd
 }
@@ -141,7 +144,6 @@ func newVerifyWebhooksCmd(opts *CliOpts) *cobra.Command {
 	}
 
 	cmd.AddCommand(newVerifyWebhooksStartCmd(opts))
-	//cmd.AddCommand(newVerifyWebhooksStopCmd(opts))
 
 	return cmd
 }
@@ -260,28 +262,6 @@ func newVerifyWebhooksStartCmd(opts *CliOpts) *cobra.Command {
 		},
 	}
 }
-
-//func newVerifyWebhooksStopCmd(opts *CliOpts) *cobra.Command {
-//	return &cobra.Command{
-//		Use:   "stop",
-//		Short: "Stop all test webhook servers",
-//		RunE: func(cmd *cobra.Command, args []string) error {
-//			webhooksMutex.Lock()
-//			urls := make([]string, 0, len(runningWebhooks))
-//			for url := range runningWebhooks {
-//				urls = append(urls, url)
-//			}
-//			webhooksMutex.Unlock()
-//
-//			for _, url := range urls {
-//				if err := stopWebhook(url); err != nil {
-//					return err
-//				}
-//			}
-//			return nil
-//		},
-//	}
-//}
 
 func stopWebhook(url string) error {
 	webhooksMutex.Lock()
