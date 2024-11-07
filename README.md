@@ -91,7 +91,7 @@ While simple, it showcases Orra's capabilities:
 orra projects add my-ai-app
 
 # Register a webhook
-orra webhooks add http://localhost:8080/webhook
+orra webhooks add http://host.docker.internal:8080/webhook
 
 # Create an API key for your services
 orra api-keys gen service-key

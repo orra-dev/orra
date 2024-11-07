@@ -19,9 +19,9 @@ orra verify run "Estimate order delivery and notify customer" \
   -d orderId:ORD456 \
   -d customerId:ABC123
 
-# Specify webhook for results
+# Specify webhook for results (assumes the control plane is running with docker compose)
 orra verify run "Process refund request ensuring it is not fraudulent" \
-  -w http://localhost:3000/webhooks/results \
+  -w http://host.docker.internal:3000/webhooks/results \ 
   -d orderId:ORD789
 ```
 
@@ -190,7 +190,7 @@ orra verify run "Process new order and arrange optimal delivery" \
   -d orderId:ORD123 \
   -d customerId:CUST456 \
   -d items:[{"id":"PROD789","quantity":2}] \
-  -w http://localhost:3000/webhooks/order-processing
+  -w http://host.docker.internal:3000/webhooks/order-processing
 
 # Monitor progress
 orra inspect o_fdhdhjhashah

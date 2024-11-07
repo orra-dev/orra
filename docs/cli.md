@@ -24,8 +24,8 @@ orra version
 # Create a new project
 orra projects add my-ai-app
 
-# Add a webhook to receive results
-orra webhooks add http://localhost:3000/webhooks/results
+# Add a webhook to receive results (assumes the control plane is running with docker compose)
+orra webhooks add http://host.docker.internal:3000/webhooks/results
 
 # Generate an API key for your services
 orra api-keys gen production-key
