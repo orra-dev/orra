@@ -3,6 +3,7 @@
 ## How Orra Makes Multi-Agent Apps Production-Ready
 
 ### Execution Plans
+
 When you submit an action, Orra's AI analyzes your intent and creates an execution plan optimized for reliability and performance:
 
 ```json
@@ -16,21 +17,21 @@ When you submit an action, Orra's AI analyzes your intent and creates an executi
       }
     },
     {
-      "id": "customer_context",
+      "id": "task1",
       "service": "CustomerService",
       "input": {
         "customerId": "$task0.customerId"
       }
     },
     {
-      "id": "order_details",
+      "id": "task2",
       "service": "OrderSystem",
       "input": {
         "orderId": "$task0.orderId"
       }
     },
     {
-      "id": "generate_response",
+      "id": "task3",
       "service": "AIAgent",
       "input": {
         "customerData": "$customer_context",
@@ -39,8 +40,8 @@ When you submit an action, Orra's AI analyzes your intent and creates an executi
     }
   ],
   "parallel_groups": [
-    ["customer_context", "order_details"],
-    ["generate_response"]
+    ["task1", "task2"],
+    ["task3"]
   ]
 }
 ```
@@ -99,6 +100,7 @@ Example log sequence:
 ### Advanced Usage Patterns
 
 #### 1. Dynamic Service Registration
+
 Services can update their capabilities at runtime:
 ```javascript
 await client.registerService('AIAgent', {
@@ -118,6 +120,7 @@ await client.registerService('AIAgent', {
 ```
 
 #### 2. Custom Persistence
+
 Control how service identity persists:
 ```javascript
 const client = createClient({
