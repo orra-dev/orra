@@ -189,7 +189,7 @@ await client.registerService('AI Service', {/*...*/});
 client.startHandler(async (task) => {/*...*/});
 ```
 
-→ [JS SDK Integration Guide](docs/js/sdk.md)
+→ [JS SDK Integration Guide](docs/sdks/js-sdk.md)
 
 ### 2. Orchestrate Actions
 
