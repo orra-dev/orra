@@ -94,10 +94,10 @@ npm run dev
 
 Let's create a fun sequence:
 
-__Send your first message__
+__Run your first action__
 
 ```shell
-orra verify tell 'Echo this secret message' --data message:'🎯 Target acquired!'
+orra verify run 'Echo this secret message' --data message:'🎯 Target acquired!'
 ```
 
 Watch the magic happen:
@@ -112,8 +112,8 @@ __Let's break things (intentionally)__
 ```shell
 # STOP THE ECHO SERVICE (Ctrl+C in its terminal)
 
-# Send another message
-orra verify tell 'Echo the rescue signal' --data message:'🆘 Send help!'
+# Run another action
+orra verify run 'Echo the rescue signal' --data message:'🆘 Send help!'
 
 # Check what's happening
 orra inspect -d <orchestration-id>
