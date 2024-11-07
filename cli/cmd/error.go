@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ *  License, v. 2.0. If a copy of the MPL was not distributed with this
+ *  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 package cmd
 
 import (
@@ -44,12 +50,12 @@ func handleCommandError(rootCmd *cobra.Command, err error) {
 	}
 
 	if isUsageError(err) {
-		fmt.Fprintf(os.Stderr, "%s%s\n\n", errorPrefix, err)
-		failedCmd.Usage()
+		_, _ = fmt.Fprintf(os.Stderr, "%s%s\n\n", errorPrefix, err)
+		_ = failedCmd.Usage()
 		return
 	}
 
-	fmt.Fprintf(os.Stderr, "%sError: %s\n", errorPrefix, err)
+	_, _ = fmt.Fprintf(os.Stderr, "%sError: %s\n", errorPrefix, err)
 
 	return
 }
