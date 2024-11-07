@@ -179,7 +179,9 @@ func newVerifyWebhooksStartCmd(opts *CliOpts) *cobra.Command {
 			}
 
 			if !contains(proj.Webhooks, webhookURL) {
-				return fmt.Errorf("unknown webhook %s for project: %s", webhookURL, projectName)
+				if !contains(proj.Webhooks, strings.ReplaceAll(webhookURL, "localhost", "host.docker.internal")) {
+					return fmt.Errorf("unknown webhook %s for project: %s", webhookURL, projectName)
+				}
 			}
 
 			webhooksMutex.Lock()
