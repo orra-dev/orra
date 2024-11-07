@@ -8,11 +8,13 @@ First, [install the Orra CLI](../cli.md) .
 
 ```bash
 # Clone the Orra repository
-git clone https://github.com/your-org/orra.git
+git clone https://github.com/ezodude/orra.git
 
 # Install the SDK from local repository
 npm install -S ../path/to/repo/orra/sdks/js
 ```
+
+> **Development Note**: During alpha, the control plane runs in-memory. After control plane restarts, services need to be reconfigured. See our [Reset Guide](../reset-control-plane.md) for the simple steps.
 
 ## Quick Integration Example
 

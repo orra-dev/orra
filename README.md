@@ -174,6 +174,8 @@ You've just experienced:
 The best part? This same pattern works for complex multi-service and multi-agent scenarios. Orra handles the complexity
 while you focus on building your application.
 
+> **Note**: The control plane currently runs in-memory. If restarting, follow our [Reset Guide](docs/reset-control-plane.md).
+
 ## Next Steps 
 
 ### 1. Integrate Services & Agents
