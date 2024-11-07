@@ -124,8 +124,18 @@ func (p *ControlPlane) InspectOrchestration(orchestrationID string) (*Orchestrat
 		return nil, err
 	}
 
+	if orchestration.FailedBeforeDecomposition() {
+		return &OrchestrationInspectResponse{
+			ID:        orchestration.ID,
+			Status:    Failed,
+			Action:    orchestration.Action.Content,
+			Timestamp: orchestration.Timestamp,
+			Error:     orchestration.Error,
+			Duration:  time.Since(orchestration.Timestamp),
+		}, nil
+	}
+
 	if orchestration.Status == NotActionable {
-		// Return inspection with only the error information
 		return &OrchestrationInspectResponse{
 			ID:        orchestration.ID,
 			Status:    NotActionable,

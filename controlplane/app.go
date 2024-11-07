@@ -211,11 +211,7 @@ func (app *App) OrchestrationsHandler(w http.ResponseWriter, r *http.Request) {
 			Str("Status", orchestration.Status.String()).
 			Msgf("Orchestration %s cannot be executed: %s", orchestration.ID, orchestration.Error)
 
-		if orchestration.Status == NotActionable {
-			w.WriteHeader(http.StatusUnprocessableEntity)
-		} else {
-			w.WriteHeader(http.StatusInternalServerError)
-		}
+		w.WriteHeader(http.StatusUnprocessableEntity)
 	} else {
 		app.Logger.Debug().Msgf("About to execute orchestration %s", orchestration.ID)
 		go app.Plane.ExecuteOrchestration(&orchestration)
@@ -224,6 +220,7 @@ func (app *App) OrchestrationsHandler(w http.ResponseWriter, r *http.Request) {
 
 	data, err := json.Marshal(orchestration)
 	if err != nil {
+		app.Logger.Error().Err(err).Interface("orchestration", orchestration).Msg("")
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(JSONMarshalingFail), err))
 		return
 	}
