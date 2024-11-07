@@ -29,52 +29,36 @@ func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orc
 	p.orchestrationStore[orchestration.ID] = orchestration
 	p.orchestrationStoreMu.Unlock()
 
-	if err := p.validateWebhook(orchestration.ProjectID, orchestration.Webhook); err != nil {
-		wrappedErr := fmt.Errorf("invalid orchestration: %w", err)
+	prepForError := func(orchestration *Orchestration, err error) {
 		p.Logger.Error().
 			Str("OrchestrationID", orchestration.ID).
-			Str("Webhook", orchestration.Webhook).
-			Err(wrappedErr)
+			Err(err)
 		orchestration.Status = Failed
 		orchestration.Timestamp = time.Now().UTC()
-		orchestration.Error = []byte(wrappedErr.Error())
+		marshaledErr, _ := json.Marshal(err.Error())
+		orchestration.Error = marshaledErr
+	}
+
+	if err := p.validateWebhook(orchestration.ProjectID, orchestration.Webhook); err != nil {
+		prepForError(orchestration, fmt.Errorf("invalid orchestration: %w", err))
 		return
 	}
 
 	services, err := p.discoverProjectServices(orchestration.ProjectID)
 	if err != nil {
-		p.Logger.Error().
-			Str("OrchestrationID", orchestration.ID).
-			Err(fmt.Errorf("error discovering services: %w", err))
-
-		orchestration.Status = Failed
-		orchestration.Timestamp = time.Now().UTC()
-		marshaledErr, _ := json.Marshal(err.Error())
-		orchestration.Error = marshaledErr
+		prepForError(orchestration, fmt.Errorf("error discovering services: %w", err))
 		return
 	}
 
 	serviceDescriptions, err := p.serviceDescriptions(services)
 	if err != nil {
-		wrappedErr := fmt.Errorf("failed to create service descriptions required for prompting: %w", err)
-		p.Logger.Error().
-			Str("OrchestrationID", orchestration.ID).
-			Err(wrappedErr)
-		orchestration.Status = Failed
-		orchestration.Timestamp = time.Now().UTC()
-		orchestration.Error = []byte(wrappedErr.Error())
+		prepForError(orchestration, fmt.Errorf("failed to create service descriptions required for prompting: %w", err))
 		return
 	}
 
 	actionParams, err := orchestration.Params.Json()
 	if err != nil {
-		wrappedErr := fmt.Errorf("failed to convert action parameters to prompt friendly format: %w", err)
-		p.Logger.Error().
-			Str("OrchestrationID", orchestration.ID).
-			Err(wrappedErr)
-		orchestration.Status = Failed
-		orchestration.Timestamp = time.Now().UTC()
-		orchestration.Error = []byte(wrappedErr.Error())
+		prepForError(orchestration, fmt.Errorf("failed to convert action parameters to prompt friendly format: %w", err))
 		return
 	}
 
@@ -83,14 +67,7 @@ func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orc
 		orchestration.Action.Content, actionParams, serviceDescriptions,
 	)
 	if err != nil {
-		p.Logger.Error().
-			Str("OrchestrationID", orchestration.ID).
-			Err(fmt.Errorf("error decomposing action: %w", err))
-
-		orchestration.Status = Failed
-		orchestration.Timestamp = time.Now().UTC()
-		marshaledErr, _ := json.Marshal(fmt.Sprintf("Error decomposing action: %s", err.Error()))
-		orchestration.Error = marshaledErr
+		prepForError(orchestration, fmt.Errorf("error decomposing action: %w", err))
 		return
 	}
 
@@ -105,40 +82,24 @@ func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orc
 
 	taskZero, onlyServicesCallingPlan := p.callingPlanMinusTaskZero(callingPlan)
 	if taskZero == nil {
-		p.Logger.Error().
-			Str("OrchestrationID", orchestration.ID).
-			Err(fmt.Errorf("error locating task zero in calling plan"))
-
 		orchestration.Plan = callingPlan
-		orchestration.Status = Failed
-		orchestration.Timestamp = time.Now().UTC()
-		marshaledErr, _ := json.Marshal(fmt.Sprintf("Error locating task zero in calling plan"))
-		orchestration.Error = marshaledErr
+		prepForError(orchestration, fmt.Errorf("error locating task zero in calling plan"))
 		return
 	}
 
 	taskZeroInput, err := json.Marshal(taskZero.Input)
 	if err != nil {
-		orchestration.Status = Failed
-		orchestration.Timestamp = time.Now().UTC()
-		marshaledErr, _ := json.Marshal(fmt.Sprintf("Failed to convert task zero into valid params: %v", err))
-		orchestration.Error = marshaledErr
+		prepForError(orchestration, fmt.Errorf("failed to convert task zero into valid params: %w", err))
 		return
 	}
 
 	if err = p.validateInput(services, onlyServicesCallingPlan.Tasks); err != nil {
-		orchestration.Status = Failed
-		orchestration.Timestamp = time.Now().UTC()
-		marshaledErr, _ := json.Marshal(fmt.Sprintf("Error validating plan input/output: %s", err.Error()))
-		orchestration.Error = marshaledErr
+		prepForError(orchestration, fmt.Errorf("error validating plan input/output: %w", err))
 		return
 	}
 
 	if err := p.addServiceDetails(services, onlyServicesCallingPlan.Tasks); err != nil {
-		orchestration.Status = Failed
-		orchestration.Timestamp = time.Now().UTC()
-		marshaledErr, _ := json.Marshal(fmt.Sprintf("Error adding service details to calling plan: %s", err.Error()))
-		orchestration.Error = marshaledErr
+		prepForError(orchestration, fmt.Errorf("error adding service details to calling plan: %w", err))
 		return
 	}
 

@@ -100,7 +100,11 @@ app.prepare().then(() => {
 				io.emit('orra_plan', response.data?.plan);
 			} catch (error) {
 				if (error.response && error.response.status === 422) {
-					io.emit('orra_err', "Sorry, I can't help with that. 😐");
+					if (error.response.data?.status === "not_actionable"){
+						io.emit('orra_err', "Sorry, I can't help with that. 😐");
+					}else{
+						io.emit('orra_err', `${error.response.data?.error}. ❌`);
+					}
 				}else {
 					console.error('Error posting to external API:', error);
 				}

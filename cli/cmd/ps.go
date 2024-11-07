@@ -8,6 +8,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -158,11 +159,11 @@ func toInterfaceSlice(s []string) []interface{} {
 	return is
 }
 
-func formatListError(err string) string {
-	if err == "" {
+func formatListError(err json.RawMessage) string {
+	if len(err) == 0 {
 		return "─"
 	}
-	return err
+	return string(err)
 }
 
 func formatStatus(status string) string {

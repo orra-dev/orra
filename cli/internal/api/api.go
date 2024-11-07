@@ -67,11 +67,11 @@ func (s Status) String() string {
 }
 
 type OrchestrationView struct {
-	ID        string    `json:"id"`
-	Action    string    `json:"action"`
-	Status    Status    `json:"status"`
-	Error     string    `json:"error,omitempty"`
-	Timestamp time.Time `json:"timestamp"`
+	ID        string          `json:"id"`
+	Action    string          `json:"action"`
+	Status    Status          `json:"status"`
+	Error     json.RawMessage `json:"error,omitempty"`
+	Timestamp time.Time       `json:"timestamp"`
 }
 
 type OrchestrationListView struct {

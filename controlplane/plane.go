@@ -196,6 +196,10 @@ func (p *ControlPlane) GetProjectIDForService(serviceID string) (string, error) 
 	return "", fmt.Errorf("no project found for service %s", serviceID)
 }
 
+func (o *Orchestration) FailedBeforeDecomposition() bool {
+	return o.Status == Failed && o.Plan == nil
+}
+
 func (o *Orchestration) Executable() bool {
 	return o.Status != NotActionable && o.Status != Failed
 }
