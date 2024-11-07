@@ -4,6 +4,8 @@ Orra makes it easy to add resilient, production-ready orchestration to your exis
 
 ## Installation
 
+First, [install the Orra CLI](../cli.md) .
+
 ```bash
 # Clone the Orra repository
 git clone https://github.com/your-org/orra.git

@@ -138,6 +138,8 @@ const client = createClient({
 
 ## Production Debugging
 
+Reference [docs/cli.md](cli.md) for inspection commands.
+
 Every orchestration provides detailed inspection:
 
 ```shell

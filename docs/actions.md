@@ -25,6 +25,8 @@ orra verify run "Process refund request ensuring it is not fraudulent" \
   -d orderId:ORD789
 ```
 
+See [docs/cli.md](cli.md) for detailed CLI usage.
+
 ### 2. Using the HTTP API (for production)
 
 ```bash

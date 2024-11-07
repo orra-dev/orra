@@ -56,6 +56,8 @@ chmod +x /usr/local/bin/orra
 orra version
 ```
 
+→ [Full CLI documentation](docs/cli.md)
+
 ### 2. Get Orra Running
 
 Clone the repository and start the control plane:
@@ -86,7 +88,7 @@ While simple, it showcases Orra's capabilities:
 
 ```shell
 # Create a new project
-orra projects add my-orra-project
+orra projects add my-ai-app
 
 # Register a webhook
 orra webhooks add http://localhost:8080/webhook
