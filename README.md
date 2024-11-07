@@ -195,7 +195,7 @@ while you focus on building your application.
 ### Coming Soon
 
 * Persistent storage
-* Additional language SDKs - Python and Ruby SDKs soon!
+* Additional language SDKs - Python and Ruby very soon!
 * Streaming for superfast task processing
 * Continuous adjustment of Agent workflows during runtime
 * Resource Reallocation based on performance and changing needs
