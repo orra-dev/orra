@@ -44,102 +44,78 @@ curl -X POST http://localhost:8005/orchestrations \
   }'
 ```
 
+# Working with Orra Actions
+
+As an AI Engineer, you know the challenges of building reliable multi-agent systems - agents failing silently, lost messages, and no visibility into what's happening. Actions are how Orra solves these problems.
+
 ## How Actions Work
 
-1. **Submission**: Action is submitted with parameters
-2. **Analysis**: Control plane uses AI to analyze the action
-3. **Planning**: Creates a parallel execution plan using available services/agents
-4. **Orchestration**: Executes tasks across services with maximum parallelization
-5. **Results**: Aggregates results and delivers via webhook
+An action is your high-level intent (e.g., "Help customer ABC123 with their order"). Orra handles the complexity of reliable execution:
 
-### Parallel Execution
-
-Orra maximizes performance by running independent tasks in parallel. The control plane:
-
-1. Analyzes task dependencies
-2. Creates parallel execution groups
-3. Runs independent groups simultaneously
-4. Manages data flow between dependent tasks
-
-Example parallel execution:
 ```mermaid
 sequenceDiagram
-    participant Client
+    participant You
     participant Orra
-    participant PaymentSvc
-    participant InventorySvc
-    participant DeliveryAgent
-    participant NotificationSvc
+    participant Agents
     participant Webhook
 
-    Client->>Orra: Submit order action
-    Note over Orra: Analyze & create parallel plan
+    You->>Orra: Submit Action
+    Note over Orra: AI Planning & Parallel Execution
     
-    par Payment & Inventory
-        Orra->>PaymentSvc: Process payment
-        Orra->>InventorySvc: Check stock
+    rect rgb(240, 240, 240)
+        Note right of Orra: Reliability Guarantees
+        Orra->Agents: Orchestrate Tasks
+        Note over Agents: Health Monitoring
+        Note over Agents: Exactly-once Execution
     end
     
-    Note over Orra: Wait for payment & stock check
-    
-    par Delivery & Notification
-        Orra->>DeliveryAgent: Schedule delivery
-        Orra->>NotificationSvc: Update customer
-    end
-    
-    Orra->>Webhook: Aggregated results
+    Orra->>Webhook: Final Results
+    Note over You: Monitor Progress
 ```
 
-In this example:
-- Payment processing and inventory checks run in parallel
-- Once both complete, delivery and notification run in parallel
-- Orra handles all coordination and data flow between tasks
-
-### Example CLI Output
+### 1. Submit Actions
 
 ```bash
-$ orra inspect -d order123
+# Direct intent, Orra handles the complexity
+orra verify run "Help customer with delayed order" \
+  -d customerId:CUST789 \
+  -d orderId:ORD456
+```
 
-┌─ Orchestration Details
-│ ID: order123
-│ Status: completed
-│ Action: Process order and arrange delivery
-│ Created: 2m ago
+### 2. Monitor Progress
+
+```bash
+# Real-time visibility
+orra inspect ORD456
 
 ┌─ Tasks
-│ ID       SERVICE          STATUS       DURATION
-│ payment  PaymentSvc      completed    1.2s
-│ stock    InventorySvc    completed    1.1s      # Ran parallel with payment
-│ delivery DeliveryAgent   completed    2.3s      # Started after payment & stock
-│ notify   NotifySvc       completed    0.8s      # Ran parallel with delivery
+│ ✓ Customer history retrieved
+│ ✓ Order details fetched
+│ ◐ Generating response
 ```
 
-### Parallel Groups in Action Response
+### 3. Get Results
 
-When you create an action, the response includes the parallel execution plan:
-
-```json
-{
-  "tasks": [
-    {"id": "payment", "service": "PaymentService", "input": {...}},
-    {"id": "inventory", "service": "InventoryService", "input": {...}},
-    {"id": "delivery", "service": "DeliveryAgent", "input": {...}},
-    {"id": "notify", "service": "NotificationService", "input": {...}}
-  ],
-  "parallel_groups": [
-    ["payment", "inventory"],   // These run in parallel
-    ["delivery", "notify"]      // These run in parallel after first group
-  ]
-}
+```javascript
+// Your webhook receives definitive results
+app.post('/webhooks/orra', (req, res) => {
+  const { orchestrationId, status, results } = req.body;
+  // Handle results confidently
+  res.sendStatus(200);
+});
 ```
 
-Orra's parallel execution ensures:
-- Maximum throughput by running independent tasks simultaneously
-- Correct ordering of dependent tasks
-- Efficient resource utilization
-- Minimal end-to-end execution time
+Want more details?
+- [Advanced Topics & Internals →](../docs/advanced.md)
 
-Would you like me to expand further on any aspect of the parallel execution system?
+This revision:
+1. Gets straight to the point about reliability
+2. Shows clear steps: submit → monitor → results
+3. Keeps focus on what AI Engineers care about most
+4. Defers complex details to advanced docs
+5. Uses minimal but meaningful examples
+
+How's this for a more focused approach?
 
 ## Monitoring Actions
 
