@@ -172,6 +172,40 @@ You've just experienced:
 The best part? This same pattern works for complex multi-service and multi-agent scenarios. Orra handles the complexity
 while you focus on building your application.
 
+## Next Steps 
+
+### 1. Integrate Services & Agents
+
+```javascript
+import { createClient } from '@orra/sdk';
+
+const client = createClient({
+  orraUrl: process.env.ORRA_URL,
+  orraKey: process.env.ORRA_API_KEY
+});
+
+// Turn your existing AI service into an orchestrated component
+await client.registerService('AI Service', {/*...*/});
+client.startHandler(async (task) => {/*...*/});
+```
+
+→ [JS SDK Integration Guide](docs/js/sdk.md)
+
+### 2. Orchestrate Actions
+
+```shell
+orra verify run "Estimate delivery for customer order" \
+  -d customerId:CUST123 \
+  -d orderId:ORD123
+```
+
+→ [Action Orchestration Guide](docs/actions.md)
+
+### 3. Explore Examples
+
+- 🛒 [E-commerce AI Assistant](examples/ecommerce-chat-js) - E-commerce customer service with a delivery specialised agent
+- 📣 [Echo Service](examples/echo-js) - Simple example showing core concepts
+
 ## Alpha Features & Limitations
 
 ### Available Now
@@ -201,11 +235,6 @@ while you focus on building your application.
 * Resource Reallocation based on performance and changing needs
 * Distributed deployment
   .. and many more planned
-
-## Examples
-
-- 📱 [Chat Application](examples/ecommerce-chat-js) - E-commerce customer service with a delivery specialised agent
-- 🔄 [Echo Service](examples/echo-js) - Simple example showing core concepts
 
 ## Join Our Alpha Testing Community
 
