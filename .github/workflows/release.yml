@@ -7,6 +7,7 @@ on:
       - 'cp-v*.*.*-*'       # e.g. cp-v0.1.0-narwhal
       - 'sdk-v*.*.*-*'      # e.g. sdk-v0.1.0-narwhal
       - 'v*.*.*-*'         # e.g. v0.1.0-narwhal
+
   workflow_dispatch: # This is crucial for manual runs
     inputs:
       test_tag:
@@ -18,6 +19,7 @@ on:
         required: false
         type: boolean
         default: false
+
 jobs:
   prepare-release:
     runs-on: ubuntu-latest
