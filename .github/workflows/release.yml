@@ -35,6 +35,13 @@ jobs:
           echo "Test tag: ${{ github.event.inputs.test_tag }}"
           echo "All event inputs: ${{ toJson(github.event.inputs) }}"
 
+      - name: Debug prepare-release outputs
+        run: |
+          echo "Release type: ${{ steps.release_type.outputs.type }}"
+          echo "Has CLI: ${{ steps.check_changelog.outputs.has_cli }}"
+          echo "All outputs:"
+          echo "${{ toJSON(steps) }}"
+
       - name: Determine release type and version
         id: release_type  # This ID is important
         run: |
@@ -84,6 +91,20 @@ jobs:
             echo "Version: $(cat $GITHUB_OUTPUT | grep version | cut -d= -f2)"
           fi
 
+      - name: Check for changelog files
+        id: check_changelog
+        run: |
+          VERSION="${{ steps.release_type.outputs.version }}"
+          RELEASE_TYPE="${{ steps.release_type.outputs.type }}"
+
+          echo "Checking for CLI changelog at: releases/cli/versions/${VERSION}.md"
+          if [ -f "releases/cli/versions/${VERSION}.md" ]; then
+            echo "has_cli=true" >> $GITHUB_OUTPUT
+            echo "Found CLI changelog"
+          else
+            echo "has_cli=false" >> $GITHUB_OUTPUT
+            echo "No CLI changelog found"
+          fi
   build-cli:
     needs: prepare-release
     if: |
@@ -140,8 +161,17 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    if: github.event_name != 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
+
+      - name: Debug Info (Test Mode)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "This is a test run, skipping actual release"
+          echo "Would create release with:"
+          echo "Version: ${{ needs.prepare-release.outputs.version }}"
+          echo "Release type: ${{ needs.prepare-release.outputs.release_type }}"
 
       - name: Download artifacts
         uses: actions/download-artifact@v4
