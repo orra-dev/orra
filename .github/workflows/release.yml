@@ -24,25 +24,31 @@ jobs:
         id: release_type
         run: |
           TAG=${GITHUB_REF#refs/tags/}
+
+          # First determine type and extract version
           if [[ $TAG == cli-v* ]]; then
-            echo "type=cli" >> $GITHUB_OUTPUT
-            echo "version=${TAG#cli-v}" >> $GITHUB_OUTPUT
+            TYPE="cli"
+            VERSION="${TAG#cli-v}"
           elif [[ $TAG == cp-v* ]]; then
-            echo "type=controlplane" >> $GITHUB_OUTPUT
-            echo "version=${TAG#cp-v}" >> $GITHUB_OUTPUT
+            TYPE="controlplane"
+            VERSION="${TAG#cp-v}"
           elif [[ $TAG == sdk-v* ]]; then
-            echo "type=sdk" >> $GITHUB_OUTPUT
-            echo "version=${TAG#sdk-v}" >> $GITHUB_OUTPUT
+            TYPE="sdk"
+            VERSION="${TAG#sdk-v}"
           else
-            echo "type=full" >> $GITHUB_OUTPUT
-            echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+            TYPE="full"
+            VERSION="${TAG#v}"
           fi
 
           # Validate version format (now includes suffix)
-          if ! echo "${{ steps.release_type.outputs.version }}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-[a-zA-Z0-9]+$'; then
-            echo "Error: Version format must be X.Y.Z-suffix"
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-[a-zA-Z0-9]+$'; then
+            echo "Error: Version format must be X.Y.Z-suffix (got: $VERSION)"
             exit 1
           fi
+
+          # Output after validation passes
+          echo "type=$TYPE" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Check for changelog files
         id: check_changelog
