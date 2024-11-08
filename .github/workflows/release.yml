@@ -3,10 +3,10 @@ name: Release Management
 on:
   push:
     tags:
-      - 'cli-v*.*.*'       # e.g. cli-v0.1.0
-      - 'cp-v*.*.*'        # e.g. cp-v0.1.0
-      - 'sdk-v*.*.*'       # e.g. sdk-v0.1.0
-      - 'v*.*.*'          # For full release
+      - 'cli-v*.*.*-*'      # e.g. cli-v0.1.0-narwhal
+      - 'cp-v*.*.*-*'       # e.g. cp-v0.1.0-narwhal
+      - 'sdk-v*.*.*-*'      # e.g. sdk-v0.1.0-narwhal
+      - 'v*.*.*-*'         # e.g. v0.1.0-narwhal
 
 jobs:
   prepare-release:
@@ -36,6 +36,12 @@ jobs:
           else
             echo "type=full" >> $GITHUB_OUTPUT
             echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+          fi
+
+          # Validate version format (now includes suffix)
+          if ! echo "${{ steps.release_type.outputs.version }}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-[a-zA-Z0-9]+$'; then
+            echo "Error: Version format must be X.Y.Z-suffix"
+            exit 1
           fi
 
       - name: Check for changelog files
@@ -104,7 +110,10 @@ jobs:
       - name: Generate checksum
         run: |
           cd dist
-          sha256sum ${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }} > ${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}.sha256
+          VERSION=${{ needs.prepare-release.outputs.version }}
+          # Include version in binary names
+          mv ${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }} ${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}-${VERSION}
+          sha256sum ${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}-${VERSION} > ${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}-${VERSION}.sha256
 
       - name: Upload binary artifacts
         uses: actions/upload-artifact@v3
@@ -181,35 +190,42 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
 
-      - name: Generate CLI changelog
-        if: needs.prepare-release.outputs.has_cli == 'true'
+      - name: Generate Changelogs
         run: |
+          # Create all changelog directories
+          mkdir -p releases/cli
+          mkdir -p releases/control-plane
+          mkdir -p releases/sdk
+
+          # CLI Changelog
           echo "# CLI Changelog" > releases/cli/CHANGELOG.md
           echo "" >> releases/cli/CHANGELOG.md
-          find releases/cli/versions -name "*.md" -type f | sort -r | while read -r file; do
-            cat "$file" >> releases/cli/CHANGELOG.md
-            echo "" >> releases/cli/CHANGELOG.md
-          done
+          if [ -d "releases/cli/versions" ]; then
+            find releases/cli/versions -name "*.md" -type f | sort -r | while read -r file; do
+              cat "$file" >> releases/cli/CHANGELOG.md
+              echo "" >> releases/cli/CHANGELOG.md
+            done
+          fi
 
-      - name: Generate Control Plane changelog
-        if: needs.prepare-release.outputs.has_controlplane == 'true'
-        run: |
-          echo "# Control Plane Changelog" > releases/controlplane/CHANGELOG.md
-          echo "" >> releases/controlplane/CHANGELOG.md
-          find releases/controlplane/versions -name "*.md" -type f | sort -r | while read -r file; do
-            cat "$file" >> releases/controlplane/CHANGELOG.md
-            echo "" >> releases/controlplane/CHANGELOG.md
-          done
+          # Control Plane Changelog
+          echo "# Control Plane Changelog" > releases/control-plane/CHANGELOG.md
+          echo "" >> releases/control-plane/CHANGELOG.md
+          if [ -d "releases/control-plane/versions" ]; then
+            find releases/control-plane/versions -name "*.md" -type f | sort -r | while read -r file; do
+              cat "$file" >> releases/control-plane/CHANGELOG.md
+              echo "" >> releases/control-plane/CHANGELOG.md
+            done
+          fi
 
-      - name: Generate SDK changelog
-        if: needs.prepare-release.outputs.has_sdk == 'true'
-        run: |
-          echo "# SDK Changelog" > releases/sdks/CHANGELOG.md
-          echo "" >> releases/sdks/CHANGELOG.md
-          find releases/sdks/versions -name "*.md" -type f | sort -r | while read -r file; do
-            cat "$file" >> releases/sdks/CHANGELOG.md
-            echo "" >> releases/sdks/CHANGELOG.md
-          done
+          # SDK Changelog
+          echo "# SDK Changelog" > releases/sdk/CHANGELOG.md
+          echo "" >> releases/sdk/CHANGELOG.md
+          if [ -d "releases/sdk/versions" ]; then
+            find releases/sdk/versions -name "*.md" -type f | sort -r | while read -r file; do
+              cat "$file" >> releases/sdk/CHANGELOG.md
+              echo "" >> releases/sdk/CHANGELOG.md
+            done
+          fi
 
       - name: Commit updated changelogs
         run: |
