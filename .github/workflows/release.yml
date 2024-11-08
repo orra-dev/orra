@@ -7,7 +7,7 @@ on:
       - 'cp-v*.*.*-*'       # e.g. cp-v0.1.0-narwhal
       - 'sdk-v*.*.*-*'      # e.g. sdk-v0.1.0-narwhal
       - 'v*.*.*-*'         # e.g. v0.1.0-narwhal
-  workflow_dispatch:
+  workflow_dispatch: # This is crucial for manual runs
     inputs:
       test_tag:
         description: 'Tag to simulate (e.g., v0.1.0-narwhal)'
@@ -299,4 +299,3 @@ jobs:
         with:
           name: changelogs
           path: releases/**/CHANGELOG.md
-
