@@ -185,6 +185,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -237,25 +238,34 @@ jobs:
         run: |
           if [[ -n $(git status --porcelain) ]]; then
             VERSION="${{ needs.prepare-release.outputs.version }}"
+          
+            # Ensure VERSION is not empty
+            if [ -z "$VERSION" ]; then
+              echo "Error: Version is empty"
+              exit 1
+            fi
+
             git add releases/*/CHANGELOG.md
             git commit -m "docs: update changelogs for version ${VERSION} [skip ci]"
+
+            # Create branch with version
+            BRANCH_NAME="changelog-update-${VERSION}"
+            git checkout -b "$BRANCH_NAME"
+            git push origin "$BRANCH_NAME"
           
-            # Create changelog update branch
-            git checkout -b changelog-update-${VERSION}
-            git push origin changelog-update-${VERSION}
-          
-            # Create Pull Request
+            # Create Pull Request with proper token
             gh pr create \
               --title "docs: update changelogs for version ${VERSION}" \
               --body "Automated changelog updates for version ${VERSION}" \
               --label "documentation" \
               --base main \
-              --head changelog-update-${VERSION}
+              --head "$BRANCH_NAME"
           else
             echo "No changelog updates needed"
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Add this for gh CLI
 
       - name: Upload changelog artifacts
         uses: actions/upload-artifact@v3
