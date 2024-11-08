@@ -102,20 +102,50 @@ jobs:
           VERSION="${{ steps.release_type.outputs.version }}"
           RELEASE_TYPE="${{ steps.release_type.outputs.type }}"
           
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${{ github.event.inputs.debug }}" == "true" ]; then
-            echo "Test mode: Setting has_cli=true for testing"
-            echo "has_cli=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
+          echo "Debug: Checking changelogs for version ${VERSION}"
           
+          # Check CLI changelog
           echo "Checking for CLI changelog at: releases/cli/versions/${VERSION}.md"
           if [ -f "releases/cli/versions/${VERSION}.md" ]; then
             echo "has_cli=true" >> $GITHUB_OUTPUT
             echo "Found CLI changelog"
+            echo "Content:"
+            cat "releases/cli/versions/${VERSION}.md"
           else
             echo "has_cli=false" >> $GITHUB_OUTPUT
             echo "No CLI changelog found"
           fi
+          
+          # Check Control Plane changelog
+          echo "Checking for Control Plane changelog at: releases/controlplane/versions/${VERSION}.md"
+          if [ -f "releases/controlplane/versions/${VERSION}.md" ]; then
+            echo "has_controlplane=true" >> $GITHUB_OUTPUT
+            echo "Found Control Plane changelog"
+            echo "Content:"
+            cat "releases/controlplane/versions/${VERSION}.md"
+          else
+            echo "has_controlplane=false" >> $GITHUB_OUTPUT
+            echo "No Control Plane changelog found"
+          fi
+          
+          # Check SDK changelog
+          echo "Checking for SDK changelog at: releases/sdks/versions/${VERSION}.md"
+          if [ -f "releases/sdks/versions/${VERSION}.md" ]; then
+            echo "has_sdk=true" >> $GITHUB_OUTPUT
+            echo "Found SDK changelog"
+            echo "Content:"
+            cat "releases/sdks/versions/${VERSION}.md"
+          else
+            echo "has_sdk=false" >> $GITHUB_OUTPUT
+            echo "No SDK changelog found"
+          fi
+          
+          # Debug output all flags
+          echo "Final output flags:"
+          echo "has_cli: $(cat $GITHUB_OUTPUT | grep has_cli || echo 'not set')"
+          echo "has_controlplane: $(cat $GITHUB_OUTPUT | grep has_controlplane || echo 'not set')"
+          echo "has_sdk: $(cat $GITHUB_OUTPUT | grep has_sdk || echo 'not set')"
+
   build-cli:
     needs: prepare-release
     if: |
@@ -202,7 +232,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    if: github.event_name != 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
 
@@ -222,6 +251,10 @@ jobs:
         run: |
           VERSION=${{ needs.prepare-release.outputs.version }}
           RELEASE_TYPE=${{ needs.prepare-release.outputs.release_type }}
+          
+          echo "Debug: Preparing release notes"
+          echo "Version: $VERSION"
+          echo "Release Type: $RELEASE_TYPE"
           
           if [ "$RELEASE_TYPE" = "full" ]; then
             echo "# Release v${VERSION}" > RELEASE_NOTES.md
@@ -246,7 +279,7 @@ jobs:
           if [ "$RELEASE_TYPE" = "full" ]; then
             # Only add notes if the component has changes
             [ "${{ needs.prepare-release.outputs.has_cli }}" = "true" ] && add_component_notes "cli" "$VERSION" || echo "Skipping CLI notes"
-            [ "${{ needs.prepare-release.outputs.has_controlplane }}" = "true" ] && add_component_notes "control-plane" "$VERSION" || echo "Skipping Control Plane notes"
+            [ "${{ needs.prepare-release.outputs.has_controlplane }}" = "true" ] && add_component_notes "controlplane" "$VERSION" || echo "Skipping Control Plane notes"  # Fixed from control-plane to controlplane
             [ "${{ needs.prepare-release.outputs.has_sdk }}" = "true" ] && add_component_notes "sdks" "$VERSION" || echo "Skipping SDK notes"
           else
             add_component_notes "$RELEASE_TYPE" "$VERSION"
@@ -255,7 +288,7 @@ jobs:
           echo "Debug: Final RELEASE_NOTES.md content:"
           cat RELEASE_NOTES.md
 
-      - name: Create Release
+      - name: Create GitHub Release
         if: github.event_name != 'workflow_dispatch'
         uses: softprops/action-gh-release@v1
         with:
@@ -266,16 +299,18 @@ jobs:
           prerelease: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Test Release Output
+      - name: Test Release Preview
         if: github.event_name == 'workflow_dispatch'
         run: |
-          echo "Release would be created with:"
+          echo "=== Release Preview ==="
           echo "Version: ${{ needs.prepare-release.outputs.version }}"
           echo "Release type: ${{ needs.prepare-release.outputs.release_type }}"
-          echo "Files:"
-          ls -la cli-*/* || true
-          echo "Release notes:"
-          cat RELEASE_NOTES.md || true
+          echo ""
+          echo "=== Release Notes Content ==="
+          cat RELEASE_NOTES.md
+          echo ""
+          echo "=== Available Artifacts ==="
+          ls -R cli-*/* || echo "No CLI artifacts found"
 
   generate-changelogs:
     needs: prepare-release
@@ -298,7 +333,7 @@ jobs:
         run: |
           # Create all changelog directories
           mkdir -p releases/cli
-          mkdir -p releases/control-plane
+          mkdir -p releases/controlplane
           mkdir -p releases/sdks
       
           # CLI Changelog
@@ -308,9 +343,9 @@ jobs:
           fi
       
           # Control Plane Changelog
-          echo "# Control Plane Changelog" > releases/control-plane/CHANGELOG.md
-          if [ -d "releases/control-plane/versions" ]; then
-          find "releases/control-plane/versions" -name "*.md" -type f -print0 | sort -zr | xargs -0 -I {} bash -c 'cat {} >> releases/control-plane/CHANGELOG.md; echo "" >> releases/control-plane/CHANGELOG.md'
+          echo "# Control Plane Changelog" > releases/controlplane/CHANGELOG.md
+          if [ -d "releases/controlplane/versions" ]; then
+          find "releases/controlplane/versions" -name "*.md" -type f -print0 | sort -zr | xargs -0 -I {} bash -c 'cat {} >> releases/controlplane/CHANGELOG.md; echo "" >> releases/controlplane/CHANGELOG.md'
           fi
       
           # SDK Changelog
