@@ -233,19 +233,27 @@ jobs:
           add_component_notes() {
             local component=$1
             local version=$2
+            echo "Debug: Checking for ${component} changelog at releases/${component}/versions/${version}.md"
             if [ -f "releases/${component}/versions/${version}.md" ]; then
+              echo "Debug: Found changelog for ${component}"
               cat "releases/${component}/versions/${version}.md" >> RELEASE_NOTES.md
               echo "" >> RELEASE_NOTES.md
+            else
+              echo "Debug: No changelog found for ${component}"
             fi
           }
           
           if [ "$RELEASE_TYPE" = "full" ]; then
-            [ "${{ needs.prepare-release.outputs.has_cli }}" = "true" ] && add_component_notes "cli" "$VERSION"
-            [ "${{ needs.prepare-release.outputs.has_controlplane }}" = "true" ] && add_component_notes "controlplane" "$VERSION"
-            [ "${{ needs.prepare-release.outputs.has_sdk }}" = "true" ] && add_component_notes "sdks" "$VERSION"
+            # Only add notes if the component has changes
+            [ "${{ needs.prepare-release.outputs.has_cli }}" = "true" ] && add_component_notes "cli" "$VERSION" || echo "Skipping CLI notes"
+            [ "${{ needs.prepare-release.outputs.has_controlplane }}" = "true" ] && add_component_notes "control-plane" "$VERSION" || echo "Skipping Control Plane notes"
+            [ "${{ needs.prepare-release.outputs.has_sdk }}" = "true" ] && add_component_notes "sdks" "$VERSION" || echo "Skipping SDK notes"
           else
             add_component_notes "$RELEASE_TYPE" "$VERSION"
           fi
+          
+          echo "Debug: Final RELEASE_NOTES.md content:"
+          cat RELEASE_NOTES.md
 
       - name: Create Release
         if: github.event_name != 'workflow_dispatch'
