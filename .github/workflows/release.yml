@@ -138,23 +138,52 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Debug build info
+        run: |
+          echo "Go version: $(go version)"
+          echo "GOOS: ${{ matrix.os }}"
+          echo "GOARCH: ${{ matrix.arch }}"
+          echo "Binary name: ${{ matrix.binary }}"
+          ls -la cli/
+          ls -la dist/
+
+      - name: Set up Go cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
           go-version: '1.21'
+          cache: true  # Enable Go module cache
 
       - name: Build CLI binary
         run: |
-          cd cli
-          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o ../dist/${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}
+          mkdir -p dist
+          cd cli || exit 1
+          echo "Building binary for ${{ matrix.os }}/${{ matrix.arch }}"
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -v -o ../dist/${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}
+          
+          if [ ! -f "../dist/${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}" ]; then
+            echo "Failed to build binary"
+            exit 1
+          fi
 
       - name: Generate checksum
         run: |
           cd dist
-          VERSION=${{ needs.prepare-release.outputs.version }}
-          # Include version in binary names
-          mv ${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }} ${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}-${VERSION}
-          sha256sum ${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}-${VERSION} > ${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}-${VERSION}.sha256
+          if [ -f "${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}" ]; then
+            sha256sum ${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }} > ${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}.sha256
+          else
+            echo "Binary not found: ${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}"
+            exit 1
+          fi
 
       - name: Upload binary artifacts
         uses: actions/upload-artifact@v4
@@ -163,6 +192,7 @@ jobs:
           path: |
             dist/${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}
             dist/${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}.sha256
+          if-no-files-found: error
           retention-days: 5     # Optional: Set retention period
 
   create-release:
