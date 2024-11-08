@@ -116,7 +116,7 @@ jobs:
           sha256sum ${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}-${VERSION} > ${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}-${VERSION}.sha256
 
       - name: Upload binary artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: cli-${{ matrix.os }}-${{ matrix.arch }}
           path: |
@@ -252,7 +252,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload changelog artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: changelogs
           path: releases/**/CHANGELOG.md
