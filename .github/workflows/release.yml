@@ -8,6 +8,18 @@ on:
       - 'sdk-v*.*.*-*'      # e.g. sdk-v0.1.0-narwhal
       - 'v*.*.*-*'         # e.g. v0.1.0-narwhal
 
+  workflow_dispatch: # This is crucial for manual runs
+    inputs:
+      test_tag:
+        description: 'Tag to simulate (e.g., v0.1.0-narwhal)'
+        required: true
+        default: 'v0.1.0-narwhal'
+      debug:
+        description: 'Enable debug logging'
+        required: false
+        type: boolean
+        default: false
+
 jobs:
   prepare-release:
     runs-on: ubuntu-latest
