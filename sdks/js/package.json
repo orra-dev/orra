@@ -1,0 +1,35 @@
+{
+  "name": "@orra/sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Orra JavaScript SDK",
+  "main": "src/index.js",
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ezodude/orra.git"
+  },
+  "keywords": [
+    "Multi-agent",
+    "app",
+    "orchestration"
+  ],
+  "author": "Orra",
+  "license": "MPL-2.0",
+  "bugs": {
+    "url": "https://github.com/ezodude/orra/issues"
+  },
+  "homepage": "https://github.com/ezodude/orra#readme",
+  "dependencies": {
+    "pino": "^8.0.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "pino-pretty": "^10.0.0"
+  }
+}

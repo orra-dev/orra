@@ -1,0 +1,61 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ *  License, v. 2.0. If a copy of the MPL was not distributed with this
+ *  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+.json-view {
+  font-family: monospace;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.json-toggle {
+  cursor: pointer;
+  user-select: none;
+}
+
+.json-nested {
+  margin-left: 20px;
+}
+
+.json-pair {
+  margin: 5px 0;
+}
+
+.json-key {
+  color: #881391;
+  font-weight: bold;
+}
+
+.json-value {
+  color: #1A1AA6;
+}

@@ -1,0 +1,17 @@
+{
+  "name": "customer-svc",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "An example of a customer service that retrieves and manages customer info.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "node index.js"
+  },
+  "author": "Orra Team",
+  "license": "MIT",
+  "dependencies": {
+    "@orra/sdk": "file:../../../sdks/js",
+    "dotenv": "^16.4.5"
+  }
+}

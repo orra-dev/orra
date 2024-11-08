@@ -8,6 +8,8 @@
 *.dll
 *.so
 *.dylib
+
+# bin directory
 bin
 
 # Test binary, built with `go test -c`
@@ -22,11 +24,3 @@ bin
 # Go workspace file
 go.work
 
-# Idea
-.idea
-
-# Plandex
-.plandex
-
-# dotenv
-.env

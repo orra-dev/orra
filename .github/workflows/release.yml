@@ -1,0 +1,416 @@
+name: Release Management
+
+on:
+  push:
+    tags:
+      - 'cli-v*.*.*-*'      # e.g. cli-v0.1.0-narwhal
+      - 'cp-v*.*.*-*'       # e.g. cp-v0.1.0-narwhal
+      - 'sdk-v*.*.*-*'      # e.g. sdk-v0.1.0-narwhal
+      - 'v*.*.*-*'         # e.g. v0.1.0-narwhal
+
+  workflow_dispatch: # This is crucial for manual runs
+    inputs:
+      test_tag:
+        description: 'Tag to simulate (e.g., v0.1.0-narwhal)'
+        required: true
+        default: 'v0.1.0-narwhal'
+      debug:
+        description: 'Enable debug logging'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_type: ${{ steps.release_type.outputs.type }}
+      version: ${{ steps.release_type.outputs.version }}  # Make sure this matches
+      has_cli: ${{ steps.check_changelog.outputs.has_cli }}
+      has_controlplane: ${{ steps.check_changelog.outputs.has_controlplane }}
+      has_sdk: ${{ steps.check_changelog.outputs.has_sdk }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Debug Info
+        if: github.event.inputs.debug == 'true'
+        run: |
+          echo "Event name: ${{ github.event_name }}"
+          echo "Test tag: ${{ github.event.inputs.test_tag }}"
+          echo "All event inputs: ${{ toJson(github.event.inputs) }}"
+
+      - name: Debug prepare-release outputs
+        run: |
+          echo "Release type: ${{ steps.release_type.outputs.type }}"
+          echo "Version: ${{ steps.release_type.outputs.version }}"
+          echo "Has CLI: ${{ steps.check_changelog.outputs.has_cli }}"
+          
+          echo "GitHub event name: ${{ github.event_name }}"
+          echo "Test tag: ${{ github.event.inputs.test_tag }}"
+
+      - name: Determine release type and version
+        id: release_type  # This ID is important
+        run: |
+          # Enable debug logging if requested
+          if [[ "${{ github.event.inputs.debug }}" == "true" ]]; then
+            set -x
+          fi
+          
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TEST_TAG="${{ github.event.inputs.test_tag }}"
+            echo "Running in test mode with tag: $TEST_TAG"
+            
+            # Use the same tag logic but with test input
+            if [[ $TEST_TAG == cli-v* ]]; then
+              echo "type=cli" >> $GITHUB_OUTPUT
+              echo "version=${TEST_TAG#cli-v}" >> $GITHUB_OUTPUT
+            elif [[ $TEST_TAG == cp-v* ]]; then
+              echo "type=controlplane" >> $GITHUB_OUTPUT
+              echo "version=${TEST_TAG#cp-v}" >> $GITHUB_OUTPUT
+            elif [[ $TEST_TAG == sdk-v* ]]; then
+              echo "type=sdk" >> $GITHUB_OUTPUT
+              echo "version=${TEST_TAG#sdk-v}" >> $GITHUB_OUTPUT
+            else
+              echo "type=full" >> $GITHUB_OUTPUT
+              echo "version=${TEST_TAG#v}" >> $GITHUB_OUTPUT
+            fi
+          else
+            TAG=${GITHUB_REF#refs/tags/}
+            
+            if [[ $TAG == cli-v* ]]; then
+              echo "type=cli" >> $GITHUB_OUTPUT
+              echo "version=${TAG#cli-v}" >> $GITHUB_OUTPUT
+            elif [[ $TAG == cp-v* ]]; then
+              echo "type=controlplane" >> $GITHUB_OUTPUT
+              echo "version=${TAG#cp-v}" >> $GITHUB_OUTPUT
+            elif [[ $TAG == sdk-v* ]]; then
+              echo "type=sdk" >> $GITHUB_OUTPUT
+              echo "version=${TAG#sdk-v}" >> $GITHUB_OUTPUT
+            else
+              echo "type=full" >> $GITHUB_OUTPUT
+              echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+            fi
+            
+            # Debug output
+            echo "Tag: $TAG"
+            echo "Type: $(cat $GITHUB_OUTPUT | grep type | cut -d= -f2)"
+            echo "Version: $(cat $GITHUB_OUTPUT | grep version | cut -d= -f2)"
+          fi
+
+      - name: Check for changelog files
+        id: check_changelog
+        run: |
+          VERSION="${{ steps.release_type.outputs.version }}"
+          RELEASE_TYPE="${{ steps.release_type.outputs.type }}"
+          
+          echo "Debug: Checking changelogs for version ${VERSION}"
+          
+          # Check CLI changelog
+          echo "Checking for CLI changelog at: releases/cli/versions/${VERSION}.md"
+          if [ -f "releases/cli/versions/${VERSION}.md" ]; then
+            echo "has_cli=true" >> $GITHUB_OUTPUT
+            echo "Found CLI changelog"
+            echo "Content:"
+            cat "releases/cli/versions/${VERSION}.md"
+          else
+            echo "has_cli=false" >> $GITHUB_OUTPUT
+            echo "No CLI changelog found"
+          fi
+          
+          # Check Control Plane changelog
+          echo "Checking for Control Plane changelog at: releases/controlplane/versions/${VERSION}.md"
+          if [ -f "releases/controlplane/versions/${VERSION}.md" ]; then
+            echo "has_controlplane=true" >> $GITHUB_OUTPUT
+            echo "Found Control Plane changelog"
+            echo "Content:"
+            cat "releases/controlplane/versions/${VERSION}.md"
+          else
+            echo "has_controlplane=false" >> $GITHUB_OUTPUT
+            echo "No Control Plane changelog found"
+          fi
+          
+          # Check SDK changelog
+          echo "Checking for SDK changelog at: releases/sdks/versions/${VERSION}.md"
+          if [ -f "releases/sdks/versions/${VERSION}.md" ]; then
+            echo "has_sdk=true" >> $GITHUB_OUTPUT
+            echo "Found SDK changelog"
+            echo "Content:"
+            cat "releases/sdks/versions/${VERSION}.md"
+          else
+            echo "has_sdk=false" >> $GITHUB_OUTPUT
+            echo "No SDK changelog found"
+          fi
+          
+          # Debug output all flags
+          echo "Final output flags:"
+          echo "has_cli: $(cat $GITHUB_OUTPUT | grep has_cli || echo 'not set')"
+          echo "has_controlplane: $(cat $GITHUB_OUTPUT | grep has_controlplane || echo 'not set')"
+          echo "has_sdk: $(cat $GITHUB_OUTPUT | grep has_sdk || echo 'not set')"
+
+  build-cli:
+    needs: prepare-release
+    if: |
+      needs.prepare-release.outputs.has_cli == 'true' && 
+      (needs.prepare-release.outputs.release_type == 'cli' || needs.prepare-release.outputs.release_type == 'full')
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            binary: orra
+          - os: darwin
+            arch: amd64
+            binary: orra
+          - os: darwin
+            arch: arm64
+            binary: orra
+          - os: windows
+            arch: amd64
+            binary: orra.exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+          cache: true  # Enable Go module cache
+
+      - name: Build CLI binary
+        run: |
+          mkdir -p dist
+          cd cli || exit 1
+          echo "Building binary for ${{ matrix.os }}/${{ matrix.arch }}"
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -v -o ../dist/${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}
+          
+          if [ ! -f "../dist/${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}" ]; then
+            echo "Failed to build binary"
+            exit 1
+          fi
+
+      - name: Generate checksum
+        run: |
+          cd dist
+          if [ -f "${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}" ]; then
+            sha256sum ${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }} > ${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}.sha256
+          else
+            echo "Binary not found: ${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}"
+            exit 1
+          fi
+
+      - name: Upload binary artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            dist/${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}
+            dist/${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}.sha256
+          if-no-files-found: error
+          retention-days: 5     # Optional: Set retention period
+
+      - name: Debug build info
+        run: |
+          echo "Go version: $(go version)"
+          echo "GOOS: ${{ matrix.os }}"
+          echo "GOARCH: ${{ matrix.arch }}"
+          echo "Binary name: ${{ matrix.binary }}"
+          ls -la cli/
+          ls -la dist/
+
+  create-release:
+    needs: [prepare-release, build-cli]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Debug Info (Test Mode)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "This is a test run, skipping actual release"
+          echo "Would create release with:"
+          echo "Version: ${{ needs.prepare-release.outputs.version }}"
+          echo "Release type: ${{ needs.prepare-release.outputs.release_type }}"
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        if: needs.prepare-release.outputs.has_cli == 'true'
+
+      - name: Prepare release notes
+        run: |
+          VERSION=${{ needs.prepare-release.outputs.version }}
+          RELEASE_TYPE=${{ needs.prepare-release.outputs.release_type }}
+          
+          echo "Debug: Preparing release notes"
+          echo "Version: $VERSION"
+          echo "Release Type: $RELEASE_TYPE"
+          
+          if [ "$RELEASE_TYPE" = "full" ]; then
+            echo "# Release v${VERSION}" > RELEASE_NOTES.md
+          else
+            echo "# ${RELEASE_TYPE} v${VERSION}" > RELEASE_NOTES.md
+          fi
+          echo "" >> RELEASE_NOTES.md
+          
+          add_component_notes() {
+            local component=$1
+            local version=$2
+            echo "Debug: Checking for ${component} changelog at releases/${component}/versions/${version}.md"
+            if [ -f "releases/${component}/versions/${version}.md" ]; then
+              echo "Debug: Found changelog for ${component}"
+              cat "releases/${component}/versions/${version}.md" >> RELEASE_NOTES.md
+              echo "" >> RELEASE_NOTES.md
+            else
+              echo "Debug: No changelog found for ${component}"
+            fi
+          }
+          
+          if [ "$RELEASE_TYPE" = "full" ]; then
+            # Only add notes if the component has changes
+            [ "${{ needs.prepare-release.outputs.has_cli }}" = "true" ] && add_component_notes "cli" "$VERSION" || echo "Skipping CLI notes"
+            [ "${{ needs.prepare-release.outputs.has_controlplane }}" = "true" ] && add_component_notes "controlplane" "$VERSION" || echo "Skipping Control Plane notes"  # Fixed from control-plane to controlplane
+            [ "${{ needs.prepare-release.outputs.has_sdk }}" = "true" ] && add_component_notes "sdks" "$VERSION" || echo "Skipping SDK notes"
+          else
+            add_component_notes "$RELEASE_TYPE" "$VERSION"
+          fi
+          
+          echo "Debug: Final RELEASE_NOTES.md content:"
+          cat RELEASE_NOTES.md
+
+      - name: Create GitHub Release
+        if: github.event_name != 'workflow_dispatch'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            cli-*/*
+          body_path: RELEASE_NOTES.md
+          draft: true
+          prerelease: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Test Release Preview
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "=== Release Preview ==="
+          echo "Version: ${{ needs.prepare-release.outputs.version }}"
+          echo "Release type: ${{ needs.prepare-release.outputs.release_type }}"
+          echo ""
+          echo "=== Release Notes Content ==="
+          cat RELEASE_NOTES.md
+          echo ""
+          echo "=== Available Artifacts ==="
+          ls -R cli-*/* || echo "No CLI artifacts found"
+
+  generate-changelogs:
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main  # Or your default branch
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+      - name: Generate Changelogs
+        run: |
+          # Create all changelog directories
+          mkdir -p releases/cli
+          mkdir -p releases/controlplane
+          mkdir -p releases/sdks
+      
+          # CLI Changelog
+          echo "# CLI Changelog" > releases/cli/CHANGELOG.md
+          if [ -d "releases/cli/versions" ]; then
+          find "releases/cli/versions" -name "*.md" -type f -print0 | sort -zr | xargs -0 -I {} bash -c 'cat {} >> releases/cli/CHANGELOG.md; echo "" >> releases/cli/CHANGELOG.md'
+          fi
+      
+          # Control Plane Changelog
+          echo "# Control Plane Changelog" > releases/controlplane/CHANGELOG.md
+          if [ -d "releases/controlplane/versions" ]; then
+          find "releases/controlplane/versions" -name "*.md" -type f -print0 | sort -zr | xargs -0 -I {} bash -c 'cat {} >> releases/controlplane/CHANGELOG.md; echo "" >> releases/controlplane/CHANGELOG.md'
+          fi
+      
+          # SDK Changelog
+          echo "# SDK Changelog" > releases/sdks/CHANGELOG.md
+          if [ -d "releases/sdks/versions" ]; then
+            find "releases/sdks/versions" -name "*.md" -type f -print0 | sort -zr | xargs -0 -I {} bash -c 'cat {} >> releases/sdks/CHANGELOG.md; echo "" >> releases/sdks/CHANGELOG.md'
+          fi
+
+      - name: Commit updated changelogs
+        run: |
+          # Debug output
+          echo "Debug values:"
+          echo "Version from needs: ${{ needs.prepare-release.outputs.version }}"
+          echo "Release type: ${{ needs.prepare-release.outputs.release_type }}"
+          
+          # Check if there are actual changes in changelog files
+          CHANGES=$(git diff releases/*/CHANGELOG.md)
+          if [ -n "$CHANGES" ]; then
+            echo "Changes detected in changelogs:"
+            echo "$CHANGES"
+
+            VERSION="${{ needs.prepare-release.outputs.version }}"
+            git add releases/*/CHANGELOG.md
+            git commit -m "docs: update changelogs for version ${VERSION} [skip ci]"
+            # Rest of commit/PR logic...
+          else
+            echo "No changes detected in changelog files"
+            exit 0
+          fi
+          
+          if [[ -n $(git status --porcelain) ]]; then
+            VERSION="${{ needs.prepare-release.outputs.version }}"
+          
+            if [ -z "$VERSION" ]; then
+              echo "Error: Version is empty"
+              echo "All prepare-release outputs:"
+              echo "${{ toJSON(needs.prepare-release.outputs) }}"
+              exit 1
+            fi
+          
+            git add releases/*/CHANGELOG.md
+            git commit -m "docs: update changelogs for version ${VERSION} [skip ci]"
+          
+            # Create branch with version
+            BRANCH_NAME="changelog-update-${VERSION}"
+            git checkout -b "$BRANCH_NAME"
+            git push origin "$BRANCH_NAME"
+          
+            # Create Pull Request
+            gh pr create \
+              --title "docs: update changelogs for version ${VERSION}" \
+              --body "Automated changelog updates for version ${VERSION}" \
+              --label "documentation" \
+              --base main \
+              --head "$BRANCH_NAME"
+          else
+            echo "No changelog updates needed"
+          fi
+        env:
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload changelog artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: changelogs
+          path: releases/**/CHANGELOG.md
+          retention-days: 5

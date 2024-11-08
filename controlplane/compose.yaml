@@ -1,0 +1,12 @@
+services:
+  control-plane:
+    container_name: orra-control-plane
+    image: orra-control-plane-dev
+    env_file:
+      - .env
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: final
+    ports:
+      - 8005:8005

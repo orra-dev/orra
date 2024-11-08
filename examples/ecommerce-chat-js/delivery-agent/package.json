@@ -1,0 +1,20 @@
+{
+  "name": "delivery-agent",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "An example of a delivery agent that estimates delivery dates.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "node index.js",
+    "agent": "node --experimental-json-modules -e \"import('./agent.js').then( module => module.runAgent({customerId: '1', customerName: 'Clark Kent', customerAddress: '1a Goldsmiths Row, London E2 8QA', productDescription: 'Superman T-Shirt', productAvailability: 'AVAILABLE', warehouseAddress: 'Unit 1 Cairnrobin Way, Portlethen, Aberdeen AB12 4NJ'})).catch(console.error);\""
+  },
+  "author": "Orra Team",
+  "license": "MIT",
+  "dependencies": {
+    "@mistralai/mistralai": "^1.1.0",
+    "@orra/sdk": "file:../../../sdks/js",
+    "dotenv": "^16.4.5",
+    "timers": "^0.1.1"
+  }
+}

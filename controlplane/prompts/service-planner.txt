@@ -1,0 +1,115 @@
+You are tasked with extending the existing Orchestration Platform in Go to implement a Service Calling Planner, inspired by the Function Calling Planner component of the LLM Compiler described in the paper "An LLM Compiler for Parallel Function Calling".
+
+The Function Calling Planner in the LLM Compiler is responsible for:
+1. Task Decomposition: Breaking down complex tasks into smaller, manageable subtasks.
+2. Dependency Analysis: Identifying dependencies between subtasks to determine which can be executed in parallel and which require sequential execution.
+3. Execution Plan Generation: Creating an optimized plan for executing the subtasks.
+
+Your implementation should adapt these concepts to work with services and agents instead of function calls.
+
+Requirements:
+1. Services and Agents are grouped by Projects.
+2. All registered services and Agents catalog their expected inputs and outputs.
+3. Execution time estimation is not necessary for this version.
+4. Resource allocation is beyond the scope of the platform.
+5. Implement simple error handling for this alpha version.
+
+The planning process should include the following steps:
+1. Project-Based Service and Agent Discovery
+2. Task Decomposition (adapting the orchestration request into subtasks)
+3. Input/Output Analysis and Compatibility Check
+4. Dependency Mapping
+5. Parallelization Planning
+6. Orchestration Plan Generation
+
+Your implementation should:
+1. Create new structures or modify existing ones as needed to support the planning process.
+2. Implement methods for each step of the planning process.
+3. Integrate the planning logic into the existing executeOrchestration method.
+4. Ensure the generated plan respects project boundaries and service/agent compatibilities.
+5. Include basic error handling and retry logic in the plan.
+6. Implement a method to generate a prompt for upstream LLMs to assist in task decomposition and dependency analysis.
+
+Please provide the Go code to implement this Service Calling Planner, including any necessary modifications to existing structures and methods. Include comments explaining the key parts of your implementation.
+
+*****VERY IMPORTANT: DO NOT remove existing code unless you absolutely have to. YOU ARE EXTENDING the platform so add to relevant API handlers.*****
+
+Example output format:
+
+```go
+// New or modified structures
+
+type ServiceCallingPlan struct {
+    // Fields for the plan
+}
+
+// Implementation of planning methods
+
+func (op *OrchestrationPlatform) discoverProjectServices(projectID string) ([]*ServiceInfo, error) {
+    // Implementation
+}
+
+func (op *OrchestrationPlatform) decomposeTask(orchestration *Orchestration) ([]SubTask, error) {
+    // Implementation, including LLM prompt generation and parsing
+}
+
+func (op *OrchestrationPlatform) analyzeInputOutput(services []*ServiceInfo, subTasks []SubTask) (map[string]json.RawMessage, error) {
+    // Implementation
+}
+
+// ... other planning methods ...
+
+// Modified executeOrchestration method
+
+func (op *OrchestrationPlatform) executeOrchestration(orchestration *Orchestration) {
+    // Implementation using the new planning logic
+}
+
+// LLM prompt generation method
+
+func (op *OrchestrationPlatform) generateLLMPrompt(orchestration *Orchestration, services []*ServiceInfo) string {
+    // Implementation to generate a prompt for upstream LLMs
+}
+
+// Any additional helper functions or methods
+```
+
+Example LLM Prompt for Task Decomposition and Dependency Analysis:
+
+```
+You are an AI assistant helping to plan the execution of a complex task using available services and agents. Your goal is to break down the task into subtasks and identify dependencies between them.
+
+Main Task: [Insert main task description from the orchestration request]
+
+Available Services and Agents:
+[List of available services and agents with their inputs and outputs]
+
+Please provide the following:
+1. A list of subtasks required to complete the main task.
+2. For each subtask, specify which service or agent should be used.
+3. Identify the inputs required for each subtask and where they come from (e.g., user input, output of another subtask).
+4. Specify the expected output of each subtask.
+5. Describe any dependencies between subtasks (i.e., which subtasks must be completed before others can start).
+
+Format your response as a JSON object with the following structure:
+{
+  "subtasks": [
+    {
+      "id": "subtask1",
+      "description": "Description of subtask 1",
+      "service": "ServiceName",
+      "inputs": {
+        "input1": "source of input1",
+        "input2": "source of input2"
+      },
+      "expectedOutput": "Description of expected output",
+      "dependencies": []
+    },
+    // ... more subtasks ...
+  ]
+}
+
+Ensure that your plan maximizes parallel execution where possible while respecting necessary dependencies.
+```
+
+Ensure that your implementation integrates smoothly with the existing OrchestrationPlatform code, follows Go best practices, and effectively utilizes the LLM's capabilities for task planning.
