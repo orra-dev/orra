@@ -102,20 +102,50 @@ jobs:
           VERSION="${{ steps.release_type.outputs.version }}"
           RELEASE_TYPE="${{ steps.release_type.outputs.type }}"
           
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${{ github.event.inputs.debug }}" == "true" ]; then
-            echo "Test mode: Setting has_cli=true for testing"
-            echo "has_cli=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
+          echo "Debug: Checking changelogs for version ${VERSION}"
           
+          # Check CLI changelog
           echo "Checking for CLI changelog at: releases/cli/versions/${VERSION}.md"
           if [ -f "releases/cli/versions/${VERSION}.md" ]; then
             echo "has_cli=true" >> $GITHUB_OUTPUT
             echo "Found CLI changelog"
+            echo "Content:"
+            cat "releases/cli/versions/${VERSION}.md"
           else
             echo "has_cli=false" >> $GITHUB_OUTPUT
             echo "No CLI changelog found"
           fi
+          
+          # Check Control Plane changelog
+          echo "Checking for Control Plane changelog at: releases/controlplane/versions/${VERSION}.md"
+          if [ -f "releases/controlplane/versions/${VERSION}.md" ]; then
+            echo "has_controlplane=true" >> $GITHUB_OUTPUT
+            echo "Found Control Plane changelog"
+            echo "Content:"
+            cat "releases/controlplane/versions/${VERSION}.md"
+          else
+            echo "has_controlplane=false" >> $GITHUB_OUTPUT
+            echo "No Control Plane changelog found"
+          fi
+          
+          # Check SDK changelog
+          echo "Checking for SDK changelog at: releases/sdks/versions/${VERSION}.md"
+          if [ -f "releases/sdks/versions/${VERSION}.md" ]; then
+            echo "has_sdk=true" >> $GITHUB_OUTPUT
+            echo "Found SDK changelog"
+            echo "Content:"
+            cat "releases/sdks/versions/${VERSION}.md"
+          else
+            echo "has_sdk=false" >> $GITHUB_OUTPUT
+            echo "No SDK changelog found"
+          fi
+          
+          # Debug output all flags
+          echo "Final output flags:"
+          echo "has_cli: $(cat $GITHUB_OUTPUT | grep has_cli || echo 'not set')"
+          echo "has_controlplane: $(cat $GITHUB_OUTPUT | grep has_controlplane || echo 'not set')"
+          echo "has_sdk: $(cat $GITHUB_OUTPUT | grep has_sdk || echo 'not set')"
+
   build-cli:
     needs: prepare-release
     if: |
