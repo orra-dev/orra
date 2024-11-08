@@ -28,6 +28,7 @@ jobs:
       has_controlplane: ${{ steps.check_changelog.outputs.has_controlplane }}
       has_sdk: ${{ steps.check_changelog.outputs.has_sdk }}
     steps:
+      - uses: actions/checkout@v4
       - name: Debug Info
         if: github.event.inputs.debug == 'true'
         run: |
@@ -38,9 +39,11 @@ jobs:
       - name: Debug prepare-release outputs
         run: |
           echo "Release type: ${{ steps.release_type.outputs.type }}"
+          echo "Version: ${{ steps.release_type.outputs.version }}"
           echo "Has CLI: ${{ steps.check_changelog.outputs.has_cli }}"
-          echo "All outputs:"
-          echo "${{ toJSON(steps) }}"
+          
+          echo "GitHub event name: ${{ github.event_name }}"
+          echo "Test tag: ${{ github.event.inputs.test_tag }}"
 
       - name: Determine release type and version
         id: release_type  # This ID is important
@@ -96,7 +99,13 @@ jobs:
         run: |
           VERSION="${{ steps.release_type.outputs.version }}"
           RELEASE_TYPE="${{ steps.release_type.outputs.type }}"
-
+          
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${{ github.event.inputs.debug }}" == "true" ]; then
+            echo "Test mode: Setting has_cli=true for testing"
+            echo "has_cli=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
           echo "Checking for CLI changelog at: releases/cli/versions/${VERSION}.md"
           if [ -f "releases/cli/versions/${VERSION}.md" ]; then
             echo "has_cli=true" >> $GITHUB_OUTPUT
