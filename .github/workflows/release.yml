@@ -138,15 +138,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Debug build info
-        run: |
-          echo "Go version: $(go version)"
-          echo "GOOS: ${{ matrix.os }}"
-          echo "GOARCH: ${{ matrix.arch }}"
-          echo "Binary name: ${{ matrix.binary }}"
-          ls -la cli/
-          ls -la dist/
-
       - name: Set up Go cache
         uses: actions/cache@v3
         with:
@@ -194,6 +185,15 @@ jobs:
             dist/${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}.sha256
           if-no-files-found: error
           retention-days: 5     # Optional: Set retention period
+
+      - name: Debug build info
+        run: |
+          echo "Go version: $(go version)"
+          echo "GOOS: ${{ matrix.os }}"
+          echo "GOARCH: ${{ matrix.arch }}"
+          echo "Binary name: ${{ matrix.binary }}"
+          ls -la cli/
+          ls -la dist/
 
   create-release:
     needs: [prepare-release, build-cli]
