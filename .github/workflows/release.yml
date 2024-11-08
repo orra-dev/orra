@@ -7,12 +7,17 @@ on:
       - 'cp-v*.*.*-*'       # e.g. cp-v0.1.0-narwhal
       - 'sdk-v*.*.*-*'      # e.g. sdk-v0.1.0-narwhal
       - 'v*.*.*-*'         # e.g. v0.1.0-narwhal
-  workflow_dispatch: # Add this to enable manual runs
+  workflow_dispatch:
     inputs:
-      version:
-        description: 'Version to release'
+      test_tag:
+        description: 'Tag to simulate (e.g., v0.1.0-narwhal)'
         required: true
-        default: '0.1.0-narwhal'
+        default: 'v0.1.0-narwhal'
+      debug:
+        description: 'Enable debug logging'
+        required: false
+        type: boolean
+        default: false
 jobs:
   prepare-release:
     runs-on: ubuntu-latest
@@ -23,12 +28,39 @@ jobs:
       has_controlplane: ${{ steps.check_changelog.outputs.has_controlplane }}
       has_sdk: ${{ steps.check_changelog.outputs.has_sdk }}
     steps:
+      - name: Debug Info
+        if: github.event.inputs.debug == 'true'
+        run: |
+          echo "Event name: ${{ github.event_name }}"
+          echo "Test tag: ${{ github.event.inputs.test_tag }}"
+          echo "All event inputs: ${{ toJson(github.event.inputs) }}"
+
       - name: Determine release type and version
         id: release_type  # This ID is important
         run: |
+          # Enable debug logging if requested
+          if [[ "${{ github.event.inputs.debug }}" == "true" ]]; then
+            set -x
+          fi
+          
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "type=full" >> $GITHUB_OUTPUT
-            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            TEST_TAG="${{ github.event.inputs.test_tag }}"
+            echo "Running in test mode with tag: $TEST_TAG"
+            
+            # Use the same tag logic but with test input
+            if [[ $TEST_TAG == cli-v* ]]; then
+              echo "type=cli" >> $GITHUB_OUTPUT
+              echo "version=${TEST_TAG#cli-v}" >> $GITHUB_OUTPUT
+            elif [[ $TEST_TAG == cp-v* ]]; then
+              echo "type=controlplane" >> $GITHUB_OUTPUT
+              echo "version=${TEST_TAG#cp-v}" >> $GITHUB_OUTPUT
+            elif [[ $TEST_TAG == sdk-v* ]]; then
+              echo "type=sdk" >> $GITHUB_OUTPUT
+              echo "version=${TEST_TAG#sdk-v}" >> $GITHUB_OUTPUT
+            else
+              echo "type=full" >> $GITHUB_OUTPUT
+              echo "version=${TEST_TAG#v}" >> $GITHUB_OUTPUT
+            fi
           else
             TAG=${GITHUB_REF#refs/tags/}
             
@@ -145,6 +177,7 @@ jobs:
           fi
 
       - name: Create Release
+        if: github.event_name != 'workflow_dispatch'
         uses: softprops/action-gh-release@v1
         with:
           files: |
@@ -153,6 +186,17 @@ jobs:
           draft: true
           prerelease: true
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Test Release Output
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "Release would be created with:"
+          echo "Version: ${{ needs.prepare-release.outputs.version }}"
+          echo "Release type: ${{ needs.prepare-release.outputs.release_type }}"
+          echo "Files:"
+          ls -la cli-*/* || true
+          echo "Release notes:"
+          cat RELEASE_NOTES.md || true
 
   generate-changelogs:
     needs: prepare-release
