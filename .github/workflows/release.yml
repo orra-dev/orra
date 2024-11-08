@@ -59,24 +59,31 @@ jobs:
           check_changelog() {
             local component=$1
             local version=$2
+            # Debug output
+            echo "Checking ${component} changelog for version ${version}"
+            echo "Path: releases/${component}/versions/${version}.md"
+
+            # For SDK, check "sdk" directory, not "sdks"
             if [ -f "releases/${component}/versions/${version}.md" ]; then
               echo "has_${component}=true" >> $GITHUB_OUTPUT
+              echo "Found changelog for ${component}"
             else
               echo "has_${component}=false" >> $GITHUB_OUTPUT
+              echo "No changelog found for ${component}"
             fi
           }
-          
+
           if [ "$RELEASE_TYPE" = "full" ]; then
             # Check all components for changes
             check_changelog "cli" "$VERSION"
-            check_changelog "controlplane" "$VERSION"
-            check_changelog "sdk" "$VERSION"
+            check_changelog "control-plane" "$VERSION"
+            check_changelog "sdks" "$VERSION"  # Keep as "sdks"
           elif [ "$RELEASE_TYPE" = "cli" ]; then
             check_changelog "cli" "$VERSION"
           elif [ "$RELEASE_TYPE" = "controlplane" ]; then
-            check_changelog "controlplane" "$VERSION"
+            check_changelog "control-plane" "$VERSION"
           elif [ "$RELEASE_TYPE" = "sdk" ]; then
-            check_changelog "sdk" "$VERSION"
+            check_changelog "sdks" "$VERSION"  # Keep as "sdks"
           fi
 
   build-cli:
@@ -202,7 +209,7 @@ jobs:
           # Create all changelog directories
           mkdir -p releases/cli
           mkdir -p releases/control-plane
-          mkdir -p releases/sdk
+          mkdir -p releases/sdks
 
           # CLI Changelog
           echo "# CLI Changelog" > releases/cli/CHANGELOG.md
@@ -225,12 +232,12 @@ jobs:
           fi
 
           # SDK Changelog
-          echo "# SDK Changelog" > releases/sdk/CHANGELOG.md
-          echo "" >> releases/sdk/CHANGELOG.md
-          if [ -d "releases/sdk/versions" ]; then
-            find releases/sdk/versions -name "*.md" -type f | sort -r | while read -r file; do
-              cat "$file" >> releases/sdk/CHANGELOG.md
-              echo "" >> releases/sdk/CHANGELOG.md
+          echo "# SDK Changelog" > releases/sdks/CHANGELOG.md  # Keep as "sdks"
+          echo "" >> releases/sdks/CHANGELOG.md
+          if [ -d "releases/sdks/versions" ]; then  # Keep as "sdks"
+            find releases/sdks/versions -name "*.md" -type f | sort -r | while read -r file; do
+              cat "$file" >> releases/sdks/CHANGELOG.md
+              echo "" >> releases/sdks/CHANGELOG.md
             done
           fi
 
