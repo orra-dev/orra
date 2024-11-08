@@ -7,7 +7,12 @@ on:
       - 'cp-v*.*.*-*'       # e.g. cp-v0.1.0-narwhal
       - 'sdk-v*.*.*-*'      # e.g. sdk-v0.1.0-narwhal
       - 'v*.*.*-*'         # e.g. v0.1.0-narwhal
-
+  workflow_dispatch: # Add this to enable manual runs
+    inputs:
+      version:
+        description: 'Version to release'
+        required: true
+        default: '0.1.0-narwhal'
 jobs:
   prepare-release:
     runs-on: ubuntu-latest
@@ -21,26 +26,31 @@ jobs:
       - name: Determine release type and version
         id: release_type  # This ID is important
         run: |
-          TAG=${GITHUB_REF#refs/tags/}
-          
-          if [[ $TAG == cli-v* ]]; then
-            echo "type=cli" >> $GITHUB_OUTPUT
-            echo "version=${TAG#cli-v}" >> $GITHUB_OUTPUT
-          elif [[ $TAG == cp-v* ]]; then
-            echo "type=controlplane" >> $GITHUB_OUTPUT
-            echo "version=${TAG#cp-v}" >> $GITHUB_OUTPUT
-          elif [[ $TAG == sdk-v* ]]; then
-            echo "type=sdk" >> $GITHUB_OUTPUT
-            echo "version=${TAG#sdk-v}" >> $GITHUB_OUTPUT
-          else
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "type=full" >> $GITHUB_OUTPUT
-            echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            TAG=${GITHUB_REF#refs/tags/}
+            
+            if [[ $TAG == cli-v* ]]; then
+              echo "type=cli" >> $GITHUB_OUTPUT
+              echo "version=${TAG#cli-v}" >> $GITHUB_OUTPUT
+            elif [[ $TAG == cp-v* ]]; then
+              echo "type=controlplane" >> $GITHUB_OUTPUT
+              echo "version=${TAG#cp-v}" >> $GITHUB_OUTPUT
+            elif [[ $TAG == sdk-v* ]]; then
+              echo "type=sdk" >> $GITHUB_OUTPUT
+              echo "version=${TAG#sdk-v}" >> $GITHUB_OUTPUT
+            else
+              echo "type=full" >> $GITHUB_OUTPUT
+              echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+            fi
+            
+            # Debug output
+            echo "Tag: $TAG"
+            echo "Type: $(cat $GITHUB_OUTPUT | grep type | cut -d= -f2)"
+            echo "Version: $(cat $GITHUB_OUTPUT | grep version | cut -d= -f2)"
           fi
-          
-          # Debug output
-          echo "Tag: $TAG"
-          echo "Type: $(cat $GITHUB_OUTPUT | grep type | cut -d= -f2)"
-          echo "Version: $(cat $GITHUB_OUTPUT | grep version | cut -d= -f2)"
 
   build-cli:
     needs: prepare-release
@@ -91,6 +101,8 @@ jobs:
           path: |
             dist/${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}
             dist/${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}.sha256
+          compression-level: 9  # Optional: Add compression
+          retention-days: 5     # Optional: Set retention period
 
   create-release:
     needs: [prepare-release, build-cli]
@@ -166,35 +178,23 @@ jobs:
           mkdir -p releases/cli
           mkdir -p releases/control-plane
           mkdir -p releases/sdks
-
+      
           # CLI Changelog
           echo "# CLI Changelog" > releases/cli/CHANGELOG.md
-          echo "" >> releases/cli/CHANGELOG.md
           if [ -d "releases/cli/versions" ]; then
-            find releases/cli/versions -name "*.md" -type f | sort -r | while read -r file; do
-              cat "$file" >> releases/cli/CHANGELOG.md
-              echo "" >> releases/cli/CHANGELOG.md
-            done
+          find "releases/cli/versions" -name "*.md" -type f -print0 | sort -zr | xargs -0 -I {} bash -c 'cat {} >> releases/cli/CHANGELOG.md; echo "" >> releases/cli/CHANGELOG.md'
           fi
-
+      
           # Control Plane Changelog
           echo "# Control Plane Changelog" > releases/control-plane/CHANGELOG.md
-          echo "" >> releases/control-plane/CHANGELOG.md
           if [ -d "releases/control-plane/versions" ]; then
-            find releases/control-plane/versions -name "*.md" -type f | sort -r | while read -r file; do
-              cat "$file" >> releases/control-plane/CHANGELOG.md
-              echo "" >> releases/control-plane/CHANGELOG.md
-            done
+          find "releases/control-plane/versions" -name "*.md" -type f -print0 | sort -zr | xargs -0 -I {} bash -c 'cat {} >> releases/control-plane/CHANGELOG.md; echo "" >> releases/control-plane/CHANGELOG.md'
           fi
-
+      
           # SDK Changelog
-          echo "# SDK Changelog" > releases/sdks/CHANGELOG.md  # Keep as "sdks"
-          echo "" >> releases/sdks/CHANGELOG.md
-          if [ -d "releases/sdks/versions" ]; then  # Keep as "sdks"
-            find releases/sdks/versions -name "*.md" -type f | sort -r | while read -r file; do
-              cat "$file" >> releases/sdks/CHANGELOG.md
-              echo "" >> releases/sdks/CHANGELOG.md
-            done
+          echo "# SDK Changelog" > releases/sdks/CHANGELOG.md
+          if [ -d "releases/sdks/versions" ]; then
+          find "releases/sdks/versions" -name "*.md" -type f -print0 | sort -zr | xargs -0 -I {} bash -c 'cat {} >> releases/sdks/CHANGELOG.md; echo "" >> releases/sdks/CHANGELOG.md'
           fi
 
       - name: Commit updated changelogs
@@ -203,6 +203,21 @@ jobs:
           echo "Debug values:"
           echo "Version from needs: ${{ needs.prepare-release.outputs.version }}"
           echo "Release type: ${{ needs.prepare-release.outputs.release_type }}"
+          
+          # Check if there are actual changes in changelog files
+          CHANGES=$(git diff releases/*/CHANGELOG.md)
+          if [ -n "$CHANGES" ]; then
+            echo "Changes detected in changelogs:"
+            echo "$CHANGES"
+
+            VERSION="${{ needs.prepare-release.outputs.version }}"
+            git add releases/*/CHANGELOG.md
+            git commit -m "docs: update changelogs for version ${VERSION} [skip ci]"
+            # Rest of commit/PR logic...
+          else
+            echo "No changes detected in changelog files"
+            exit 0
+          fi
           
           if [[ -n $(git status --porcelain) ]]; then
             VERSION="${{ needs.prepare-release.outputs.version }}"
