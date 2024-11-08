@@ -12,7 +12,7 @@ require (
 	github.com/olahol/melody v1.2.1
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/rs/zerolog v1.33.0
-	github.com/sashabaranov/go-openai v1.32.3
+	github.com/sashabaranov/go-openai v1.35.6
 	github.com/stretchr/testify v1.8.0
 	github.com/vrischmann/envconfig v1.3.0
 	golang.org/x/sync v0.8.0
