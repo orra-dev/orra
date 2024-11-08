@@ -235,25 +235,32 @@ jobs:
           fi
 
       - name: Commit updated changelogs
+        env:
+          VERSION: ${{ needs.prepare-release.outputs.version }}  # Get version from job output
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Add this for gh CLI
+
         run: |
-          if [[ -n $(git status --porcelain) ]]; then
-            VERSION="${{ needs.prepare-release.outputs.version }}"
+          # Debug output
+          echo "Current version: $VERSION"
           
-            # Ensure VERSION is not empty
+          if [[ -n $(git status --porcelain) ]]; then
+            # Double check version
             if [ -z "$VERSION" ]; then
               echo "Error: Version is empty"
+              echo "prepare-release.outputs: ${{ toJson(needs.prepare-release.outputs) }}"
               exit 1
             fi
-
+          
             git add releases/*/CHANGELOG.md
             git commit -m "docs: update changelogs for version ${VERSION} [skip ci]"
-
+          
             # Create branch with version
             BRANCH_NAME="changelog-update-${VERSION}"
             git checkout -b "$BRANCH_NAME"
             git push origin "$BRANCH_NAME"
           
-            # Create Pull Request with proper token
+            # Create Pull Request
             gh pr create \
               --title "docs: update changelogs for version ${VERSION}" \
               --body "Automated changelog updates for version ${VERSION}" \
@@ -263,10 +270,6 @@ jobs:
           else
             echo "No changelog updates needed"
           fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Add this for gh CLI
-
       - name: Upload changelog artifacts
         uses: actions/upload-artifact@v3
         with:
