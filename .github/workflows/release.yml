@@ -101,7 +101,6 @@ jobs:
           path: |
             dist/${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}
             dist/${{ matrix.binary }}-${{ matrix.os }}-${{ matrix.arch }}.sha256
-          compression-level: 9  # Optional: Add compression
           retention-days: 5     # Optional: Set retention period
 
   create-release:
@@ -194,7 +193,7 @@ jobs:
           # SDK Changelog
           echo "# SDK Changelog" > releases/sdks/CHANGELOG.md
           if [ -d "releases/sdks/versions" ]; then
-          find "releases/sdks/versions" -name "*.md" -type f -print0 | sort -zr | xargs -0 -I {} bash -c 'cat {} >> releases/sdks/CHANGELOG.md; echo "" >> releases/sdks/CHANGELOG.md'
+            find "releases/sdks/versions" -name "*.md" -type f -print0 | sort -zr | xargs -0 -I {} bash -c 'cat {} >> releases/sdks/CHANGELOG.md; echo "" >> releases/sdks/CHANGELOG.md'
           fi
 
       - name: Commit updated changelogs
