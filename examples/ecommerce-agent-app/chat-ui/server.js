@@ -90,14 +90,16 @@ app.prepare().then(() => {
 					],
 					webhook: ORRA_WEBHOOK_URL
 				};
-				const response = await axios.post(ORRA_URL, payload,
-					{
-						headers: {
-							'Authorization': `Bearer ${ORRA_API_KEY}`,
-							'Content-Type': 'application/json'
-						}
-					});
-				io.emit('orra_plan', response.data?.plan);
+				const response = await axios.post(ORRA_URL, payload, {
+					headers: {
+						'Authorization': `Bearer ${ORRA_API_KEY}`,
+						'Content-Type': 'application/json'
+					}
+				});
+				io.emit('orra_plan', {
+					...response.data,
+					triggeredBy: msg.triggerId
+				});
 			} catch (error) {
 				if (error.response && error.response.status === 422) {
 					if (error.response.data?.status === "not_actionable"){
@@ -107,6 +109,7 @@ app.prepare().then(() => {
 					}
 				}else {
 					console.error('Error posting to external API:', error);
+					io.emit('orra_err', "Something went wrong while processing your request. Please try again. 🔄");
 				}
 			}
 		});

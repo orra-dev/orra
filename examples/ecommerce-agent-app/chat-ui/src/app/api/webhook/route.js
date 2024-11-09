@@ -7,15 +7,20 @@
 import { NextResponse } from 'next/server';
 
 export async function POST(req) {
-	const body = await req.json();
+	const data = await req.json();
 	
 	// Verify webhook signature here if needed
 	
-	console.log('webhook_data', body);
+	console.log('webhook_data', data);
 	
 	// Access the global io instance
 	if (global.io) {
-		global.io.emit('webhook_data', body);
+		global.io.emit('webhook_data', {
+			orchestrationId: data.orchestrationId,
+			status: data.status,
+			results: data.results,
+			error: data.error
+		});
 	} else {
 		console.warn('Socket.IO not initialized');
 	}
