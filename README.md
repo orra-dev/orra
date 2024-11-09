@@ -77,7 +77,7 @@ docker compose up --build
 
 ## Quick Start
 
-Build your first AI-orchestrated application! We'll use our [Echo service](examples/echo-js) example to show you the
+Build your first AI-orchestrated application! We'll use our [Echo service](examples/echo) example to show you the
 magic of intelligent service orchestration.
 
 While simple, it showcases Orra's capabilities:
@@ -207,8 +207,8 @@ orra verify run "Estimate delivery for customer order" \
 
 ### 3. Explore Examples
 
-- 🛒 [E-commerce AI Assistant](examples/ecommerce-chat-js) - E-commerce customer service with a delivery specialised agent
-- 📣 [Echo Service](examples/echo-js) - Simple example showing core concepts
+- 🛒 [E-commerce AI Assistant](examples/ecommerce-agent-app) - E-commerce customer service with a delivery specialised agent
+- 📣 [Echo Service](examples/echo) - Simple example showing core concepts
 
 ## Alpha Features & Limitations
 
