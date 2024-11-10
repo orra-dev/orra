@@ -1,3 +1,9 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ *  License, v. 2.0. If a copy of the MPL was not distributed with this
+ *  file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 import { useState, useEffect } from 'react';
 import { Activity, Bot, Cpu, CheckCircle2, XCircle, MapPin, Calendar } from 'lucide-react';
 
@@ -61,8 +67,6 @@ const OrchestrationFlow = ({ orchestrationData }) => {
 	
 	useEffect(() => {
 		if (!orchestrationData?.webhookData || resultShown) return;
-		
-		const { status, results, error } = orchestrationData.webhookData;
 		
 		setCurrentTasks(prev =>
 			prev.map(task => ({ ...task, status: 'completed' }))
