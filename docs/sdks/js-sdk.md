@@ -240,7 +240,7 @@ Here's how to convert an existing AI service to use Orra:
 ### Before (Traditional Express API)
 ```javascript
 import express from 'express';
-import { analyzeImage } from './ai-service';
+import { analyzeImage } from './ai-agent';
 
 const app = express();
 
