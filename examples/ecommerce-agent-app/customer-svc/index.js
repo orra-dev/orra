@@ -4,87 +4,83 @@
  *  file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+import express from 'express';
 import { createClient } from '@orra.dev/sdk';
-import dotenv from 'dotenv';
+import schema from './schema.json' assert { type: 'json' };
 
-// Load environment variables
+import dotenv from 'dotenv';
 dotenv.config();
 
-// Validate environment variables
-if (!process.env.ORRA_URL || !process.env.ORRA_API_KEY) {
-	console.error('Error: ORRA_URL and ORRA_API_KEY must be set in the environment variables');
-	process.exit(1);
-}
+const app = express();
+const port = process.env.PORT || 3200;
 
-// Create the Orra SDK client
+// Initialize the Orra client with environment-aware persistence
 const orra = createClient({
 	orraUrl: process.env.ORRA_URL,
 	orraKey: process.env.ORRA_API_KEY,
-	persistenceOpts: {
-		method: 'file',
-		filePath: process.env.ORRA_SERVICE_KEY_PATH || '.orra-data/orra-service-key.json'
-	}
+	persistenceOpts: getPersistenceConfig()
 });
 
-// Service details
-const serviceName = 'CustomerService';
-const serviceDescription = 'A service that retrieves and manages customer information.'
-const serviceSchema = {
-	input: {
-		type: 'object',
-		properties: {
-			customerId: { type: 'string' }
-		},
-		required: ['customerId']
-	},
-	output: {
-		type: 'object',
-		properties: {
-			customerId: { type: 'string' },
-			customerName: { type: 'string' },
-			customerAddress: { type: 'string' },
-		},
-		required: ['customerId', 'customerName', 'customerAddress'],
-	}
-};
+// Health check
+app.get('/health', (req, res) => {
+	res.status(200).json({ status: 'healthy' });
+});
 
-// Task handler function
-async function handleTask(task) {
-	// Extract the message from the task input
-	const { customerId }  = task.input;
-	
-	// Send back customer data
-	const result = {
-		customerId: customerId,
-		customerName: "Clark Kent",
-		customerAddress: "1a Goldsmiths Row, London E2 8QA"
-	};
-	
-	return result;
-}
-
-// Main function to set up and run the service
-async function main() {
+async function startService() {
 	try {
-		// Register the service
-		await orra.registerService(serviceName, {
-			description: serviceDescription,
-			schema: serviceSchema
+		// Register the customer servive with Orra
+		await orra.registerService('CustomerService', {
+			description: 'A service that retrieves and manages customer information.',
+			schema
 		});
 		
-		// Start the task handler
-		orra.startHandler(handleTask);
+		orra.startHandler(async (task) => {
+			console.log('Processing customer details:', task.id);
+			return {
+				customerId: task?.input?.customerId,
+				customerName: "Clark Kent",
+				customerAddress: "1a Goldsmiths Row, London E2 8QA"
+			};
+		});
+		
+		console.log('Customer Service started successfully');
 	} catch (error) {
-		console.error('Error setting up the service:', error);
+		console.error('Failed to start Customer Service:', error);
+		process.exit(1);
 	}
 }
 
-// Run the main function
-main();
-
-// Handle graceful shutdown
-process.on('SIGINT', () => {
-	console.log('Shutting down...');
-	orra.close();
-	process.exit();
+// Start the Express server and the service
+app.listen(port, () => {
+	console.log(`Server listening on port ${port}`);
+	startService().catch(console.error);
 });
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+	console.log('SIGTERM received, shutting down gracefully');
+	orra.close();
+	process.exit(0);
+});
+
+// Configure persistence based on environment
+function getPersistenceConfig () {
+	if (process.env.NODE_ENV === 'development') {
+		// For local development with Docker, use file persistence with custom path
+		return {
+			method: 'file',
+			filePath: process.env.ORRA_SERVICE_KEY_PATH || '.orra-data/orra-service-key.json'
+		};
+	}
+	
+	// For production (Vercel, etc...), use in-memory or other persistence
+	return {
+		method: 'custom',
+		customSave: async (serviceId) => {
+			console.log('Service ID saved:', serviceId);
+		},
+		customLoad: async () => {
+			return null;
+		}
+	};
+}
