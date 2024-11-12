@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -116,6 +117,14 @@ type TaskStatusEvent struct {
 	Timestamp       time.Time `json:"timestamp"`
 	ServiceID       string    `json:"serviceId,omitempty"`
 	Error           string    `json:"error,omitempty"`
+}
+
+type NotFoundError struct {
+	Err error
+}
+
+func (e NotFoundError) Error() string {
+	return e.Err.Error()
 }
 
 func NewClient() *Client {
@@ -230,8 +239,16 @@ func (c *Client) GetOrchestrationInspection(ctx context.Context, id string) (*Or
 		Method(http.MethodGet).
 		Client(c.httpClient).
 		Header("Authorization", "Bearer "+c.apiKey).
-		ToJSON(&inspection).
+		AddValidator(nil).
+		Handle(requests.ChainHandlers(
+			ResponseHandlerWithExcludedCodes(http.StatusNotFound),
+			requests.ToJSON(&inspection),
+		)).
 		Fetch(ctx)
+
+	if requests.HasStatusErr(err, http.StatusNotFound) {
+		return nil, NotFoundError{Err: fmt.Errorf("orchestration not found: %s", id)}
+	}
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get orchestration inspection: %w", err)
@@ -266,4 +283,24 @@ func (v OrchestrationListView) Empty() bool {
 		len(v.Completed) == 0 &&
 		len(v.Failed) == 0 &&
 		len(v.NotActionable) == 0
+}
+
+func ResponseHandlerWithExcludedCodes(excludedCodes ...int) requests.ResponseHandler {
+	return func(resp *http.Response) error {
+		return forErr(requests.DefaultValidator, resp, excludedCodes...)
+	}
+}
+
+func forErr(validator requests.ResponseHandler, resp *http.Response, excludedCodes ...int) error {
+	if err := validator(resp); err != nil {
+		resData, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("error reading body: %w", readErr)
+		}
+		if requests.HasStatusErr(err, excludedCodes...) {
+			return err
+		}
+		return fmt.Errorf("unanticipated error for respons %s: %w", string(resData), err)
+	}
+	return nil
 }
