@@ -4,96 +4,81 @@
  *  file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-import { createClient } from '@orra/sdk';
-import { runAgent } from "./agent.js";
-import dotenv from 'dotenv';
+import express from 'express';
+import { createClient } from '@orra.dev/sdk';
+import { estimateDelivery } from "./agent.js";
+import schema from './schema.json' assert { type: 'json' };
 
-// Load environment variables
+import dotenv from 'dotenv';
 dotenv.config();
 
-// Validate environment variables
-if (!process.env.ORRA_URL || !process.env.ORRA_API_KEY) {
-	console.error('Error: ORRA_URL and ORRA_API_KEY must be set in the environment variables');
-	process.exit(1);
-}
+const app = express();
+const port = process.env.PORT || 3100;
 
-// Create the Orra SDK client
+// Initialize the Orra client with environment-aware persistence
 const orra = createClient({
 	orraUrl: process.env.ORRA_URL,
 	orraKey: process.env.ORRA_API_KEY,
+	persistenceOpts: getPersistenceConfig()
 });
 
-// Service details
-const agentName = 'DeliveryAgent';
-const agentDescription = 'An agent that helps customers with estimated delivery dates for online shopping.';
-const agentSchema = {
-	input: {
-		type: 'object',
-		properties: {
-			customerId: { type: 'string' },
-			customerName: { type: 'string' },
-			customerAddress: { type: 'string' },
-			productDescription: { type: 'string' },
-			productAvailability: { type: 'string' },
-			warehouseAddress: { type: 'string' },
-		},
-		required: [ 'customerId', 'customerAddress', 'warehouseAddress', 'productAvailability' ]
-	},
-	output: {
-		type: 'object',
-		properties: {
-			response: { type: 'string' }
-		},
-		required: [ 'response' ]
-	}
-};
+// Health check
+app.get('/health', (req, res) => {
+	res.status(200).json({ status: 'healthy' });
+});
 
-// Task handler function
-async function handleTask(task) {
-	// Extract the message from the task input
-	const {
-		customerId,
-		customerName,
-		customerAddress,
-		productDescription,
-		productAvailability,
-		warehouseAddress
-	} = task.input;
-	
-	const response = await runAgent({
-		customerId,
-		customerName,
-		customerAddress,
-		productDescription,
-		productAvailability,
-		warehouseAddress,
-	})
-	
-	return { response: response };
-}
-
-// Main function to set up and run the service
-async function main() {
+async function startService() {
 	try {
-		// Register the service
-		await orra.registerAgent(agentName, {
-			description: agentDescription,
-			schema: agentSchema
+		// Register the delivery agent with Orra
+		await orra.registerAgent('Delivery Agent', {
+			description: 'An agent that helps customers with intelligent delivery estimation dates and routing for online shopping.',
+			schema
 		});
 		
-		// Start the task handler
-		orra.startHandler(handleTask);
+		// Start handling delivery estimation tasks
+		orra.startHandler(async (task) => {
+			console.log('Processing delivery estimation:', task.id);
+			return { response: await estimateDelivery(task.input) };
+		});
+		
+		console.log('Delivery Agent started successfully');
 	} catch (error) {
-		console.error('Error setting up the agent:', error);
+		console.error('Failed to start Delivery Agent:', error);
+		process.exit(1);
 	}
 }
 
-// Run the main function
-main();
-
-// Handle graceful shutdown
-process.on('SIGINT', () => {
-	console.log('Shutting down...');
-	orra.close();
-	process.exit();
+// Start the Express server and the service
+app.listen(port, () => {
+	console.log(`Server listening on port ${port}`);
+	startService().catch(console.error);
 });
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+	console.log('SIGTERM received, shutting down gracefully');
+	orra.close();
+	process.exit(0);
+});
+
+// Configure persistence based on environment
+function getPersistenceConfig () {
+	if (process.env.NODE_ENV === 'development') {
+		// For local development with Docker, use file persistence with custom path
+		return {
+			method: 'file',
+			filePath: process.env.ORRA_SERVICE_KEY_PATH || '.orra-data/orra-service-key.json'
+		};
+	}
+	
+	// For production (Vercel, etc...), use in-memory or other persistence
+	return {
+		method: 'custom',
+		customSave: async (serviceId) => {
+			console.log('Service ID saved:', serviceId);
+		},
+		customLoad: async () => {
+			return null;
+		}
+	};
+}

@@ -7,14 +7,16 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "node index.js",
+    "start": "node index.js",
     "agent": "node --experimental-json-modules -e \"import('./agent.js').then( module => module.runAgent({customerId: '1', customerName: 'Clark Kent', customerAddress: '1a Goldsmiths Row, London E2 8QA', productDescription: 'Superman T-Shirt', productAvailability: 'AVAILABLE', warehouseAddress: 'Unit 1 Cairnrobin Way, Portlethen, Aberdeen AB12 4NJ'})).catch(console.error);\""
   },
   "author": "Orra Team",
-  "license": "MIT",
+  "license": "MPL2.0",
   "dependencies": {
     "@mistralai/mistralai": "^1.1.0",
-    "@orra/sdk": "file:../../../sdks/js",
+    "@orra.dev/sdk": "0.1.0-narwhal.1",
     "dotenv": "^16.4.5",
+    "express": "^4.21.1",
     "timers": "^0.1.1"
   }
 }

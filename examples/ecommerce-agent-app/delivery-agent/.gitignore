@@ -131,4 +131,9 @@ dist
 .pnp.*
 
 # orra
-orra-service-key.json
+.orra-data/orra-service-key.json
+
+# Ignore service persistence data
+.orra-data/*
+# But keep the directory
+!.orra-data/.gitkeep

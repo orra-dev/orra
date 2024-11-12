@@ -1,0 +1,13 @@
+node_modules
+npm-debug.log
+Dockerfile
+.dockerignore
+.git
+.gitignore
+README.md
+.env
+.env.*
+# Don't ignore essential files
+!schema.json
+!.orra-data
+# Don't ignore SDK directory

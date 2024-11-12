@@ -334,7 +334,7 @@ async function retryWithBackoff(fn, retries = 0) {
 	}
 }
 
-export async function runAgent(opts) {
+export async function estimateDelivery(opts) {
 	const prompt = createPrompt(opts);
 	
 	const messages = [
