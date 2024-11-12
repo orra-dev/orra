@@ -181,7 +181,7 @@ while you focus on building your application.
 ### 1. Integrate Services & Agents
 
 ```javascript
-import { createClient } from '@orra/sdk';
+import { createClient } from '@orra.dev/sdk';
 
 const client = createClient({
   orraUrl: process.env.ORRA_URL,
