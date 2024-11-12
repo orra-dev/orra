@@ -28,7 +28,9 @@ If you're building multi-agent applications, this probably sounds familiar:
 
 **Scaling Pains**: Scaling beyond a few concurrent users means juggling queues, caches, and distributed state across agents and backend services. What started as "just a few agents talking to each other" has become a distributed systems problem.
 
-Orra adds powerful orchestration to your agents and services. No rewrites, no infrastructure headaches - just predictable, scalable execution.
+**LLM Chain Explosion**: Your research agents are drowning in unnecessary LLM function calls. Each extra call isn't just burning compute - it's adding latency, increasing hallucination risk, and making your apps slower and less reliable. What should be focused AI interactions have become chaotic chains of "let me ask the LLM one more time."
+
+Orra adds powerful orchestration to your agents and services. No rewrites, no infrastructure headaches - just predictable, intelligent routing that lets your LLMs think once and think right.
 
 ## Install
 
