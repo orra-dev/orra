@@ -10,6 +10,7 @@ import { OrraLogger } from './logger.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 
+const DEFAULT_SERVICE_KEY_DIR= '.orra-data'
 const DEFAULT_SERVICE_KEY_FILE= 'orra-service-key.json'
 
 class OrraSDK {
@@ -42,7 +43,7 @@ class OrraSDK {
 		this.version = 0;
 		this.persistenceOpts = {
 			method: 'file', // 'file' or 'custom'
-			filePath: path.join(process.cwd(), DEFAULT_SERVICE_KEY_FILE),
+			filePath: path.join(process.cwd(), DEFAULT_SERVICE_KEY_DIR, DEFAULT_SERVICE_KEY_FILE),
 			customSave: null,
 			customLoad: null,
 			...persistenceOpts
