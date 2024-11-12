@@ -57,7 +57,7 @@ class OrraSDK {
 			const data = JSON.stringify({ serviceId: this.serviceId });
 			const filePath = this.persistenceOpts.filePath
 			const directoryPath = extractDirectoryFromFilePath(filePath);
-			await createDirectoryIfNotExists(directoryPath);
+			await createDirectoryIfNotExists(directoryPath, this.logger);
 			
 			await fs.writeFile(this.persistenceOpts.filePath, data, 'utf8');
 		} else if (this.persistenceOpts.method === 'custom' && typeof this.persistenceOpts.customSave === 'function') {
@@ -547,7 +547,7 @@ async function directoryExists(dirPath) {
 	}
 }
 
-async function createDirectoryIfNotExists(directoryPath) {
+async function createDirectoryIfNotExists(directoryPath, logger) {
 	let exists = false
 	try {
 		exists = await directoryExists(directoryPath)
@@ -556,15 +556,15 @@ async function createDirectoryIfNotExists(directoryPath) {
 		try {
 			await fs.mkdir(directoryPath, { recursive: true });
 			
-			this.logger.trace('Directory created successfully', {directoryPath});
+			logger.trace('Directory created successfully', {directoryPath});
 		} catch (mkdirError) {
-			this.logger.error('Error creating directory', {
+			logger.error('Error creating directory', {
 				error: mkdirError.message,
 				directoryPath
 			});
 		}
 	}catch (e) {
-		this.logger.error('Error creating directory', {
+		logger.error('Error creating directory', {
 			error: e.message,
 			directoryPath
 		});
