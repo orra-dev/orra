@@ -11,7 +11,7 @@
   "author": "Orra Team",
   "license": "MIT",
   "dependencies": {
-    "@orra/sdk": "file:../../../sdks/js",
+    "@orra.dev/sdk": "file:../../../sdks/js",
     "dotenv": "^16.4.5"
   }
 }
