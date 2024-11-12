@@ -4,7 +4,7 @@
  *  file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-import { createClient } from '@orra/sdk';
+import { createClient } from '@orra.dev/sdk';
 import dotenv from 'dotenv';
 
 // Load environment variables
