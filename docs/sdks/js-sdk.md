@@ -21,7 +21,7 @@ npm install -S ../path/to/repo/orra/sdks/js
 The Orra SDK is designed to wrap your existing service logic with minimal changes. Here's a simple example showing how to integrate an existing chat service:
 
 ```javascript
-import { createClient } from '@orra/sdk';
+import { createClient } from '@orra.dev/sdk';
 import { myService } from './existing-service';  // Your existing logic
 
 // Initialize the Orra client
@@ -259,7 +259,7 @@ app.listen(3000);
 
 ### After (Orra Integration)
 ```javascript
-import { createClient } from '@orra/sdk';
+import { createClient } from '@orra.dev/sdk';
 import { analyzeImage } from './ai-service';  // Reuse existing logic
 
 const client = createClient({
