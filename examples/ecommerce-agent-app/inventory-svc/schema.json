@@ -1,0 +1,19 @@
+{
+	"input": {
+		"type": "object",
+		"properties": {
+			"productDescription": { "type": "string" }
+		},
+		"required": ["productDescription"]
+	},
+	"output": {
+		"type": "object",
+		"properties": {
+			"productId": { "type": "string" },
+			"productDescription": { "type": "string" },
+			"productAvailability": { "type": "string" },
+			"warehouseAddress": { "type": "string" }
+		},
+		"required": ["productId", "productDescription", "productAvailability"]
+	}
+}
