@@ -4,7 +4,7 @@
  *  file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-import { createClient } from '@orra/sdk';
+import { createClient } from '@orra.dev/sdk';
 import dotenv from 'dotenv';
 
 // Load environment variables
@@ -20,6 +20,10 @@ if (!process.env.ORRA_URL || !process.env.ORRA_API_KEY) {
 const orra = createClient({
 	orraUrl: process.env.ORRA_URL,
 	orraKey: process.env.ORRA_API_KEY,
+	persistenceOpts: {
+		method: 'file',
+		filePath: process.env.ORRA_SERVICE_KEY_PATH || '.orra-data/orra-service-key.json'
+	}
 });
 
 // Service details
