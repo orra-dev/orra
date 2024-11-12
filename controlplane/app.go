@@ -338,13 +338,8 @@ func (app *App) OrchestrationInspectionHandler(w http.ResponseWriter, r *http.Re
 	orchestrationID := vars["id"]
 
 	if !app.Plane.OrchestrationBelongsToProject(orchestrationID, project.ID) {
-		err := fmt.Errorf("unknown orchestration")
-		app.Logger.
-			Error().
-			Str("ProjectID", project.ID).
-			Str("OrchestrationID", orchestrationID).
-			Msg("Orchestration not found for the given project")
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unauthorized, err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
