@@ -1,6 +1,6 @@
 {
   "name": "@orra.dev/sdk",
-  "version": "0.1.0-narwhal.1",
+  "version": "0.1.0-narwhal.2",
   "type": "module",
   "description": "SDK for running reliable multi-agent applications with Orra",
   "main": "./dist/index.js",
