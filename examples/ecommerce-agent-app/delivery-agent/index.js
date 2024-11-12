@@ -61,7 +61,7 @@ process.on('SIGTERM', async () => {
 	process.exit(0);
 });
 
-// Configure persistence based on environment
+// Configure service key persistence based on environment
 function getPersistenceConfig () {
 	if (process.env.NODE_ENV === 'development') {
 		// For local development with Docker, use file persistence with custom path

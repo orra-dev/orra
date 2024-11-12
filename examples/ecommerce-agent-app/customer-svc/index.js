@@ -28,7 +28,7 @@ app.get('/health', (req, res) => {
 
 async function startService() {
 	try {
-		// Register the customer servive with Orra
+		// Register the customer service with Orra
 		await orra.registerService('CustomerService', {
 			description: 'A service that retrieves and manages customer information.',
 			schema
@@ -63,7 +63,7 @@ process.on('SIGTERM', async () => {
 	process.exit(0);
 });
 
-// Configure persistence based on environment
+// Configure service key persistence based on environment
 function getPersistenceConfig () {
 	if (process.env.NODE_ENV === 'development') {
 		// For local development with Docker, use file persistence with custom path
