@@ -4,7 +4,7 @@ This example demonstrates how to build an AI-powered e-commerce assistant using 
 
 It uses a chat UI to simulate a WhatsApp sales experience.
 
-<img src="images/ecommerce-agent-app.png" alt="E-commerce Assistant Architecture" width="640" style="max-width: 100%; height: auto;" />
+<img src="images/ecommerce-agent-app.png" alt="E-commerce Assistant Architecture" width="1053" style="max-width: 100%; height: auto;" />
 
 ## ✨ Features
 
@@ -19,13 +19,12 @@ It uses a chat UI to simulate a WhatsApp sales experience.
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
-- [Node.js](https://nodejs.org/) 18+
 - [Mistral API key](https://mistral.ai/api/) for the Delivery Agent
 - [OpenAI API key](https://platform.openai.com/api-keys) for Orra's control plane
 
 ## Setup
 
-1. First, setup Orra by following the [Quick Start](https://github.com/ezodude/orra#quick-start) guide:
+1. First, setup Orra by following the [Quick Start](../../README.md#quick-start) guide:
 ```bash
 # Clone Orra
 git clone https://github.com/ezodude/orra
@@ -176,6 +175,6 @@ The example consists of:
 
 ## Learn More
 
-- [Orra Documentation](https://github.com/ezodude/orra/tree/main/docs)
-- [Reset Guide](https://github.com/ezodude/orra/blob/main/docs/reset-control-plane.md) (if restarting)
-- [CLI Documentation](https://github.com/ezodude/orra/blob/main/docs/cli.md)
+- [Orra Documentation](../../docs)
+- [Reset Guide](../../docs/reset-control-plane.md) (if restarting)
+- [CLI Documentation](../../docs/cli.md)
