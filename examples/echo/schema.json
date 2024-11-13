@@ -1,0 +1,16 @@
+{
+	"input": {
+		"type": "object",
+		"properties": {
+			"message": { "type": "string" }
+		},
+		"required": [ "message" ]
+	},
+	"output": {
+		"type": "object",
+		"properties": {
+			"echo": { "type": "string" }
+		},
+		"required": [ "echo" ]
+	}
+}

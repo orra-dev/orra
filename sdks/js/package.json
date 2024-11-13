@@ -1,13 +1,19 @@
 {
-  "name": "@orra/sdk",
-  "version": "0.1.0",
+  "name": "@orra.dev/sdk",
+  "version": "0.1.0-narwhal.2",
   "type": "module",
-  "description": "Orra JavaScript SDK",
-  "main": "src/index.js",
+  "description": "SDK for running reliable multi-agent applications with Orra",
+  "main": "./dist/index.js",
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
-    "src"
+    "dist",
+    "README.md"
   ],
   "scripts": {
+    "prepare": "npm run build",
+    "build": "rm -rf dist && babel src -d dist",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -15,17 +21,16 @@
     "url": "git+https://github.com/ezodude/orra.git"
   },
   "keywords": [
-    "Multi-agent",
-    "app",
-    "orchestration"
+    "orra",
+    "llm",
+    "orchestration",
+    "agents",
+    "multi-agent"
   ],
   "author": "Orra",
   "license": "MPL-2.0",
-  "bugs": {
-    "url": "https://github.com/ezodude/orra/issues"
-  },
-  "homepage": "https://github.com/ezodude/orra#readme",
   "dependencies": {
+    "@orra.dev/sdk": "^0.1.0-narwhal.1",
     "pino": "^8.0.0",
     "ws": "^8.18.0"
   },

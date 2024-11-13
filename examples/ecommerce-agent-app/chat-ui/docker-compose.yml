@@ -1,0 +1,13 @@
+services:
+  chat-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.local
+    environment:
+      - NODE_ENV=production
+      - ORRA_URL=http://host.docker.internal:8005/orchestrations
+      - ORRA_WEBHOOK_URL=http://host.docker.internal:3000/api/webhook

@@ -10,7 +10,7 @@ orra config reset
 
 # 2. Clean up service keys
 # Remove from each service directory
-rm */orra-service-key.json
+rm */.orra-data/orra-service-key.json
 
 # 3. Start control plane
 # Your control plane start command here

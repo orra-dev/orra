@@ -1,0 +1,19 @@
+{
+  "name": "echo-service",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "A simple example that uses the Orra JS SDK to orchestrate a service using Orra.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "author": "Orra Team",
+  "license": "MIT",
+  "dependencies": {
+    "@orra.dev/sdk": "0.1.0-narwhal.2",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1"
+  }
+}

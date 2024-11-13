@@ -1,0 +1,21 @@
+{
+	"input": {
+		"type": "object",
+		"properties": {
+			"customerId": { "type": "string" },
+			"customerName": { "type": "string" },
+			"customerAddress": { "type": "string" },
+			"productDescription": { "type": "string" },
+			"productAvailability": { "type": "string" },
+			"warehouseAddress": { "type": "string" }
+		},
+		"required": [ "customerId", "customerAddress", "warehouseAddress", "productAvailability" ]
+	},
+	"output": {
+		"type": "object",
+		"properties": {
+			"response": { "type": "string" }
+		},
+		"required": [ "response" ]
+	}
+}
