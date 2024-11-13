@@ -10,9 +10,9 @@
     "dev": "node index.js"
   },
   "author": "Orra Team",
-  "license": "MIT",
+  "license": "MPL2.0",
   "dependencies": {
-    "@orra.dev/sdk": "0.1.0-narwhal.2",
+    "@orra.dev/sdk": "0.1.1-narwhal",
     "dotenv": "^16.4.5",
     "express": "^4.21.1"
   }
