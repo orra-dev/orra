@@ -36,7 +36,7 @@ orra api-keys gen production-key
 Use the generated API key in your Node.js services:
 
 ```javascript
-import { createClient } from '@orra/sdk';
+import { createClient } from '@orra.dev/sdk';
 
 // Initialize with the API key from step 1
 const client = createClient({

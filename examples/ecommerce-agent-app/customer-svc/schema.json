@@ -1,0 +1,18 @@
+{
+	"input": {
+		"type": "object",
+		"properties": {
+			"customerId": { "type": "string" }
+		},
+		"required": ["customerId"]
+	},
+	"output": {
+		"type": "object",
+		"properties": {
+			"customerId": { "type": "string" },
+			"customerName": { "type": "string" },
+			"customerAddress": { "type": "string" }
+		},
+		"required": ["customerId", "customerName", "customerAddress"]
+	}
+}

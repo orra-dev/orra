@@ -1,0 +1,4 @@
+ORRA_URL=http://localhost:8005
+ORRA_API_KEY=xxx
+MISTRAL_API_KEY=xxx
+NODE_ENV=development

@@ -28,7 +28,9 @@ If you're building multi-agent applications, this probably sounds familiar:
 
 **Scaling Pains**: Scaling beyond a few concurrent users means juggling queues, caches, and distributed state across agents and backend services. What started as "just a few agents talking to each other" has become a distributed systems problem.
 
-Orra adds powerful orchestration to your agents and services. No rewrites, no infrastructure headaches - just predictable, scalable execution.
+**LLM Chain Explosion**: Your research agents are drowning in unnecessary LLM function calls. Each extra call adds latency, risks hallucination, and degrades reliability. What should be precise AI interactions become endless chains of "just one more try."
+
+Orra adds powerful orchestration to your agents and services. No rewrites, no infrastructure headaches - just predictable, intelligent routing that lets your LLMs think once and think right.
 
 ## Install
 
@@ -77,7 +79,7 @@ docker compose up --build
 
 ## Quick Start
 
-Build your first AI-orchestrated application! We'll use our [Echo service](examples/echo-js) example to show you the
+Build your first AI-orchestrated application! We'll use our [Echo service](examples/echo) example to show you the
 magic of intelligent service orchestration.
 
 While simple, it showcases Orra's capabilities:
@@ -181,7 +183,7 @@ while you focus on building your application.
 ### 1. Integrate Services & Agents
 
 ```javascript
-import { createClient } from '@orra/sdk';
+import { createClient } from '@orra.dev/sdk';
 
 const client = createClient({
   orraUrl: process.env.ORRA_URL,
@@ -207,8 +209,8 @@ orra verify run "Estimate delivery for customer order" \
 
 ### 3. Explore Examples
 
-- 🛒 [E-commerce AI Assistant](examples/ecommerce-chat-js) - E-commerce customer service with a delivery specialised agent
-- 📣 [Echo Service](examples/echo-js) - Simple example showing core concepts
+- 🛒 [E-commerce AI Assistant](examples/ecommerce-agent-app) - E-commerce customer service with a delivery specialised agent
+- 📣 [Echo Service](examples/echo) - Simple example showing core concepts
 
 ## Alpha Features & Limitations
 
@@ -251,7 +253,7 @@ orra verify run "Estimate delivery for customer order" \
 
 **Connect With Us:**
 
-- GitHub Discussions - Share your experience and ideas
+- [GitHub Discussions](https://github.com/ezodude/orra/discussions) - Share your experience and ideas
 - Office Hours - Weekly calls with the team
 
 ## License
