@@ -253,7 +253,7 @@ orra verify run "Estimate delivery for customer order" \
 
 **Connect With Us:**
 
-- GitHub Discussions - Share your experience and ideas
+- [GitHub Discussions](https://github.com/ezodude/orra/discussions) - Share your experience and ideas
 - Office Hours - Weekly calls with the team
 
 ## License
