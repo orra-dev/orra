@@ -49,11 +49,11 @@ Download the latest CLI binary for your platform from our releases page.
 
 ```shell
 # macOS
-curl -L https://github.com/ezodude/orra/releases/download/v0.1.0-narwhal/orra-macos -o /usr/local/bin/orra
+curl -L https://github.com/ezodude/orra/releases/download/v0.1.1-narwhal/orra-macos -o /usr/local/bin/orra
 chmod +x /usr/local/bin/orra
 
 # Linux
-curl -L https://github.com/ezodude/orra/releases/download/v0.1.0-narwhal/orra-linux -o /usr/local/bin/orra
+curl -L https://github.com/ezodude/orra/releases/download/v0.1.1-narwhal/orra-linux -o /usr/local/bin/orra
 chmod +x /usr/local/bin/orra
 
 # Verify installation

@@ -1,6 +1,6 @@
 {
   "name": "@orra.dev/sdk",
-  "version": "0.1.0-narwhal.2",
+  "version": "0.1.1-narwhal",
   "type": "module",
   "description": "SDK for running reliable multi-agent applications with Orra",
   "main": "./dist/index.js",
@@ -30,7 +30,6 @@
   "author": "Orra",
   "license": "MPL-2.0",
   "dependencies": {
-    "@orra.dev/sdk": "^0.1.0-narwhal.1",
     "pino": "^8.0.0",
     "ws": "^8.18.0"
   },
