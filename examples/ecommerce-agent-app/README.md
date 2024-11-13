@@ -4,7 +4,7 @@ This example demonstrates how to build an AI-powered e-commerce assistant using 
 
 It uses a chat UI to simulate a WhatsApp sales experience.
 
-<img src="images/ecommerce-agent-app.png" alt="E-commerce Assistant Architecture" width="1053" style="max-width: 100%; height: auto;" />
+<img src="images/ecommerce-agent-app.png" alt="E-commerce Assistant Architecture" width="702" style="max-width: 100%; height: auto;" />
 
 ## ✨ Features
 
