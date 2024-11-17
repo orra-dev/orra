@@ -42,6 +42,7 @@ FROM alpine:latest AS final
 # Leverage a cache mount to /var/cache/apk/ to speed up subsequent builds.
 RUN --mount=type=cache,target=/var/cache/apk \
     apk --update add \
+    		curl \
         ca-certificates \
         tzdata \
         && \
