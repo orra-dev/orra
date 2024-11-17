@@ -44,6 +44,7 @@ func NewApp(cfg Config, args []string) (*App, error) {
 }
 
 func (app *App) configureRoutes() *App {
+	app.Router.HandleFunc("/health", app.healthHandler).Methods(http.MethodGet)
 	app.Router.HandleFunc("/register/project", app.RegisterProject).Methods(http.MethodPost)
 	app.Router.HandleFunc("/apikeys", app.APIKeyMiddleware(app.CreateAdditionalApiKey)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/webhooks", app.APIKeyMiddleware(app.AddWebhook)).Methods(http.MethodPost)
@@ -357,6 +358,14 @@ func (app *App) OrchestrationInspectionHandler(w http.ResponseWriter, r *http.Re
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(inspection); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Internal, err))
+		return
+	}
+}
+
+func (app *App) healthHandler(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(map[string]any{}); err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Internal, err))
 		return
 	}
