@@ -1,0 +1,41 @@
+services:
+  control-plane:
+    image: orra-control-plane-dev
+    container_name: orra-control-plane
+    build:
+      context: ../../controlplane
+      dockerfile: Dockerfile
+      target: final
+    environment:
+      - PORT=8005
+      - OPEN_API_KEY=${OPEN_API_KEY:-random-key}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - test-network
+
+  protocol-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: orra-protocol-proxy
+    environment:
+      - CONTROL_PLANE_URL=ws://control-plane:8005
+      - PROXY_PORT=8006
+    ports:
+      - "8006:8006"
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    networks:
+      - test-network
+    volumes:
+      - ../contracts:/app/contracts:ro
+
+networks:
+  test-network:
+    name: orra-test-network

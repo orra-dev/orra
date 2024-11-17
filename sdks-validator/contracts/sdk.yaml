@@ -1,0 +1,384 @@
+# Defines the expected behavior and interfaces
+asyncapi: '2.6.0'
+info:
+  title: Orra SDK Contract
+  version: '1.0.0'
+  description: |
+    Core contract for all Orra SDK implementations. This contract defines the required
+    behaviors, interfaces and test scenarios that all SDKs must implement.
+
+    Key Requirements:
+    - Exactly-once task execution
+    - Automatic reconnection with backoff
+    - Message queueing during disconnection
+    - Health monitoring via ping/pong
+    - Proper error propagation
+
+servers:
+  controlPlane:
+    url: ws://localhost:8005
+    protocol: ws
+    description: Orra Control Plane WebSocket endpoint
+
+channels:
+  /ws:
+    description: Main WebSocket endpoint for service communication
+    parameters:
+      serviceId:
+        description: Registered service identifier
+        schema:
+          type: string
+      apiKey:
+        description: Authentication key
+        schema:
+          type: string
+    subscribe:
+      description: Messages received from control plane
+      message:
+        oneOf:
+          - $ref: '#/components/messages/TaskRequest'
+          - $ref: '#/components/messages/Ping'
+    publish:
+      description: Messages sent to control plane
+      message:
+        oneOf:
+          - $ref: '#/components/messages/TaskResult'
+          - $ref: '#/components/messages/Pong'
+          - $ref: '#/components/messages/TaskStatus'
+
+components:
+  messages:
+    TaskRequest:
+      name: TaskRequest
+      title: Task execution request
+      payload:
+        type: object
+        required:
+          - type
+          - id
+          - input
+          - executionId
+          - idempotencyKey
+          - serviceId
+        properties:
+          type:
+            type: string
+            enum: [task_request]
+            description: Message type identifier
+          id:
+            type: string
+            description: Unique task identifier
+          input:
+            type: object
+            description: Task input parameters
+          executionId:
+            type: string
+            description: Unique execution identifier for deduplication
+          idempotencyKey:
+            type: string
+            description: Key for exactly-once execution guarantee
+          serviceId:
+            type: string
+            description: Target service identifier
+
+    TaskResult:
+      name: TaskResult
+      title: Task execution result
+      payload:
+        type: object
+        required:
+          - type
+          - taskId
+          - executionId
+          - serviceId
+          - idempotencyKey
+        properties:
+          type:
+            type: string
+            enum: [task_result]
+            description: Message type identifier
+          taskId:
+            type: string
+            description: ID of the task being processed
+          executionId:
+            type: string
+            description: Matches the execution request ID
+          serviceId:
+            type: string
+            description: Service that processed the task
+          idempotencyKey:
+            type: string
+            description: Matches the request idempotency key
+          result:
+            type: object
+            description: Task execution result (required if successful)
+            nullable: true
+          error:
+            type: string
+            description: Error message (required if failed)
+            nullable: true
+
+    TaskStatus:
+      name: TaskStatus
+      title: Task execution status update
+      payload:
+        type: object
+        required:
+          - type
+          - taskId
+          - executionId
+          - serviceId
+          - status
+        properties:
+          type:
+            type: string
+            enum: [task_status]
+          taskId:
+            type: string
+          executionId:
+            type: string
+          serviceId:
+            type: string
+          status:
+            type: string
+            enum: [in_progress]
+          timestamp:
+            type: string
+            format: date-time
+
+    Ping:
+      name: Ping
+      title: Health check request
+      payload:
+        type: object
+        required: [type]
+        properties:
+          type:
+            type: string
+            enum: [ping]
+
+    Pong:
+      name: Pong
+      title: Health check response
+      payload:
+        type: object
+        required: [type, serviceId]
+        properties:
+          type:
+            type: string
+            enum: [pong]
+          serviceId:
+            type: string
+
+x-conformance-tests:
+  service_lifecycle:
+    description: Validates service registration and lifecycle
+    steps:
+      - id: registration
+        description: Service registers successfully
+        action: register_service
+        input:
+          name: Test Service
+          schema:
+            input:
+              type: object
+              properties:
+                message:
+                  type: string
+        expect:
+          - type: service_registered
+            timeout: 5000
+            validate:
+              - service_id_present: true
+              - websocket_connected: true
+
+  task_processing:
+    description: Validates task execution behaviors
+    steps:
+      - id: successful_execution
+        description: Successfully processes task
+        action: process_task
+        input:
+          message: "test message"
+        expect:
+          - type: task_result
+            timeout: 5000
+            validate:
+              - result_matches: "test message"
+              - error_absent: true
+
+      - id: error_propagation
+        description: Properly handles and propagates errors
+        action: process_task
+        input:
+          message: null
+        expect:
+          - type: task_result
+            timeout: 5000
+            validate:
+              - error_present: true
+              - result_absent: true
+
+      - id: exactly_once
+        description: Ensures exactly-once execution
+        action: process_task
+        input:
+          message: "duplicate message"
+          duplicate: true
+        expect:
+          - type: task_result
+            timeout: 5000
+            validate:
+              - execution_count: 1
+
+  connection_management:
+    description: Validates connection handling
+    steps:
+      - id: health_check
+        description: Responds to health checks
+        action: send_ping
+        expect:
+          - type: pong
+            timeout: 5000
+            validate:
+              - service_id_matches: true
+
+      - id: reconnection
+        description: Automatically reconnects with backoff
+        action: force_disconnect
+        expect:
+          - type: reconnected
+            timeout: 30000
+            validate:
+              - backoff_used: true
+              - same_service_id: true
+
+      - id: message_queueing
+        description: Queues messages during disconnection
+        actions:
+          - force_disconnect
+          - send_task
+          - restore_connection
+        expect:
+          - type: task_result
+            timeout: 5000
+            validate:
+              - result_present: true
+              - in_order: true
+
+  task_processing_edge_cases:
+    description: "Validates handling of edge cases in task processing"
+    steps:
+      - id: large_payload
+        description: Handles payloads near size limits
+        action: process_task
+        input:
+          message: "a" # Test runner will expand to MAX_MESSAGE_SIZE
+          size: MAX_MESSAGE_SIZE  # e.g., 10MB
+        expect:
+          - type: task_result
+            timeout: 10000  # Longer timeout for large payloads
+            validate:
+              - result_present: true
+              - size_matches: true
+              - no_truncation: true
+
+      - id: task_timeout
+        description: Handles task execution timeout correctly
+        action: process_task
+        input:
+          message: "timeout_trigger"
+          execution_time: 35000  # Exceeds 30s timeout
+        expect:
+          - type: task_result
+            timeout: 40000
+            validate:
+              - error_present: true
+              - error_type: "task_timeout"
+              - result_absent: true
+
+  connection_resilience:
+    description: Validates behavior during connection failures
+    steps:
+      - id: mid_task_disconnect
+        description: Handles connection drop during task execution
+        actions:
+          - start_long_task
+          - wait: 1000
+          - force_disconnect
+          - wait: 2000
+          - restore_connection
+        expect:
+          - type: task_result
+            timeout: 10000
+            validate:
+              - result_present: true
+              - task_completed: true
+              - no_duplicate_execution: true
+
+      - id: registration_disconnect
+        description: Handles connection drop during service registration
+        actions:
+          - start_registration
+          - force_disconnect_at_step: "websocket_connect"
+          - wait: 1000
+        expect:
+          - type: registration_completed
+            timeout: 10000
+            validate:
+              - service_id_present: true
+              - registration_successful: true
+              - single_registration_attempt: true
+
+  service_identity:
+    description: Validates service identity persistence and recovery
+    steps:
+      - id: service_restart
+        description: Maintains identity after service restart
+        actions:
+          - register_service
+          - store_service_id
+          - shutdown_service
+          - restart_service
+        expect:
+          - type: service_restarted
+            timeout: 5000
+            validate:
+              - service_id_matches_stored: true
+              - connection_restored: true
+              - no_duplicate_registration: true
+
+x-sdk-requirements:
+  connection:
+    - Initial connect timeout: 5 seconds
+    - Reconnect attempts: 10 maximum
+    - Backoff: Exponential with 1s initial delay
+    - Maximum backoff: 30 seconds
+    - Health check interval: 30 seconds
+    - Health check timeout: 5 seconds
+
+  task_execution:
+    - Exactly-once delivery guaranteed
+    - Result caching: 24 hours
+    - Task timeout: 30 seconds
+    - Maximum queued messages: 1000
+
+  error_handling:
+    - All errors must include:
+        - Error message
+        - Error type
+        - Stack trace (when available)
+    - Must distinguish between:
+        - Transient errors (retry)
+        - Permanent errors (fail)
+
+  message_limits:
+    - Maximum message size: 10MB
+    - Maximum task duration: 30 seconds
+    - Reconnection timeout during task: 5 seconds
+    - Registration timeout: 10 seconds
+
+  persistence:
+    - Service identity must persist across restarts
+    - Identity storage must be atomic
+    - Failed persistence should prevent service start
