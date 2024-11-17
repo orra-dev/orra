@@ -1,7 +1,7 @@
 services:
   control-plane:
-    image: orra-control-plane-dev
-    container_name: orra-control-plane
+    image: orra-control-plane-sdk-valid
+    container_name: orra-cp-sdk-valid
     build:
       context: ../../controlplane
       dockerfile: Dockerfile
@@ -13,10 +13,10 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
       interval: 5s
       timeout: 3s
-      retries: 3
+      retries: 5
       start_period: 5s
     networks:
-      - test-network
+      - sdk-test-network
 
   protocol-proxy:
     build:
@@ -32,10 +32,10 @@ services:
       control-plane:
         condition: service_healthy
     networks:
-      - test-network
+      - sdk-test-network
     volumes:
       - ../contracts:/app/contracts:ro
 
 networks:
-  test-network:
-    name: orra-test-network
+  sdk-test-network:
+    name: orra-sdk-test-network

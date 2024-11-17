@@ -1,13 +1,10 @@
-FROM node:18-alpine
+FROM node:18-slim
 
 WORKDIR /app
 
 # Install dependencies first (better layer caching)
 COPY package*.json ./
 RUN npm clean-install --production
-
-COPY package*.json ./
-RUN npm cache clean && npm install
 
 # Copy source code
 COPY src/ ./src/
