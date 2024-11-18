@@ -1,0 +1,13 @@
+{
+	"name": "@orra.dev/protocol-validator-js-tests",
+	"version": "1.0.0",
+	"type": "module",
+	"dependencies": {
+		"node-fetch": "^3.3.2",
+		"ws": "^8.18.0",
+		"@orra.dev/sdk": "file:../../../sdks/js"
+	},
+	"engines": {
+		"node": ">=18"
+	}
+}
