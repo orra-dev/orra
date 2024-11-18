@@ -10,6 +10,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONTROL_PLANE_ROOT="$(cd "${SCRIPT_DIR}/../../controlplane" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REBUILD=${REBUILD:-true}
 
 echo "CONTROL_PLANE_ROOT: ${CONTROL_PLANE_ROOT}"
 echo "PROJECT_ROOT: ${PROJECT_ROOT}"
@@ -20,12 +21,13 @@ if (! docker stats --no-stream &> /dev/null); then
     exit 1
 fi
 
-# Build control plane image
-docker compose -f "${PROJECT_ROOT}/proxy/docker-compose.yaml" build control-plane
-
 # Start services
 echo "Starting test environment..."
-docker compose -f "${PROJECT_ROOT}/proxy/docker-compose.yaml" up -d
+if [ "$REBUILD" = "true" ]; then
+    docker compose -f "${PROJECT_ROOT}/proxy/docker-compose.yaml" up --build -d
+else
+    docker compose -f "${PROJECT_ROOT}/proxy/docker-compose.yaml" up -d
+fi
 
 # Function to cleanup on exit
 cleanup() {

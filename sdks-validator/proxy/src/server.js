@@ -5,12 +5,20 @@
  */
 
 import { ProtocolProxy } from './proxy.js';
+import { join } from "path";
+import { fileURLToPath } from "url";
+import * as path from "node:path";
 
-const CONTROL_PLANE_URL = process.env.CONTROL_PLANE_URL || 'ws://control-plane:8005';
-const PROXY_PORT = parseInt(process.env.PROXY_PORT || '8006', 10);
+const CONTROL_PLANE_URL = process?.env?.CONTROL_PLANE_URL || 'http://control-plane:8005';
+const PROXY_PORT = parseInt(process?.env?.PROXY_PORT || '8006', 10);
+
+console.log('process?.env?.SDK_CONTRACT_PATH', process?.env?.SDK_CONTRACT_PATH)
+
+const SDK_CONTRACT_PATH = process?.env?.SDK_CONTRACT_PATH ||
+	join(getDirName(import.meta.url), "../../contracts/sdk.yaml")
 
 async function main() {
-	const proxy = new ProtocolProxy(CONTROL_PLANE_URL);
+	const proxy = new ProtocolProxy(CONTROL_PLANE_URL, SDK_CONTRACT_PATH);
 	
 	// Handle shutdown gracefully
 	process.on('SIGTERM', async () => {
@@ -31,3 +39,7 @@ async function main() {
 
 main().catch(console.error);
 
+function getDirName(moduleUrl) {
+	const filename = fileURLToPath(moduleUrl);
+	return path.dirname(filename);
+}

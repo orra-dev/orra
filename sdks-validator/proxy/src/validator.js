@@ -6,14 +6,13 @@
 
 import { parse } from 'yaml';
 import { readFileSync } from 'fs';
-import { join } from 'path';
 
 export class ProtocolValidator {
 	#contract;
 	
-	constructor() {
-		const contractPath = join(__dirname, '../../contracts/sdk.yaml');
-		const contractYaml = readFileSync(contractPath, 'utf8');
+	constructor(sdkContractPath) {
+		console.log('ProtocolValidator - sdkContractPath', sdkContractPath)
+		const contractYaml = readFileSync(sdkContractPath, 'utf8');
 		this.#contract = parse(contractYaml);
 	}
 	
@@ -29,11 +28,15 @@ export class ProtocolValidator {
 		if (!serviceId.startsWith('s_')) {
 			throw new Error('Invalid serviceId format');
 		}
+		
+		return this.validateApiKey(apiKey);
+	}
+	
+	validateApiKey(apiKey) {
 		if (!apiKey.startsWith('sk-orra-')) {
 			throw new Error('Invalid apiKey format');
 		}
-		
-		return true;
+		return true
 	}
 	
 	validateMessage(msg, direction = 'outbound') {
@@ -72,7 +75,7 @@ export class ProtocolValidator {
 	}
 	
 	#validateTaskRequest(msg) {
-		const required = ['id', 'executionId', 'serviceId', 'input'];
+		const required = [ 'id', 'executionId', 'serviceId', 'input' ];
 		for (const field of required) {
 			if (!(field in msg)) {
 				throw new Error(`Task request missing required field: ${field}`);
@@ -86,7 +89,7 @@ export class ProtocolValidator {
 	}
 	
 	#validateTaskResult(msg) {
-		const required = ['taskId', 'executionId', 'serviceId'];
+		const required = [ 'taskId', 'executionId', 'serviceId' ];
 		for (const field of required) {
 			if (!(field in msg)) {
 				throw new Error(`Task result missing required field: ${field}`);

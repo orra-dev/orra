@@ -24,8 +24,9 @@ services:
       dockerfile: Dockerfile
     container_name: orra-protocol-proxy
     environment:
-      - CONTROL_PLANE_URL=ws://control-plane:8005
+      - CONTROL_PLANE_URL=http://control-plane:8005
       - PROXY_PORT=8006
+      - SDK_CONTRACT_PATH=/app/contracts/sdk.yaml
     ports:
       - "8006:8006"
     depends_on:
@@ -34,7 +35,7 @@ services:
     networks:
       - sdk-test-network
     volumes:
-      - ../contracts:/app/contracts:ro
+      - ${PWD}/contracts:/app/contracts
 
 networks:
   sdk-test-network:
