@@ -62,7 +62,7 @@ type Project struct {
 	ID                string   `json:"id"`
 	APIKey            string   `json:"apiKey"`
 	AdditionalAPIKeys []string `json:"additionalAPIKeys"`
-	Webhooks          []string `json:"webhook"`
+	Webhooks          []string `json:"webhooks"`
 }
 
 type OrchestrationState struct {
