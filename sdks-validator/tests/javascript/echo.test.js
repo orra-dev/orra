@@ -4,8 +4,7 @@
  *  file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-import { test } from 'node:test';
-import assert from 'node:assert';
+import { expect, test, describe, beforeAll, afterEach } from '@jest/globals';
 import { createClient } from '@orra.dev/sdk'; // The actual Orra SDK
 
 const PROXY_URL = process.env.PROXY_URL || 'http://localhost:8006';
@@ -31,107 +30,113 @@ async function registerProject() {
 	};
 }
 
-test('echo service protocol conformance', async (t) => {
-	const { projectId, apiKey } = await registerProject();
-	assert.ok(apiKey, 'Should receive API key');
-	assert.ok(projectId, 'Should receive project ID');
+describe('Echo Service', () => {
+	let client;
+	let apiKey;
+	let projectId;
 	
-	const client = createClient({
-		orraUrl: PROXY_URL,
-		orraKey: apiKey,
-		persistenceOpts: {
-			method: 'custom',
-			customSave: async (serviceId) => {
-				console.log('Service ID saved:', serviceId);
-			},
-			customLoad: async () => {
-				return null;
-			}
+	beforeAll(async () => {
+		const registration = await registerProject();
+		apiKey = registration.apiKey;
+		projectId = registration.projectId;
+	});
+	
+	afterEach(() => {
+		if (client) {
+			client.close();
 		}
 	});
 	
-	// Register service using SDK
-	await client.registerService('Echo Service', {
-		description: 'A service that can echo a message sent to it.',
-		schema: {
-			input: {
-				type: 'object',
-				properties: {
-					message: { type: 'string' }
+	test('echo service protocol conformance', async () => {
+		// Verify registration
+		expect(apiKey).toBeTruthy();
+		expect(projectId).toBeTruthy();
+		
+		// Create client
+		client = createClient({
+			orraUrl: PROXY_URL,
+			orraKey: apiKey,
+			persistenceOpts: {
+				method: 'custom',
+				customSave: async (serviceId) => {
+					console.log('Service ID saved:', serviceId);
 				},
-				required: [ 'message' ]
-			},
-			output: {
-				type: 'object',
-				properties: {
-					message: { type: 'string' }
-				},
-				required: [ 'message' ]
-			}
-		}
-	});
-	
-	// Set up echo handler using SDK
-	client.startHandler(async (task) => {
-		return {
-			message: task.input.message
-		};
-	});
-	
-	// Trigger echo action through SDK
-	const orchestrationResponse = await fetch(`${PROXY_URL}/orchestrations`, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			'Authorization': `Bearer ${apiKey}`
-		},
-		body: JSON.stringify({
-			action: {
-				type: "echo",
-				content: "Echo this message"
-			},
-			data: [
-				{
-					field: "message",
-					value: "Hello World"
+				customLoad: async () => {
+					return null;
 				}
-			],
-			webhook: "http://localhost:8006/webhook-test"
-		})
-	});
-	
-	assert.ok(orchestrationResponse.ok, 'Orchestration request should succeed');
-	const orchestration = await orchestrationResponse.json();
-	
-	// Wait for orchestration completion
-	await new Promise(r => setTimeout(r, 1000));
-	
-	// Verify result
-	const resultResponse = await fetch(
-		`${process.env.PROXY_URL || 'http://localhost:8006'}/orchestrations/inspections/${orchestration.id}`,
-		{
-			headers: {
-				'Authorization': `Bearer ${apiKey}`
 			}
-		}
-	);
-	
-	assert.ok(resultResponse.ok, 'Should be able to fetch orchestration result');
-	const result = await resultResponse.json();
-	
-	assert.equal(result.status, 'completed', 'Orchestration should complete');
-	assert.deepEqual(
-		result.tasks[0].output,
-		{ message: 'Hello World' },
-		'Should echo back the message'
-	);
-	
-	// Cleanup
-	client.close();
-});
-
-process.on('unhandledRejection', (err) => {
-	console.error('Unhandled Rejection:', err);
-	process.exitCode = 1;
-	throw err;
+		});
+		
+		// Register service using SDK
+		await client.registerService('Echo Service', {
+			description: 'A service that can echo a message sent to it.',
+			schema: {
+				input: {
+					type: 'object',
+					properties: {
+						message: { type: 'string' }
+					},
+					required: [ 'message' ]
+				},
+				output: {
+					type: 'object',
+					properties: {
+						message: { type: 'string' }
+					},
+					required: [ 'message' ]
+				}
+			}
+		});
+		
+		// Set up echo handler using SDK
+		client.startHandler(async (task) => {
+			return {
+				message: task.input.message
+			};
+		});
+		
+		// Trigger echo action through SDK
+		const orchestrationResponse = await fetch(`${PROXY_URL}/orchestrations`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				'Authorization': `Bearer ${apiKey}`
+			},
+			body: JSON.stringify({
+				action: {
+					type: "echo",
+					content: "Echo this message"
+				},
+				data: [
+					{
+						field: "message",
+						value: "Hello World"
+					}
+				],
+				webhook: "http://localhost:8006/webhook-test"
+			})
+		});
+		
+		expect(orchestrationResponse.ok).toBeTruthy();
+		const orchestration = await orchestrationResponse.json();
+		
+		// Wait for orchestration completion
+		await new Promise(r => setTimeout(r, 1000));
+		
+		// Verify result
+		const resultResponse = await fetch(
+			`${process.env.PROXY_URL || 'http://localhost:8006'}/orchestrations/inspections/${orchestration.id}`,
+			{
+				headers: {
+					'Authorization': `Bearer ${apiKey}`
+				}
+			}
+		);
+		
+		expect(resultResponse.ok).toBeTruthy();
+		const result = await resultResponse.json();
+		
+		expect(result.status).toBe('completed');
+		expect(result.tasks[0].output).toEqual({ message: 'Hello World' });
+	});
 });

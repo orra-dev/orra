@@ -18,7 +18,11 @@ fi
 
 # Run tests
 echo "Running JavaScript implementation tests..."
-NODE_ENV="test" node --test "${DIR}"/*.test.js
+NODE_OPTIONS=--experimental-vm-modules NODE_ENV="test" npm run test \
+  --bail \
+  --verbose \
+  --force-exit \
+  "${DIR}"/*.test.js
 
 # Get exit code
 EXIT_CODE=$?
