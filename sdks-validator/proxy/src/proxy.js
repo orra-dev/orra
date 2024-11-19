@@ -12,7 +12,6 @@ import { createWebhookHandler } from './webhook-handler.js';
 
 export class ProtocolProxy {
 	constructor(controlPlaneUrl, sdkContractPath) {
-		console.log('ProtocolProxy - sdkContractPath', sdkContractPath)
 		this.controlPlaneUrl = controlPlaneUrl;
 		this.sdkContractPath = sdkContractPath
 		this.httpServer = null;

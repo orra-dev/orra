@@ -30,20 +30,23 @@ export function createWebSocketProxy(controlPlaneUrl, sdkContractPath) {
 					clientWs.on('message', (data) => {
 						try {
 							const msg = JSON.parse(data.toString());
-							validator.validateMessage(msg, 'outbound');
-							controlPlaneWs.send(data);
+							validator.validateMessage(msg, 'sdk-outbound');
+							controlPlaneWs.send(JSON.stringify(msg));
 						} catch (error) {
 							clientWs.close(4002, error.message);
+							console.error(`SDK-OUTBOUND -> Control plane protocol violation: ${error.message}`, '<--->',data.toString());
+							throw new Error(`SDK-OUTBOUND -> Control plane protocol violation: ${error.message}`)
 						}
 					});
 					
 					controlPlaneWs.on('message', (data) => {
 						try {
 							const msg = JSON.parse(data.toString());
-							validator.validateMessage(msg, 'inbound');
-							clientWs.send(data);
+							validator.validateMessage(msg, 'sdk-inbound');
+							clientWs.send(JSON.stringify(msg));
 						} catch (error) {
-							console.error('Control plane protocol violation:', error);
+							console.error(`SDK-INBOUND <- Control plane protocol violation: ${error.message}`, '<--->',data.toString());
+							throw new Error(`SDK-INBOUND <- Control plane protocol violation: ${error.message}`)
 						}
 					});
 				});

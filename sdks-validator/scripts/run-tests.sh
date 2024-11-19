@@ -11,9 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONTROL_PLANE_ROOT="$(cd "${SCRIPT_DIR}/../../controlplane" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REBUILD=${REBUILD:-true}
-
-echo "CONTROL_PLANE_ROOT: ${CONTROL_PLANE_ROOT}"
-echo "PROJECT_ROOT: ${PROJECT_ROOT}"
+WEBHOOK_URL=${WEBHOOK_URL:-http://protocol-proxy:8006/webhook-test}
 
 # Check if Docker daemon is running
 if (! docker stats --no-stream &> /dev/null); then
@@ -21,18 +19,20 @@ if (! docker stats --no-stream &> /dev/null); then
     exit 1
 fi
 
-# Start services
+echo "🪡 Validating SDKs against Orra SDK protocols..."
+echo ""
+
 echo "Starting test environment..."
-if [ "$REBUILD" = "true" ]; then
-    docker compose -f "${PROJECT_ROOT}/proxy/docker-compose.yaml" up --build -d
+if [ "$REBUILD" ==   "true" ]; then
+    docker compose -f "${PROJECT_ROOT}/proxy/docker-compose.yaml" up --build -d --quiet-pull > /dev/null 2>&1
 else
-    docker compose -f "${PROJECT_ROOT}/proxy/docker-compose.yaml" up -d
+    docker compose -f "${PROJECT_ROOT}/proxy/docker-compose.yaml" up -d --quiet-pull > /dev/null 2>&1
 fi
 
 # Function to cleanup on exit
 cleanup() {
   echo "Cleaning up test environment..."
-  docker compose -f "${PROJECT_ROOT}/proxy/docker-compose.yaml" down
+  docker compose -f "${PROJECT_ROOT}/proxy/docker-compose.yaml" down > /dev/null 2>&1
 }
 trap cleanup EXIT
 
@@ -43,6 +43,7 @@ FAILED=0
 # Track test results
 RESULTS_DIR="${PROJECT_ROOT}/test-results"
 mkdir -p "${RESULTS_DIR}"
+rm -rf "${RESULTS_DIR}/*.json"
 
 # Run tests for each implementation
 for IMPL_DIR in "${PROJECT_ROOT}"/tests/*/; do
@@ -50,29 +51,33 @@ for IMPL_DIR in "${PROJECT_ROOT}"/tests/*/; do
     IMPL_NAME=$(basename "$IMPL_DIR")
     echo "Testing $IMPL_NAME implementation..."
 
-    if [ -f "$IMPL_DIR/package.json" ]; then
-      echo "Running npm tests for $IMPL_NAME..."
-
-      # Run implementation-specific test script
-      if [ -f "$IMPL_DIR/run.sh" ]; then
-        if ! (cd "$IMPL_DIR" && bash "$IMPL_DIR"/run.sh); then
-          FAILED=1
-          echo "❌ $IMPL_NAME tests failed"
-        else
-          echo "✅ $IMPL_NAME tests passed"
-        fi
+    # Run implementation-specific test script
+    if [ -f "$IMPL_DIR/run.sh" ]; then
+      if ! (cd "$IMPL_DIR" && WEBHOOK_URL="$WEBHOOK_URL" bash "$IMPL_DIR"/run.sh); then
+        FAILED=1
+        echo "❌ $IMPL_NAME tests failed"
+      else
+        echo "✅ $IMPL_NAME tests passed"
       fi
     fi
   fi
 done
 
 # Generate test report
-echo "Generating test report..."
-jq -s '.' "${RESULTS_DIR}/*.json" > "${RESULTS_DIR}/report.json"
+if ls "${RESULTS_DIR}"/*.json 1> /dev/null 2>&1; then
+  echo ""
+  echo "Generating test report..."
+  jq -s '.' "${RESULTS_DIR}"/*.json > "${RESULTS_DIR}/report.json"
+else
+  echo "No JSON test result files found in ${RESULTS_DIR}"
+#  exit 1
+fi
 
 # Output summary
-echo "Test Summary:"
-echo "============"
-jq -r '.[] | "\(.implementation): \(.passed)/\(.total) tests passed"' "${RESULTS_DIR}/report.json"
+if [ -f "${RESULTS_DIR}/report.json" ]; then
+  echo "Test Summary:"
+  echo "============"
+  jq -r '.[] | "\(.implementation): \(.passed)/\(.total) tests passed"' "${RESULTS_DIR}/report.json"
+fi
 
 exit $FAILED

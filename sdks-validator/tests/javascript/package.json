@@ -3,19 +3,19 @@
 	"version": "1.0.0",
 	"type": "module",
 	"scripts": {
-		"test": "node node_modules/jest/bin/jest.js"
+		"test": "node node_modules/jest/bin/jest.js --detectOpenHandles"
 	},
 	"jest": {
 		"testEnvironment": "node",
 		"bail": true
 	},
 	"dependencies": {
-		"@orra.dev/sdk": "file:../../../sdks/js",
-		"node-fetch": "^3.3.2",
-		"ws": "^8.18.0",
 		"@jest/globals": "^29.7.0",
-		"jest": "^29.7.0"
-
+		"@orra.dev/sdk": "file:../../../sdks/js",
+		"@testing-library/dom": "^10.4.0",
+		"jest": "^29.7.0",
+		"node-fetch": "^3.3.2",
+		"ws": "^8.18.0"
 	},
 	"engines": {
 		"node": ">=18"

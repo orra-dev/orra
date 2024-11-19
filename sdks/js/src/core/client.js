@@ -33,6 +33,8 @@ class OrraSDK {
 	#inProgressTasks = new Map();
 	#maxProcessedTasksAge = 24 * 60 * 60 * 1000; // 24 hours
 	#maxInProgressAge = 30 * 60 * 1000; // 30 minutes
+	#userInitiatedClose = false;
+	#cacheCleanupIntervalId = null;
 	
 	constructor(apiUrl, apiKey, persistenceOpts={}) {
 		this.#apiUrl = apiUrl;
@@ -103,6 +105,9 @@ class OrraSDK {
 		description: undefined,
 		schema: undefined,
 	}) {
+		if (this.#userInitiatedClose){
+			throw new Error(`Cannot register ${kind} after closing down SDK connections`)
+		}
 		await this.loadServiceKey(); // Try to load an existing service id
 		
 		this.logger.debug('Registering service/agent', {
@@ -162,6 +167,10 @@ class OrraSDK {
 	}
 	
 	#connect() {
+		if (this.#userInitiatedClose){
+			throw new Error(`Cannot request halted as SDK connections closed permanently.`)
+		}
+		
 		const wsUrl = this.#apiUrl.replace('http', 'ws');
 		this.#ws = new WebSocket(`${wsUrl}/ws?serviceId=${this.serviceId}&apiKey=${this.#apiKey}`);
 		
@@ -180,12 +189,6 @@ class OrraSDK {
 		this.#ws.onmessage = (event) => {
 			const data = event.data;
 			
-			if (data === 'ping') {
-				this.logger.trace('Received ping');
-				this.#handlePing();
-				return;
-			}
-			
 			let parsedData;
 			try {
 				parsedData = JSON.parse(data);
@@ -199,6 +202,9 @@ class OrraSDK {
 			}
 			
 			switch (parsedData.type) {
+				case 'ping':
+					this.#handlePing(parsedData);
+					break;
 				case 'ACK':
 					this.#handleAcknowledgment(parsedData);
 					break;
@@ -214,6 +220,12 @@ class OrraSDK {
 		
 		this.#ws.onclose = (event) => {
 			this.#isConnected = false;
+			
+			if (this.#userInitiatedClose) {
+				this.logger.info('WebSocket closed by user', { code: event.code, reason: event.reason });
+				return; // Do not reconnect
+			}
+			
 			for (const message of this.#pendingMessages.values()) {
 				this.#messageQueue.push(message);
 			}
@@ -241,7 +253,11 @@ class OrraSDK {
 		};
 	}
 	
-	#handlePing() {
+	#handlePing(data) {
+		if (data.serviceId !== this.serviceId){
+			this.logger.trace(`Received PING for unknown serviceId: ${data.serviceId}`);
+			return
+		}
 		this.logger.trace("Received PING");
 		this.#sendPong();
 		this.logger.trace("Sent PONG");
@@ -489,7 +505,7 @@ class OrraSDK {
 	}
 	
 	#startProcessedTasksCacheCleanup() {
-		setInterval(() => {
+		this.#cacheCleanupIntervalId = setInterval(() => {
 			const now = Date.now();
 			let processedTasksRemoved = 0;
 			let inProgressTasksRemoved = 0;
@@ -524,8 +540,19 @@ class OrraSDK {
 	}
 	
 	close() {
-		if (this.#ws) {
-			this.#ws.close();
+		this.logger.info('User initiated WebSocket close');
+		// Set flag indicating that the closure was initiated by the user
+		this.#userInitiatedClose = true;
+		
+		// Close WebSocket cleanly with normal closure code (1000)
+		if (this.#ws.readyState === WebSocket.OPEN || this.#ws.readyState === WebSocket.CONNECTING) {
+			this.#ws.close(1000, 'Normal Closure');
+		}
+		
+		if (this.#cacheCleanupIntervalId !== null) {
+			clearInterval(this.#cacheCleanupIntervalId);
+			this.logger.trace('Cleared cache cleanup interval after user initiated close');
+			this.#cacheCleanupIntervalId = null;
 		}
 	}
 }

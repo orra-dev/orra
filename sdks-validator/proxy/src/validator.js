@@ -6,6 +6,16 @@
 
 import { parse } from 'yaml';
 import { readFileSync } from 'fs';
+import assert from 'node:assert';
+
+const CONTRACT_MESSAGE_TYPE_MAPPING = {
+	'task_request': 'TaskRequest',
+	'task_result': 'TaskResult',
+	'task_status': 'TaskStatus',
+	'ping': 'Ping',
+	'pong': 'Pong',
+	'ACK': 'Ack'
+}
 
 export class ProtocolValidator {
 	#contract;
@@ -19,43 +29,32 @@ export class ProtocolValidator {
 	validateConnection(params) {
 		const { serviceId, apiKey } = params;
 		
-		// Required parameters
-		if (!serviceId || !apiKey) {
-			throw new Error('serviceId and apiKey are required');
-		}
-		
-		// Format validation
-		if (!serviceId.startsWith('s_')) {
-			throw new Error('Invalid serviceId format');
-		}
-		
+		assert(serviceId, 'serviceId is required');
+		assert(apiKey, 'apiKey is required');
+		assert(serviceId.startsWith('s_'), 'Invalid serviceId format');
+
 		return this.validateApiKey(apiKey);
 	}
 	
 	validateApiKey(apiKey) {
-		if (!apiKey.startsWith('sk-orra-')) {
-			throw new Error('Invalid apiKey format');
-		}
+		assert(apiKey.startsWith('sk-orra-'), 'Invalid apiKey format');
 		return true
 	}
 	
-	validateMessage(msg, direction = 'outbound') {
-		if (!msg.type) {
-			throw new Error('Message missing type');
+	validateMessage(msg, direction = 'sdk-outbound') {
+		if (direction === 'sdk-outbound'){
+			msg = msg.payload
 		}
 		
-		// Get expected message format from contract
-		const schema = this.#getMessageSchema(msg.type, direction);
-		if (!schema) {
-			throw new Error(`Unknown message type: ${msg.type}`);
-		}
+		assert(msg.type, 'Message missing type');
+		assert(CONTRACT_MESSAGE_TYPE_MAPPING[msg.type], `Unknown message type: ${msg.type}`);
 		
-		// Echo scenario specific validation
-		if (msg.type === 'task_request') {
-			this.#validateTaskRequest(msg);
-		} else if (msg.type === 'task_result') {
-			this.#validateTaskResult(msg);
-		}
+		const schema = this.getMessageSchema(CONTRACT_MESSAGE_TYPE_MAPPING[msg.type], direction);
+		assert(schema, `Schema is missing for message type: ${msg.type}`);
+		
+		const methodName = `validate${CONTRACT_MESSAGE_TYPE_MAPPING[msg.type]}`;
+		assert(typeof this[methodName] === 'function', `No validation method found for message type: ${msg.type}`);
+		this[methodName](msg, schema);
 		
 		return true;
 	}
@@ -67,42 +66,47 @@ export class ProtocolValidator {
 			'health_check': 100    // 100ms max for health check response
 		};
 		
-		if (duration > limits[operation]) {
-			throw new Error(`${operation} exceeded ${limits[operation]}ms limit`);
-		}
-		
+		assert(duration <= limits[operation], `${operation} exceeded ${limits[operation]}ms limit`);
 		return true;
 	}
 	
-	#validateTaskRequest(msg) {
-		const required = [ 'id', 'executionId', 'serviceId', 'input' ];
-		for (const field of required) {
-			if (!(field in msg)) {
-				throw new Error(`Task request missing required field: ${field}`);
-			}
+	validateAck(msg, schema) {
+		for (const field of schema.required) {
+			assert(field in msg, `Acknowledgement message missing required field: ${field}`);
 		}
-		
-		// Echo task specific
-		if (!msg.input?.message) {
-			throw new Error('Echo task must include message in input');
+		console.assert(schema.properties.type.enum[0] === msg.type, 'Type incorrect for an acknowledgement message');
+	}
+	
+	validatePing(msg, schema) {
+		for (const field of schema.required) {
+			assert(field in msg, `Ping request missing required field: ${field}`);
+		}
+		console.assert(schema.properties.type.enum[0] === msg.type, 'Type incorrect for a ping message');
+	}
+	
+	validatePong(msg, schema) {
+		for (const field of schema.required) {
+			assert(field in msg, `Pong request missing required field: ${field}`);
+		}
+		console.assert(schema.properties.type.enum[0] === msg.type, 'Type incorrect for a pong message');
+	}
+	
+	validateTaskRequest(msg, schema) {
+		for (const field of schema.required) {
+			assert(field in msg, `Task request missing required field: ${field}`);
 		}
 	}
 	
-	#validateTaskResult(msg) {
-		const required = [ 'taskId', 'executionId', 'serviceId' ];
-		for (const field of required) {
-			if (!(field in msg)) {
-				throw new Error(`Task result missing required field: ${field}`);
-			}
+	validateTaskResult(msg, schema) {
+		for (const field of schema.required) {
+			assert(field in msg, `Task result missing required field: ${field}`);
 		}
 		
 		// Must have either result or error
-		if (!msg.result && !msg.error) {
-			throw new Error('Task result must include either result or error');
-		}
+		assert(msg.result || msg.error, 'Task result must include either result or error');
 	}
 	
-	#getMessageSchema(type, direction) {
+	getMessageSchema(type, direction) {
 		console.log('getMessageSchema', type, direction);
 		const messages = this.#contract.components.messages;
 		return messages[type]?.payload;

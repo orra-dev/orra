@@ -10,17 +10,15 @@ set -e
 # Directory containing this script
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-# Install dependencies if needed
-if [ ! -d "$DIR/node_modules" ]; then
-  echo "Installing dependencies..."
-  npm install --prefix "$DIR"
-fi
+echo "Installing dependencies..."
+rm -rf "${DIR}/node_modules" "${DIR}/package-lock.json"
+npm install --prefix "$DIR" > /dev/null 2>&1
 
 # Run tests
 echo "Running JavaScript implementation tests..."
-NODE_OPTIONS=--experimental-vm-modules NODE_ENV="test" npm run test \
+NODE_OPTIONS="--experimental-vm-modules --no-warnings" \
+  NODE_ENV="test" npm run test \
   --bail \
-  --verbose \
   --force-exit \
   "${DIR}"/*.test.js
 
@@ -33,6 +31,6 @@ echo "{
   \"passed\": $([[ $EXIT_CODE == 0 ]] && echo "1" || echo "0"),
   \"total\": 1,
   \"timestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"
-}" > "${RESULTS_DIR:-../test-results}/javascript.json"
+}" > "${RESULTS_DIR:-../../test-results}/javascript.json"
 
 exit $EXIT_CODE

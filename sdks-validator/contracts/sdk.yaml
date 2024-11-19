@@ -151,11 +151,13 @@ components:
       title: Health check request
       payload:
         type: object
-        required: [type]
+        required: [type, serviceId]
         properties:
           type:
             type: string
             enum: [ping]
+          serviceId:
+            type: string
 
     Pong:
       name: Pong
@@ -169,6 +171,20 @@ components:
             enum: [pong]
           serviceId:
             type: string
+
+    Ack:
+      name: Ack
+      title: Control plane acknowledgement that message has been received
+      payload:
+        type: object
+        required: [type, id]
+        properties:
+          type:
+            type: string
+            enum: [ACK]
+          id:
+            type: string
+            description: Unique sdk message identifier
 
 x-conformance-tests:
   service_lifecycle:

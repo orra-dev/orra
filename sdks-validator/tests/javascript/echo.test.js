@@ -8,15 +8,15 @@ import { expect, test, describe, beforeAll, afterEach } from '@jest/globals';
 import { createClient } from '@orra.dev/sdk'; // The actual Orra SDK
 
 const PROXY_URL = process.env.PROXY_URL || 'http://localhost:8006';
+const WEBHOOK_URL = process.env.WEBHOOK_URL || `http://localhost:8006/webhook-test`;
 
 async function registerProject() {
-	console.log('PROXY_URL', PROXY_URL)
 	const response = await fetch(`${PROXY_URL}/register/project`, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json'
 		},
-		body: JSON.stringify({})
+		body: JSON.stringify({ webhooks: [ WEBHOOK_URL ] })
 	});
 	
 	if (!response.ok) {
@@ -59,7 +59,6 @@ describe('Echo Service', () => {
 			persistenceOpts: {
 				method: 'custom',
 				customSave: async (serviceId) => {
-					console.log('Service ID saved:', serviceId);
 				},
 				customLoad: async () => {
 					return null;
@@ -95,7 +94,6 @@ describe('Echo Service', () => {
 			};
 		});
 		
-		// Trigger echo action through SDK
 		const orchestrationResponse = await fetch(`${PROXY_URL}/orchestrations`, {
 			method: 'POST',
 			headers: {
@@ -113,30 +111,45 @@ describe('Echo Service', () => {
 						value: "Hello World"
 					}
 				],
-				webhook: "http://localhost:8006/webhook-test"
+				webhook: WEBHOOK_URL
 			})
 		});
 		
 		expect(orchestrationResponse.ok).toBeTruthy();
 		const orchestration = await orchestrationResponse.json();
 		
-		// Wait for orchestration completion
-		await new Promise(r => setTimeout(r, 1000));
-		
-		// Verify result
-		const resultResponse = await fetch(
-			`${process.env.PROXY_URL || 'http://localhost:8006'}/orchestrations/inspections/${orchestration.id}`,
-			{
-				headers: {
-					'Authorization': `Bearer ${apiKey}`
+		const result = await poll(async () => {
+			const resultResponse = await fetch(
+				`${PROXY_URL}/orchestrations/inspections/${orchestration.id}`,
+				{
+					headers: {
+						'Authorization': `Bearer ${apiKey}`
+					}
+				}
+			);
+			
+			if (resultResponse.ok) {
+				const resultData = await resultResponse.json();
+				if (resultData.status === 'completed') {
+					return resultData;
 				}
 			}
-		);
+			
+			return null;
+		},15000, 1000); // Wait up to 10 seconds, checking every second
 		
-		expect(resultResponse.ok).toBeTruthy();
-		const result = await resultResponse.json();
-		
-		expect(result.status).toBe('completed');
 		expect(result.tasks[0].output).toEqual({ message: 'Hello World' });
-	});
+	}, 20000);
 });
+
+const poll = async (fn, timeout = 5000, interval = 500) => {
+	const endTime = Date.now() + timeout;
+	
+	while (Date.now() < endTime) {
+		const result = await fn();
+		if (result) return result;
+		await new Promise((resolve) => setTimeout(resolve, interval));
+	}
+	
+	throw new Error('Polling timed out after ' + timeout + 'ms');
+};
