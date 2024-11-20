@@ -58,7 +58,7 @@ describe('Echo Service', () => {
 			orraKey: apiKey,
 			persistenceOpts: {
 				method: 'custom',
-				customSave: async (serviceId) => {
+				customSave: async () => {
 				},
 				customLoad: async () => {
 					return null;
@@ -67,7 +67,7 @@ describe('Echo Service', () => {
 		});
 		
 		// Register service using SDK
-		await client.registerService('Echo Service', {
+		await client.registerService('echo-service', {
 			description: 'A service that can echo a message sent to it.',
 			schema: {
 				input: {
