@@ -103,7 +103,7 @@ Example log sequence:
 
 Services can update their capabilities at runtime:
 ```javascript
-await client.registerService('AIAgent', {
+await client.registerService('ai-agent', {
   schema: {
     input: {
       // New capability added
@@ -147,7 +147,7 @@ orra inspect -d o_xxxxxxxxxxxxxx
 
 ┌─ Task Execution Details
 │
-│ InventoryService (task1)
+│ inventory-service (task1)
 │ ──────────────────────────────────────────────────
 │ 14:07:43  ◎ Processing
 │ 14:07:43  ● Completed

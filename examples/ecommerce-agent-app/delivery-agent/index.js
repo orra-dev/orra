@@ -30,7 +30,7 @@ app.get('/health', (req, res) => {
 async function startService() {
 	try {
 		// Register the delivery agent with Orra
-		await orra.registerAgent('Delivery Agent', {
+		await orra.registerAgent('delivery-agent', {
 			description: 'An agent that helps customers with intelligent delivery estimation dates and routing for online shopping.',
 			schema
 		});
