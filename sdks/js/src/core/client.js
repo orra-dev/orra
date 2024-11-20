@@ -264,8 +264,8 @@ class OrraSDK {
 	}
 	
 	#sendPong() {
-		if (this.#isConnected && this.#ws.readyState === WebSocket.OPEN) {
-			this.#ws.send(JSON.stringify({ id: "pong", payload: { type: 'pong', serviceId: this.serviceId } }));
+		if (this.#isConnected && this?.#ws?.readyState === WebSocket.OPEN) {
+			this?.#ws?.send(JSON.stringify({ id: "pong", payload: { type: 'pong', serviceId: this.serviceId } }));
 		}
 	}
 	
@@ -457,7 +457,7 @@ class OrraSDK {
 			type: message.type
 		});
 		
-		if (this.#isConnected && this.#ws.readyState === WebSocket.OPEN) {
+		if (this.#isConnected && this?.#ws?.readyState === WebSocket.OPEN) {
 			try {
 				this.#ws.send(JSON.stringify(wrappedMessage));
 				this.logger.debug('Message sent successfully', {
@@ -495,7 +495,7 @@ class OrraSDK {
 	}
 	
 	#sendQueuedMessages() {
-		while (this.#messageQueue.length > 0 && this.#isConnected && this.#ws.readyState === WebSocket.OPEN) {
+		while (this.#messageQueue.length > 0 && this.#isConnected && this?.#ws?.readyState === WebSocket.OPEN) {
 			const message = this.#messageQueue.shift();
 			this.#ws.send(JSON.stringify(message));
 			this.logger.debug('Sent queued message', {
@@ -545,8 +545,8 @@ class OrraSDK {
 		this.#userInitiatedClose = true;
 		
 		// Close WebSocket cleanly with normal closure code (1000)
-		if (this.#ws.readyState === WebSocket.OPEN || this.#ws.readyState === WebSocket.CONNECTING) {
-			this.#ws.close(1000, 'Normal Closure');
+		if (this?.#ws?.readyState === WebSocket.OPEN || this?.#ws?.readyState === WebSocket.CONNECTING) {
+			this?.#ws?.close(1000, 'Normal Closure');
 		}
 		
 		if (this.#cacheCleanupIntervalId !== null) {
