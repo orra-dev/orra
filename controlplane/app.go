@@ -173,9 +173,10 @@ func (app *App) RegisterServiceOrAgent(w http.ResponseWriter, r *http.Request, s
 	}
 
 	if err := json.NewEncoder(w).Encode(map[string]any{
-		"id":     service.ID,
-		"name":   service.Name,
-		"status": Registered,
+		"id":      service.ID,
+		"name":    service.Name,
+		"status":  Registered,
+		"version": service.Version,
 	}); err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
 		return
