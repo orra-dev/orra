@@ -194,9 +194,14 @@ x-conformance-tests:
         description: Service registers successfully
         action: register_service
         input:
-          name: Test Service
+          name: test-service
           schema:
             input:
+              type: object
+              properties:
+                message:
+                  type: string
+            output:
               type: object
               properties:
                 message:

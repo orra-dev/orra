@@ -80,6 +80,18 @@ export class ProtocolProxy {
 		});
 	}
 	
+	findConformanceTestCase(conformanceTests, targetId) {
+		for (const [_, test] of Object.entries(conformanceTests)) {
+			if (test?.steps) {
+				const step = test?.steps?.find(step => step.id === targetId);
+				if (step) {
+					return step;
+				}
+			}
+		}
+		return null;
+	}
+	
 	async handleConformanceTest(req, res) {
 		let body = '';
 		for await (const chunk of req) {
@@ -93,8 +105,7 @@ export class ProtocolProxy {
 			
 			// Load test scenario from contract
 			const conformanceTests = this.validator.contract['x-conformance-tests'];
-			const taskTests = conformanceTests?.task_processing;
-			const testCase = taskTests?.steps?.find(step => step.id === testId);
+			const testCase = this.findConformanceTestCase(conformanceTests, testId)
 			
 			if (!testCase) {
 				res.writeHead(404);
@@ -143,22 +154,60 @@ export class ProtocolProxy {
 	}
 	
 	*generateTestMessages(testCase, serviceId, testRunId) {
+		// Base message structure
 		const baseMessage = {
 			type: 'task_request',
 			id: testRunId,
 			serviceId,
-			input: testCase?.input,
-			executionId: `exec_test__${testRunId}`,
-			idempotencyKey: `idem_test__${testRunId}`
+			input: testCase?.input
 		};
 		
-		if (testCase?.input?.duplicate) {
-			// Send multiple times for duplicate testing
-			yield baseMessage;
-			yield baseMessage;
-			yield baseMessage;
-		} else {
-			yield baseMessage;
+		switch (testCase.id) {
+			case 'health_check':
+				yield {
+					...baseMessage,
+					executionId: `health_check__${testRunId}`,
+					idempotencyKey: `health_check__${testRunId}`
+				};
+				break;
+			
+			case 'reconnection':
+				yield {
+					...baseMessage,
+					executionId: `reconnect__${testRunId}`,
+					idempotencyKey: `reconnect__${testRunId}`
+				};
+				break;
+			
+			case 'message_queueing':
+				// Send multiple messages to test queueing
+				for (let i = 1; i <= 3; i++) {
+					yield {
+						...baseMessage,
+						executionId: `queue__${testRunId}__${i}`,
+						idempotencyKey: `queue__${testRunId}__${i}`,
+						input: { ...testCase?.input, message: `sending ${i}` }
+					};
+				}
+				break;
+			
+			default:
+				// For other tests like exactly_once
+				if (testCase?.input?.duplicate) {
+					for (let i = 0; i < 3; i++) {
+						yield {
+							...baseMessage,
+							executionId: `exec_test__${testRunId}`,
+							idempotencyKey: `idem_test__${testRunId}`
+						};
+					}
+				} else {
+					yield {
+						...baseMessage,
+						executionId: `exec_test__${testRunId}`,
+						idempotencyKey: `idem_test__${testRunId}`
+					};
+				}
 		}
 	}
 	
