@@ -18,12 +18,11 @@ const CONTRACT_MESSAGE_TYPE_MAPPING = {
 }
 
 export class ProtocolValidator {
-	#contract;
+	contract;
 	
 	constructor(sdkContractPath) {
-		console.log('ProtocolValidator - sdkContractPath', sdkContractPath)
 		const contractYaml = readFileSync(sdkContractPath, 'utf8');
-		this.#contract = parse(contractYaml);
+		this.contract = parse(contractYaml);
 	}
 	
 	validateConnection(params) {
@@ -108,7 +107,7 @@ export class ProtocolValidator {
 	
 	getMessageSchema(type, direction) {
 		console.log('getMessageSchema', type, direction);
-		const messages = this.#contract.components.messages;
+		const messages = this.contract.components.messages;
 		return messages[type]?.payload;
 	}
 }
