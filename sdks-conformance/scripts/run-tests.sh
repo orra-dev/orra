@@ -18,7 +18,7 @@ if (! docker stats --no-stream &> /dev/null); then
     exit 1
 fi
 
-echo "🪡 Validating SDKs against Orra SDK protocols..."
+echo "🪡🪡🪡 Running the Orra SDK Conformance Suite..."
 echo ""
 
 echo "Starting test environment..."
