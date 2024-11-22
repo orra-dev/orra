@@ -12,6 +12,7 @@ export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookRe
 	const validator = new ProtocolValidator(sdkContractPath);
 	const activeConnections = new Map();
 	const metrics = new MetricsCollector();
+	let shouldDisconnectNext = false;
 	
 	class ConnectionManager {
 		constructor(serviceId, clientWs, controlPlaneWs) {
@@ -64,9 +65,11 @@ export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookRe
 		
 		isTestResult(payload) {
 			return payload.type === 'task_result' &&
-				(payload.executionId.includes('exec_test_') ||
+				(
+					payload.executionId.includes('exec_test_') ||
 					payload.executionId.includes('queue__') ||
-					payload.executionId.includes('large_payload__')
+					payload.executionId.includes('large_payload__') ||
+					payload.executionId.includes('mid_task__')
 				);
 		}
 		
@@ -133,6 +136,7 @@ export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookRe
 			if (execId.startsWith('reconnect__')) return 'Reconnect';
 			if (execId.startsWith('queue__')) return 'Queue';
 			if (execId.startsWith('large_payload__')) return 'LargePayload';
+			if (execId.startsWith('mid_task__')) return 'MidTaskDisconnect';
 			return null;
 		}
 		
@@ -228,7 +232,6 @@ export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookRe
 			if (!initialConnection) return;
 			
 			const sequenceNum = parseInt(this.message.executionId.split('__')[2]);
-			console.log('****sequenceNum', sequenceNum);
 			
 			if (sequenceNum === 1) {
 				// Force disconnect after first message
@@ -269,7 +272,7 @@ export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookRe
 				type: 'message_ordering',
 				success: isOrdered,
 				messageOrder,
-				expectedOrder: [1, 2, 3],
+				expectedOrder: [ 1, 2, 3 ],
 				timestamp: new Date().toISOString()
 			});
 			testResult.status = isOrdered ? 'completed' : 'failed';
@@ -334,6 +337,62 @@ export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookRe
 			webhookResults.set(this.testId, testResult);
 		}
 		
+		handleMidTaskDisconnect() {
+			const conn = this.activeConnections.get(this.serviceId);
+			if (!conn) return;
+			
+			// Record start of long task
+			this.recordTestEvent('long_task_started');
+			this.message
+			// Wait 1000ms then force disconnect
+			setTimeout(() => {
+				if (conn.simulateDisconnect()) {
+					this.recordTestEvent('connection_dropped');
+					
+					// Wait 2000ms then restore connection
+					setTimeout(() => {
+						// Connection will be restored automatically by SDK
+						this.recordTestEvent('connection_restored');
+						
+						// Start monitoring for task completion
+						this.monitorTaskCompletion();
+					}, 2000);
+				}
+			}, 1000);
+		}
+		
+		monitorTaskCompletion() {
+			const timeoutId = setTimeout(() => {
+				const testResult = this.webhookResults.get(this.testId);
+				if (!testResult || testResult.status !== 'completed') {
+					testResult.status = 'failed';
+					testResult.results.push({
+						type: 'task_completion',
+						error: 'Task did not complete after reconnection',
+						timestamp: new Date().toISOString()
+					});
+					this.webhookResults.set(this.testId, testResult);
+				}
+			}, 10000);
+			
+			// Clean up timeout if test completes
+			const testResult = this.webhookResults.get(this.testId);
+			if (testResult) {
+				testResult.cleanup = () => clearTimeout(timeoutId);
+			}
+		}
+		
+		recordTestEvent(eventType) {
+			const testResult = this.webhookResults.get(this.testId);
+			if (testResult) {
+				testResult.results.push({
+					type: eventType,
+					timestamp: new Date().toISOString()
+				});
+				this.webhookResults.set(this.testId, testResult);
+			}
+		}
+		
 		recordDisconnectEvent() {
 			const testResult = this.webhookResults.get(this.testId);
 			if (testResult) {
@@ -357,6 +416,13 @@ export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookRe
 					apiKey: url.searchParams.get('apiKey')
 				});
 				
+				if (shouldDisconnectNext) {
+					shouldDisconnectNext = false;
+					console.log(`Test-triggered WebSocket disconnect for service: ${serviceId}`);
+					clientWs.terminate(); // Force disconnect instead of clean close
+					return;
+				}
+				
 				const controlPlaneWs = new WebSocket(controlPlaneUrl + req.url);
 				
 				controlPlaneWs.on('open', () => {
@@ -368,6 +434,10 @@ export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookRe
 			} catch (error) {
 				clientWs.close(4000, error.message);
 			}
+		},
+		
+		enableDisconnectNext: () => {
+			shouldDisconnectNext = true;
 		},
 		
 		hasActiveConnection: (serviceId) => {

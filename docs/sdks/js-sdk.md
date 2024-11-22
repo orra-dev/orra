@@ -107,29 +107,29 @@ const client = createClient({
 
 // For stateless services
 await client.registerService('service-name', {
-  description: 'What this service does',
-  schema: {
-    input: {
-      type: 'object',
-      properties: {
-        // Define expected inputs
+   description: 'What this service does',
+   schema: {
+      input: {
+         type: 'object',
+         properties: {
+            // Define expected inputs
+         }
+      },
+      output: {
+         type: 'object',
+         properties: {
+            // Define expected outputs
+         }
       }
-    },
-    output: {
-      type: 'object',
-      properties: {
-        // Define expected outputs
-      }
-    }
-  }
+   }
 });
 
 // For AI agents
 await client.registerAgent('agent-name', {
-  description: 'What this agent does',
-  schema: {
-    // Same schema structure as services
-  }
+   description: 'What this agent does',
+   schema: {
+      // Same schema structure as services
+   }
 });
 ```
 
@@ -202,22 +202,22 @@ Orra maintains service identity across restarts using persistence. This is cruci
 
 ```javascript
 const client = createClient({
-  orraUrl: process.env.ORRA_URL,
-  orraKey: process.env.ORRA_API_KEY,
-  persistenceOpts: {
-    // 1. File-based persistence (default)
-    method: 'file',
-    filePath: './custom/path/service-key.json',
-    
-    // 2. Custom persistence (e.g., database)
-    method: 'custom',
-    customSave: async (serviceId) => {
-      await db.services.save(serviceId);
-    },
-    customLoad: async () => {
-      return await db.services.load();
-    }
-  }
+   orraUrl: process.env.ORRA_URL,
+   orraKey: process.env.ORRA_API_KEY,
+   persistenceOpts: {
+      // 1. File-based persistence (default)
+      method: 'file',
+      filePath: './custom/path/service-key.json',
+
+      // 2. Custom persistence (e.g., database)
+      method: 'custom',
+      customSave: async (serviceId) => {
+         await db.services.save(serviceId);
+      },
+      customLoad: async () => {
+         return await db.services.load();
+      }
+   }
 });
 ```
 

@@ -122,17 +122,18 @@ await client.registerService('ai-agent', {
 #### 2. Custom Persistence
 
 Control how service identity persists:
+
 ```javascript
 const client = createClient({
-  persistenceOpts: {
-    method: 'custom',
-    customSave: async (serviceId) => {
-      await redis.set(`service:${serviceId}`, serviceId);
-    },
-    customLoad: async () => {
-      return await redis.get('service:id');
-    }
-  }
+	persistenceOpts: {
+		method: 'custom',
+		customSave: async (serviceId) => {
+			await redis.set(`service:${serviceId}`, serviceId);
+		},
+		customLoad: async () => {
+			return await redis.get('service:id');
+		}
+	}
 });
 ```
 

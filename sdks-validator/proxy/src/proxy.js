@@ -29,6 +29,13 @@ export class ProtocolProxy {
 		const httpProxy = createHttpProxy(this.controlPlaneUrl, this.sdkContractPath);
 		const webhookHandler = createWebhookHandler(this.webhookResults);
 		
+		// Setup WebSocket handling
+		this.wsProxy = createWebSocketProxy(
+			this.controlPlaneUrl,
+			this.sdkContractPath,
+			this.webhookResults);
+		this.wsServer.on('connection', this.wsProxy.handleConnection);
+		
 		// Handle HTTP requests
 		this.httpServer.on('request', (req, res) => {
 			const url = new URL(req.url, `http://${req.headers.host}`);
@@ -44,6 +51,13 @@ export class ProtocolProxy {
 				return;
 			}
 			
+			if (url.pathname === '/test-control/enable-disconnect' && req.method === 'POST') {
+				this.wsProxy.enableDisconnectNext()
+				res.writeHead(200);
+				res.end(JSON.stringify({ status: 'ok' }));
+				return;
+			}
+			
 			// Handle webhook endpoint
 			if (url.pathname === '/webhook-test') {
 				webhookHandler.handleWebhook(req, res);
@@ -53,13 +67,6 @@ export class ProtocolProxy {
 			// Forward all other requests to control plane
 			httpProxy.forward(req, res);
 		});
-		
-		// Setup WebSocket handling
-		this.wsProxy = createWebSocketProxy(
-			this.controlPlaneUrl,
-			this.sdkContractPath,
-			this.webhookResults);
-		this.wsServer.on('connection', this.wsProxy.handleConnection);
 		
 		// Start listening
 		return new Promise((resolve) => {
@@ -100,6 +107,9 @@ export class ProtocolProxy {
 		
 		try {
 			const { serviceId, testId } = JSON.parse(body);
+			
+			console.log('handleConformanceTest - serviceId', serviceId);
+			console.log('handleConformanceTest - testId', testId);
 			
 			await this.waitForServiceConnection(serviceId);
 			
@@ -142,7 +152,7 @@ export class ProtocolProxy {
 	
 	async waitForServiceConnection(serviceId, timeout = 5000) {
 		const start = Date.now();
-		
+		console.log('waitForServiceConnection - serviceId', serviceId);
 		while (Date.now() - start < timeout) {
 			if (this.wsProxy.hasActiveConnection(serviceId)) {
 				return true;
@@ -196,6 +206,15 @@ export class ProtocolProxy {
 					...baseMessage,
 					executionId: `large_payload__${testRunId}`,
 					idempotencyKey: `large_payload__${testRunId}`
+				};
+				break;
+			
+			case 'mid_task_disconnect':
+				yield {
+					...baseMessage,
+					executionId: `mid_task__${testRunId}`,
+					idempotencyKey: `mid_task__${testRunId}`,
+					input: { duration: 5000 } // 5s task
 				};
 				break;
 			
