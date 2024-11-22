@@ -13,6 +13,13 @@ info:
     - Message queueing during disconnection
     - Health monitoring via ping/pong
     - Proper error propagation
+    
+    Task Execution Model:
+    - SDKs are responsible for task execution and result reporting
+    - Task timeouts and retry policies are managed by the control plane
+    - Long-running tasks may be retried multiple times by the control plane
+    - SDKs should focus on maintaining exactly-once execution guarantees
+    - The control plane is the source of truth for task lifecycle and completion status
 
 servers:
   controlPlane:
@@ -295,7 +302,7 @@ x-conformance-tests:
         action: process_task
         input:
           message: "a" # Test runner will expand to MAX_MESSAGE_SIZE
-          size: MAX_MESSAGE_SIZE  # e.g., 10MB
+          size: 10485760  # 10MB
         expect:
           - type: task_result
             timeout: 10000  # Longer timeout for large payloads
@@ -303,20 +310,6 @@ x-conformance-tests:
               - result_present: true
               - size_matches: true
               - no_truncation: true
-
-      - id: task_timeout
-        description: Handles task execution timeout correctly
-        action: process_task
-        input:
-          message: "timeout_trigger"
-          execution_time: 35000  # Exceeds 30s timeout
-        expect:
-          - type: task_result
-            timeout: 40000
-            validate:
-              - error_present: true
-              - error_type: "task_timeout"
-              - result_absent: true
 
   connection_resilience:
     description: Validates behavior during connection failures
@@ -381,8 +374,11 @@ x-sdk-requirements:
   task_execution:
     - Exactly-once delivery guaranteed
     - Result caching: 24 hours
-    - Task timeout: 30 seconds
     - Maximum queued messages: 1000
+      notes: |
+        Task timeouts and retry policies are handled by the control plane's orchestration layer.
+        SDKs should focus on executing tasks and reporting results accurately, while the
+        control plane manages task lifecycle, timeouts, and retries.
 
   error_handling:
     - All errors must include:

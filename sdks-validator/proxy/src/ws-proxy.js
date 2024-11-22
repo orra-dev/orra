@@ -64,7 +64,10 @@ export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookRe
 		
 		isTestResult(payload) {
 			return payload.type === 'task_result' &&
-				(payload.executionId.includes('exec_test_') || payload.executionId.includes('queue__'));
+				(payload.executionId.includes('exec_test_') ||
+					payload.executionId.includes('queue__') ||
+					payload.executionId.includes('large_payload__')
+				);
 		}
 		
 		handleTestResult(payload) {
@@ -129,6 +132,7 @@ export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookRe
 			if (execId.startsWith('health_check__')) return 'HealthCheck';
 			if (execId.startsWith('reconnect__')) return 'Reconnect';
 			if (execId.startsWith('queue__')) return 'Queue';
+			if (execId.startsWith('large_payload__')) return 'LargePayload';
 			return null;
 		}
 		
@@ -253,15 +257,9 @@ export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookRe
 			const testResult = this.webhookResults.get(this.testId);
 			if (!testResult) return;
 			
-			console.log('testResult', JSON.stringify(testResult));
-			
 			const messageOrder = testResult.results
 				.filter(r => r.type === 'task_result')
 				.map(r => r.result.sequence);
-			
-			console.log('testResult.results', JSON.stringify(testResult.results));
-			console.log('testResult.results filter', JSON.stringify(testResult.results.filter(r => r.type === 'task_result')));
-			console.log('messageOrder', JSON.stringify(messageOrder));
 			
 			const isOrdered = messageOrder.every((num, idx) =>
 				idx === 0 || num > messageOrder[idx - 1]
@@ -276,6 +274,51 @@ export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookRe
 			});
 			testResult.status = isOrdered ? 'completed' : 'failed';
 			this.webhookResults.set(this.testId, testResult);
+		}
+		
+		handleLargePayload() {
+			// Generate large payload
+			const msgContent = this.message?.input?.message;
+			const msgSize = this.message?.input?.size;
+			
+			const payload = msgContent?.repeat(msgSize);
+			const testMessage = {
+				...this.message,
+				input: {
+					message: payload,
+					size: msgSize
+				}
+			};
+			
+			const conn = this.activeConnections.get(this.serviceId);
+			if (!conn) return;
+			
+			console.log('SENDING!');
+			conn.clientWs.send(JSON.stringify(testMessage));
+			
+			// Monitor response size
+			this.monitorResponseSize();
+		}
+		
+		monitorResponseSize() {
+			const timeoutId = setTimeout(() => {
+				const testResult = this.webhookResults.get(this.testId);
+				if (!testResult || testResult.status !== 'completed') {
+					testResult.status = 'failed';
+					testResult.results.push({
+						type: 'large_payload',
+						error: 'Response size verification failed',
+						timestamp: new Date().toISOString()
+					});
+					this.webhookResults.set(this.testId, testResult);
+				}
+			}, 10000);
+			
+			// Clean up timeout if test completes
+			const testResult = this.webhookResults.get(this.testId);
+			if (testResult) {
+				testResult.cleanup = () => clearTimeout(timeoutId);
+			}
 		}
 		
 		recordTestFailure(reason) {
@@ -300,10 +343,6 @@ export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookRe
 				});
 				this.webhookResults.set(this.testId, testResult);
 			}
-		}
-		
-		getTestResult() {
-			return this.webhookResults.get(this.testId);
 		}
 	}
 	

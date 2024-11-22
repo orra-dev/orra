@@ -81,7 +81,7 @@ export class ProtocolProxy {
 	}
 	
 	findConformanceTestCase(conformanceTests, targetId) {
-		for (const [_, test] of Object.entries(conformanceTests)) {
+		for (const [ _, test ] of Object.entries(conformanceTests)) {
 			if (test?.steps) {
 				const step = test?.steps?.find(step => step.id === targetId);
 				if (step) {
@@ -153,7 +153,7 @@ export class ProtocolProxy {
 		throw new Error(`Timeout waiting for service ${serviceId} to connect`);
 	}
 	
-	*generateTestMessages(testCase, serviceId, testRunId) {
+	* generateTestMessages(testCase, serviceId, testRunId) {
 		// Base message structure
 		const baseMessage = {
 			type: 'task_request',
@@ -189,6 +189,14 @@ export class ProtocolProxy {
 						input: { ...testCase?.input, message: `sending ${i}` }
 					};
 				}
+				break;
+			
+			case 'large_payload':
+				yield {
+					...baseMessage,
+					executionId: `large_payload__${testRunId}`,
+					idempotencyKey: `large_payload__${testRunId}`
+				};
 				break;
 			
 			default:

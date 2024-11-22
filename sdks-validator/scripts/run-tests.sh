@@ -8,7 +8,6 @@
 
 # Directory where this script lives
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONTROL_PLANE_ROOT="$(cd "${SCRIPT_DIR}/../../controlplane" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REBUILD=${REBUILD:-true}
 WEBHOOK_URL=${WEBHOOK_URL:-http://protocol-proxy:8006/webhook-test}
@@ -23,11 +22,11 @@ echo "🪡 Validating SDKs against Orra SDK protocols..."
 echo ""
 
 echo "Starting test environment..."
-if [ "$REBUILD" ==   "true" ]; then
-    docker compose -f "${PROJECT_ROOT}/proxy/docker-compose.yaml" up --build -d --quiet-pull > /dev/null 2>&1
-else
-    docker compose -f "${PROJECT_ROOT}/proxy/docker-compose.yaml" up -d --quiet-pull > /dev/null 2>&1
-fi
+#if [ "$REBUILD" ==   "true" ]; then
+#    docker compose -f "${PROJECT_ROOT}/proxy/docker-compose.yaml" up --build -d --quiet-pull > /dev/null 2>&1
+#else
+#    docker compose -f "${PROJECT_ROOT}/proxy/docker-compose.yaml" up -d --quiet-pull > /dev/null 2>&1
+#fi
 
 # Function to cleanup on exit
 cleanup() {

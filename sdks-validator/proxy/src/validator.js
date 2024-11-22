@@ -73,27 +73,35 @@ export class ProtocolValidator {
 		for (const field of schema.required) {
 			assert(field in msg, `Acknowledgement message missing required field: ${field}`);
 		}
-		console.assert(schema.properties.type.enum[0] === msg.type, 'Type incorrect for an acknowledgement message');
+		assert(schema.properties.type.enum[0] === msg.type, 'Type incorrect for an acknowledgement message');
 	}
 	
 	validatePing(msg, schema) {
 		for (const field of schema.required) {
 			assert(field in msg, `Ping request missing required field: ${field}`);
 		}
-		console.assert(schema.properties.type.enum[0] === msg.type, 'Type incorrect for a ping message');
+		assert(schema.properties.type.enum[0] === msg.type, 'Type incorrect for ping message');
 	}
 	
 	validatePong(msg, schema) {
 		for (const field of schema.required) {
 			assert(field in msg, `Pong request missing required field: ${field}`);
 		}
-		console.assert(schema.properties.type.enum[0] === msg.type, 'Type incorrect for a pong message');
+		assert(schema.properties.type.enum[0] === msg.type, 'Type incorrect for pong message');
 	}
 	
 	validateTaskRequest(msg, schema) {
 		for (const field of schema.required) {
 			assert(field in msg, `Task request missing required field: ${field}`);
 		}
+	}
+	
+	validateTaskStatus(msg, schema) {
+		for (const field of schema.required) {
+			assert(field in msg, `Task status missing required field: ${field}`);
+		}
+		assert(schema.properties.type.enum[0] === msg.type, 'Type incorrect for task status message');
+		assert(schema.properties.status.enum[0] === 'in_progress', 'Status incorrect for task status message');
 	}
 	
 	validateTaskResult(msg, schema) {
