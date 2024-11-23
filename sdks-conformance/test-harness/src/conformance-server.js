@@ -9,9 +9,9 @@ import { WebSocketServer } from 'ws';
 import { createHttpProxy } from './http-proxy.js';
 import { createWebSocketProxy } from './ws-proxy.js';
 import { createWebhookHandler } from './webhook-handler.js';
-import { ProtocolValidator } from "./validator.js";
+import { ProtocolValidator } from "./protocol-validator.js";
 
-export class ProtocolProxy {
+export class ConformanceServer {
 	constructor(controlPlaneUrl, sdkContractPath) {
 		this.controlPlaneUrl = controlPlaneUrl;
 		this.sdkContractPath = sdkContractPath

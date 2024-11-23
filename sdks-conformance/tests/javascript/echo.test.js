@@ -7,11 +7,11 @@
 import { expect, test, describe, beforeAll, afterEach } from '@jest/globals';
 import { createClient } from '@orra.dev/sdk'; // The actual Orra SDK
 
-const PROXY_URL = process.env.PROXY_URL || 'http://localhost:8006';
+const TEST_HARNESS_URL = process.env.TEST_HARNESS_URL || 'http://localhost:8006';
 const WEBHOOK_URL = process.env.WEBHOOK_URL || `http://localhost:8006/webhook-test`;
 
 async function registerProject() {
-	const response = await fetch(`${PROXY_URL}/register/project`, {
+	const response = await fetch(`${TEST_HARNESS_URL}/register/project`, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json'
@@ -54,7 +54,7 @@ describe('Echo Service', () => {
 		
 		// Create client
 		client = createClient({
-			orraUrl: PROXY_URL,
+			orraUrl: TEST_HARNESS_URL,
 			orraKey: apiKey,
 			persistenceOpts: {
 				method: 'custom',
@@ -94,7 +94,7 @@ describe('Echo Service', () => {
 			};
 		});
 		
-		const orchestrationResponse = await fetch(`${PROXY_URL}/orchestrations`, {
+		const orchestrationResponse = await fetch(`${TEST_HARNESS_URL}/orchestrations`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
@@ -120,7 +120,7 @@ describe('Echo Service', () => {
 		
 		const result = await poll(async () => {
 			const resultResponse = await fetch(
-				`${PROXY_URL}/orchestrations/inspections/${orchestration.id}`,
+				`${TEST_HARNESS_URL}/orchestrations/inspections/${orchestration.id}`,
 				{
 					headers: {
 						'Authorization': `Bearer ${apiKey}`

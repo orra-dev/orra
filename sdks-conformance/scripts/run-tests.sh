@@ -10,7 +10,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REBUILD=${REBUILD:-true}
-WEBHOOK_URL=${WEBHOOK_URL:-http://protocol-proxy:8006/webhook-test}
+WEBHOOK_URL=${WEBHOOK_URL:-http://sdk-test-harness:8006/webhook-test}
 
 # Check if Docker daemon is running
 if (! docker stats --no-stream &> /dev/null); then
@@ -23,15 +23,15 @@ echo ""
 
 echo "Starting test environment..."
 if [ "$REBUILD" ==   "true" ]; then
-    docker compose -f "${PROJECT_ROOT}/proxy/docker-compose.yaml" up --build -d --quiet-pull > /dev/null 2>&1
+    docker compose -f "${PROJECT_ROOT}/test-harness/docker-compose.yaml" up --build -d --quiet-pull > /dev/null 2>&1
 else
-    docker compose -f "${PROJECT_ROOT}/proxy/docker-compose.yaml" up -d --quiet-pull > /dev/null 2>&1
+    docker compose -f "${PROJECT_ROOT}/test-harness/docker-compose.yaml" up -d --quiet-pull > /dev/null 2>&1
 fi
 
 # Function to cleanup on exit
 cleanup() {
   echo "Cleaning up test environment..."
-  docker compose -f "${PROJECT_ROOT}/proxy/docker-compose.yaml" down > /dev/null 2>&1
+  docker compose -f "${PROJECT_ROOT}/test-harness/docker-compose.yaml" down > /dev/null 2>&1
 }
 trap cleanup EXIT
 

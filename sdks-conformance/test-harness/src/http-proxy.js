@@ -5,7 +5,7 @@
  */
 
 import { request } from 'http';
-import { ProtocolValidator } from './validator.js';
+import { ProtocolValidator } from './protocol-validator.js';
 
 export function createHttpProxy(controlPlaneUrl, sdkContractPath) {
 	const validator = new ProtocolValidator(sdkContractPath);

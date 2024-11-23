@@ -6,8 +6,7 @@
 	"scripts": {
 		"start": "node src/server.js",
 		"test": "node --test tests/",
-		"lint": "eslint src/",
-		"validate-contract": "node scripts/validate-contract.js"
+		"lint": "eslint src/"
 	},
 	"dependencies": {
 		"ws": "^8.14.2",

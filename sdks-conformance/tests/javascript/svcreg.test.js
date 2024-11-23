@@ -10,11 +10,11 @@ import { rm } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 
-const PROXY_URL = process.env.PROXY_URL || 'http://localhost:8006';
+const TEST_HARNESS_URL = process.env.TEST_HARNESS_URL || 'http://localhost:8006';
 const DEFAULT_ORRA_DIR = '.orra-data';
 
 async function registerProject() {
-	const response = await fetch(`${PROXY_URL}/register/project`, {
+	const response = await fetch(`${TEST_HARNESS_URL}/register/project`, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json'
@@ -53,7 +53,7 @@ describe('Service Registration Protocol', () => {
 	
 	test('minimal service registration', async () => {
 		const client = createClient({
-			orraUrl: PROXY_URL,
+			orraUrl: TEST_HARNESS_URL,
 			orraKey: apiKey,
 		});
 		
@@ -91,7 +91,7 @@ describe('Service Registration Protocol', () => {
 		
 		// Create first client with persistence
 		const client = createClient({
-			orraUrl: PROXY_URL,
+			orraUrl: TEST_HARNESS_URL,
 			orraKey: apiKey,
 			persistenceOpts: {
 				method: 'custom',
@@ -114,7 +114,7 @@ describe('Service Registration Protocol', () => {
 		
 		// Create new client instance
 		const newClient = createClient({
-			orraUrl: PROXY_URL,
+			orraUrl: TEST_HARNESS_URL,
 			orraKey: apiKey,
 			persistenceOpts: {
 				method: 'custom',
@@ -140,7 +140,7 @@ describe('Service Registration Protocol', () => {
 	
 	test('service registration error cases', async () => {
 		const client = createClient({
-			orraUrl: PROXY_URL,
+			orraUrl: TEST_HARNESS_URL,
 			orraKey: apiKey
 		});
 		
@@ -159,7 +159,7 @@ describe('Service Registration Protocol', () => {
 		
 		// Test invalid API key
 		const invalidClient = createClient({
-			orraUrl: PROXY_URL,
+			orraUrl: TEST_HARNESS_URL,
 			orraKey: 'sk-orra-invalid-key'
 		});
 		
@@ -169,7 +169,7 @@ describe('Service Registration Protocol', () => {
 	
 	test('verify finality of close()', async () => {
 		const client = createClient({
-			orraUrl: PROXY_URL,
+			orraUrl: TEST_HARNESS_URL,
 			orraKey: apiKey
 		});
 		

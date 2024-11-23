@@ -5,7 +5,7 @@
  */
 
 import WebSocket from 'ws';
-import { ProtocolValidator } from './validator.js';
+import { ProtocolValidator } from './protocol-validator.js';
 import { MetricsCollector } from './metrics.js';
 
 export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookResults) {

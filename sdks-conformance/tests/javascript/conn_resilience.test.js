@@ -10,12 +10,12 @@ import { join } from "path";
 import { existsSync } from "fs";
 import { rm } from "fs/promises";
 
-const PROXY_URL = process.env.PROXY_URL || 'http://localhost:8006';
+const TEST_HARNESS_URL = process.env.TEST_HARNESS_URL || 'http://localhost:8006';
 const WEBHOOK_URL = process.env.WEBHOOK_URL || `http://localhost:8006/webhook-test`;
 const DEFAULT_ORRA_DIR = '.orra-data';
 
 async function registerProject() {
-	const response = await fetch(`${PROXY_URL}/register/project`, {
+	const response = await fetch(`${TEST_HARNESS_URL}/register/project`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ webhooks: [ WEBHOOK_URL ] })
@@ -66,7 +66,7 @@ describe('Connection Resilience Protocol', () => {
 	
 	test('mid-task disconnect resilience', async () => {
 		client = createClient({
-			orraUrl: PROXY_URL,
+			orraUrl: TEST_HARNESS_URL,
 			orraKey: apiKey
 		});
 
@@ -89,7 +89,7 @@ describe('Connection Resilience Protocol', () => {
 			};
 		});
 
-		const testResponse = await fetch(`${PROXY_URL}/conformance-tests`, {
+		const testResponse = await fetch(`${TEST_HARNESS_URL}/conformance-tests`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
@@ -106,7 +106,7 @@ describe('Connection Resilience Protocol', () => {
 
 		const result = await poll(async () => {
 			const webhookResult = await fetch(
-				`${PROXY_URL}/webhook-test/results/${testResult.id}`,
+				`${TEST_HARNESS_URL}/webhook-test/results/${testResult.id}`,
 				{
 					headers: { 'Authorization': `Bearer ${apiKey}` }
 				}
@@ -133,7 +133,7 @@ describe('Connection Resilience Protocol', () => {
 		let registrationAttempts = 0;
 		
 		client = createClient({
-			orraUrl: PROXY_URL,
+			orraUrl: TEST_HARNESS_URL,
 			orraKey: apiKey,
 			persistenceOpts: {
 				method: 'custom',
@@ -143,7 +143,7 @@ describe('Connection Resilience Protocol', () => {
 		});
 		
 		// Enable disconnect for next WebSocket connection
-		await fetch(`${PROXY_URL}/test-control/enable-disconnect`, {
+		await fetch(`${TEST_HARNESS_URL}/test-control/enable-disconnect`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',

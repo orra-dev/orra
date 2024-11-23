@@ -18,14 +18,14 @@ services:
     networks:
       - sdk-test-network
 
-  protocol-proxy:
+  sdk-test-harness:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: orra-protocol-proxy
+    container_name: orra-sdk-test-harness
     environment:
       - CONTROL_PLANE_URL=http://control-plane:8005
-      - PROXY_PORT=8006
+      - SDK_TEST_HARNESS_PORT=8006
       - SDK_CONTRACT_PATH=/app/contracts/sdk.yaml
     ports:
       - "8006:8006"

@@ -17,7 +17,7 @@ npm install --prefix "$DIR" > /dev/null 2>&1
 # Run tests
 echo "Running JavaScript implementation tests..."
 NODE_OPTIONS="--experimental-vm-modules --no-warnings" \
-  NODE_ENV="test" npm run test \
+  ORRA_LOGGING=false NODE_ENV="test" npm run test \
   --bail \
   --force-exit \
   "${DIR}"/*.test.js
