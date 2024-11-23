@@ -9,4 +9,12 @@ services:
       dockerfile: Dockerfile
       target: final
     ports:
-      - 8005:8005
+      - "8005:8005"
+    networks:
+      - orra-dev-network
+
+networks:
+  orra-dev-network:
+    name: orra-dev-network
+    driver: bridge
+

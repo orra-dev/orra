@@ -29,7 +29,7 @@ app.get('/health', (req, res) => {
 async function startService() {
 	try {
 		// Register the customer service with Orra
-		await orra.registerService('CustomerService', {
+		await orra.registerService('customer-service', {
 			description: 'A service that retrieves and manages customer information.',
 			schema
 		});

@@ -109,7 +109,7 @@ app.get('/health', (req, res) => {
 async function startService() {
 	try {
 		// Register the echo service with Orra
-		await orra.registerService('EchoService', {
+		await orra.registerService('echo-service', {
 			description: 'A simple service that echoes back the first input value it receives.',
 			schema
 		});

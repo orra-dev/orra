@@ -42,6 +42,7 @@ FROM alpine:latest AS final
 # Leverage a cache mount to /var/cache/apk/ to speed up subsequent builds.
 RUN --mount=type=cache,target=/var/cache/apk \
     apk --update add \
+    		curl \
         ca-certificates \
         tzdata \
         && \
@@ -49,11 +50,11 @@ RUN --mount=type=cache,target=/var/cache/apk \
 
 # Docker build version
 ARG VERSION
-ENV VERSION $VERSION
+ENV VERSION=$VERSION
 
 # Docker build timestamp
 ARG BUILD_TIMESTAMP
-ENV BUILD_TIMESTAMP $BUILD_TIMESTAMP
+ENV BUILD_TIMESTAMP=$BUILD_TIMESTAMP
 
 # Create a non-privileged user that the app will run under.
 # See https://docs.docker.com/go/dockerfile-user-best-practices/

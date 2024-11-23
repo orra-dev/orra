@@ -29,7 +29,7 @@ const client = createClient({
 });
 
 // Register your service
-await client.registerService('Customer Chat Service', {
+await client.registerService('customer-chat-service', {
   description: 'Handles customer chat interactions',
   schema: {
     input: {
@@ -89,7 +89,13 @@ The Orra SDK follows patterns similar to serverless functions or job processors,
 
 ## Detailed Integration Guide
 
-### 1. Service Registration
+### 1. Service/Agent Registration
+
+Services and Agents names must also follow these rules:
+- They are limited to 63 characters, and at least 3 chars in length
+- Consist of lowercase alphanumeric characters
+- Can include hyphens (-) and dots (.)
+- Must start and end with an alphanumeric character
 
 Register your service with its capabilities:
 
@@ -100,30 +106,30 @@ const client = createClient({
 });
 
 // For stateless services
-await client.registerService('Service Name', {
-  description: 'What this service does',
-  schema: {
-    input: {
-      type: 'object',
-      properties: {
-        // Define expected inputs
+await client.registerService('service-name', {
+   description: 'What this service does',
+   schema: {
+      input: {
+         type: 'object',
+         properties: {
+            // Define expected inputs
+         }
+      },
+      output: {
+         type: 'object',
+         properties: {
+            // Define expected outputs
+         }
       }
-    },
-    output: {
-      type: 'object',
-      properties: {
-        // Define expected outputs
-      }
-    }
-  }
+   }
 });
 
 // For AI agents
-await client.registerAgent('Agent Name', {
-  description: 'What this agent does',
-  schema: {
-    // Same schema structure as services
-  }
+await client.registerAgent('agent-name', {
+   description: 'What this agent does',
+   schema: {
+      // Same schema structure as services
+   }
 });
 ```
 
@@ -196,22 +202,22 @@ Orra maintains service identity across restarts using persistence. This is cruci
 
 ```javascript
 const client = createClient({
-  orraUrl: process.env.ORRA_URL,
-  orraKey: process.env.ORRA_API_KEY,
-  persistenceOpts: {
-    // 1. File-based persistence (default)
-    method: 'file',
-    filePath: './custom/path/service-key.json',
-    
-    // 2. Custom persistence (e.g., database)
-    method: 'custom',
-    customSave: async (serviceId) => {
-      await db.services.save(serviceId);
-    },
-    customLoad: async () => {
-      return await db.services.load();
-    }
-  }
+   orraUrl: process.env.ORRA_URL,
+   orraKey: process.env.ORRA_API_KEY,
+   persistenceOpts: {
+      // 1. File-based persistence (default)
+      method: 'file',
+      filePath: './custom/path/service-key.json',
+
+      // 2. Custom persistence (e.g., database)
+      method: 'custom',
+      customSave: async (serviceId) => {
+         await db.services.save(serviceId);
+      },
+      customLoad: async () => {
+         return await db.services.load();
+      }
+   }
 });
 ```
 
@@ -259,15 +265,15 @@ app.listen(3000);
 ### After (Orra Integration)
 ```javascript
 import { createClient } from '@orra.dev/sdk';
-import { analyzeImage } from './ai-service';  // Reuse existing logic
+import { analyzeImage } from './ai-agent';  // Reuse existing logic
 
 const client = createClient({
   orraUrl: process.env.ORRA_URL,
   orraKey: process.env.ORRA_API_KEY
 });
 
-await client.registerService('Image Analysis Service', {
-  description: 'Analyzes images using AI',
+await client.registerAgent('image-analysis-agent', {
+  description: 'Analyzes any image using AI',
   schema: {
     input: {
       type: 'object',

@@ -1,0 +1,42 @@
+services:
+  control-plane:
+    image: orra-control-plane-sdk-valid
+    container_name: orra-cp-sdk-valid
+    build:
+      context: ../../controlplane
+      dockerfile: Dockerfile
+      target: final
+    environment:
+      - PORT=8005
+      - OPEN_API_KEY=${OPEN_API_KEY}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - sdk-test-network
+
+  sdk-test-harness:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: orra-sdk-test-harness
+    environment:
+      - CONTROL_PLANE_URL=http://control-plane:8005
+      - SDK_TEST_HARNESS_PORT=8006
+      - SDK_CONTRACT_PATH=/app/contracts/sdk.yaml
+    ports:
+      - "8006:8006"
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    networks:
+      - sdk-test-network
+    volumes:
+      - ${PWD}/contracts:/app/contracts
+
+networks:
+  sdk-test-network:
+    name: orra-sdk-test-network

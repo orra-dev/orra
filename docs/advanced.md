@@ -103,7 +103,7 @@ Example log sequence:
 
 Services can update their capabilities at runtime:
 ```javascript
-await client.registerService('AIAgent', {
+await client.registerService('ai-agent', {
   schema: {
     input: {
       // New capability added
@@ -122,17 +122,18 @@ await client.registerService('AIAgent', {
 #### 2. Custom Persistence
 
 Control how service identity persists:
+
 ```javascript
 const client = createClient({
-  persistenceOpts: {
-    method: 'custom',
-    customSave: async (serviceId) => {
-      await redis.set(`service:${serviceId}`, serviceId);
-    },
-    customLoad: async () => {
-      return await redis.get('service:id');
-    }
-  }
+	persistenceOpts: {
+		method: 'custom',
+		customSave: async (serviceId) => {
+			await redis.set(`service:${serviceId}`, serviceId);
+		},
+		customLoad: async () => {
+			return await redis.get('service:id');
+		}
+	}
 });
 ```
 
@@ -147,7 +148,7 @@ orra inspect -d o_xxxxxxxxxxxxxx
 
 ┌─ Task Execution Details
 │
-│ InventoryService (task1)
+│ inventory-service (task1)
 │ ──────────────────────────────────────────────────
 │ 14:07:43  ◎ Processing
 │ 14:07:43  ● Completed

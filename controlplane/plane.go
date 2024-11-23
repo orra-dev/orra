@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 
+	v "github.com/RussellLuo/validating/v3"
 	"github.com/google/uuid"
 	"github.com/lithammer/shortuuid/v4"
 	"github.com/rs/zerolog"
@@ -42,6 +43,17 @@ func (p *ControlPlane) Initialise(ctx context.Context,
 func (p *ControlPlane) RegisterOrUpdateService(service *ServiceInfo) error {
 	p.servicesMu.Lock()
 	defer p.servicesMu.Unlock()
+
+	if errs := v.Validate(service.Validation()); len(errs) > 0 {
+		err := fmt.Errorf("service validation error: %w", errs)
+		p.Logger.Error().
+			Err(err).
+			Str("ProjectID", service.ProjectID).
+			Str("ServiceName", service.Name).
+			Msgf("validated service")
+
+		return err
+	}
 
 	projectServices, exists := p.services[service.ProjectID]
 	if !exists {
