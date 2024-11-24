@@ -4,7 +4,10 @@
 
 class OrraError(Exception):
     """Base exception for all Orra SDK errors"""
-    pass
+    def __init__(self, message: str, details: dict = None):
+        super().__init__(message)
+        self.message = message
+        self.details = details or {}
 
 class PersistenceError(OrraError):
     """Raised when there's an error with service key persistence"""
@@ -16,16 +19,4 @@ class ConnectionError(OrraError):
 
 class ServiceRegistrationError(OrraError):
     """Raised when service registration fails"""
-    pass
-
-class InvalidConfigurationError(OrraError):
-    """Raised when SDK configuration is invalid"""
-    pass
-
-class TaskExecutionError(OrraError):
-    """Raised when task execution fails"""
-    pass
-
-class WebSocketMessageError(OrraError):
-    """Raised when there's an error processing WebSocket messages"""
     pass

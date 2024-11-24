@@ -11,6 +11,7 @@ import json
 from datetime import datetime, timezone
 
 import httpx
+from pydantic import ValidationError
 
 from .constants import DEFAULT_SERVICE_KEY_PATH
 from .types import PersistenceConfig, T_Input, T_Output, ServiceHandler
@@ -118,6 +119,7 @@ class OrraSDK:
             async def translate(request: TranslationInput) -> TranslationOutput:
                 return TranslationOutput(text="translated")
         """
+
         def decorator(
                 handler: ServiceHandler[T_Input, T_Output]
         ) -> ServiceHandler[T_Input, T_Output]:
@@ -126,26 +128,65 @@ class OrraSDK:
                 try:
                     # Convert and validate input
                     self._logger.debug("Validating input", service=name)
-                    validated_input = input_model.model_validate(raw_input)
+                    try:
+                        validated_input = input_model.model_validate(raw_input)
+                    except ValidationError as e:
+                        self._logger.debug(
+                            "Input validation failed",
+                            service=name,
+                            errors=e.errors()
+                        )
+                        # Format validation error for control plane
+                        raise OrraError(
+                            message="Input validation failed",
+                            details={
+                                "validation_errors": [
+                                    {
+                                        "field": err["loc"][0],
+                                        "error": err["msg"],
+                                        "type": err["type"]
+                                    }
+                                    for err in e.errors()
+                                ]
+                            }
+                        )
 
                     # Execute handler
                     self._logger.debug("Executing handler", service=name)
                     result = await handler(validated_input)
 
                     # Validate output type
-                    if not isinstance(result, output_model):
-                        raise TypeError(f"Handler returned {type(result)}, expected {output_model}")
+                    try:
+                        if not isinstance(result, output_model):
+                            raise TypeError(f"Handler returned {type(result)}, expected {output_model}")
+                        # Ensure output matches schema
+                        return result.model_dump()
+                    except (TypeError, ValidationError) as e:
+                        self._logger.error(
+                            "Output validation failed",
+                            service=name,
+                            error=str(e)
+                        )
+                        raise OrraError(
+                            message="Output validation failed",
+                            details={"error": str(e)}
+                        )
 
-                    return result.model_dump()
-
+                except OrraError:
+                    # Pass through our formatted errors
+                    raise
                 except Exception as e:
+                    # Catch all other errors and format them
                     self._logger.error(
                         "Handler error",
                         service=name,
                         error=str(e),
                         error_type=type(e).__name__
                     )
-                    raise
+                    raise OrraError(
+                        message="Service error",
+                        details={"error": str(e)}
+                    )
 
             # Register with SDK internals
             self._task_handler = internal_handler
@@ -156,7 +197,6 @@ class OrraSDK:
                 output_model=output_model
             ))
 
-            # Return original handler with proper types
             return handler
 
         return decorator
