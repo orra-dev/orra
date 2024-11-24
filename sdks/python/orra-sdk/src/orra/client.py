@@ -608,3 +608,39 @@ class OrraSDK:
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         """Async context manager exit"""
         await self.shutdown()
+
+    # Only showing the new/modified runtime management additions to client.py
+
+    def run(self) -> None:
+        """
+        Run the service until interrupted. Blocks until Ctrl+C.
+
+        Example:
+            orra = OrraSDK(url="...", api_key="...")
+
+            @orra.service(...)
+            async def my_handler(request):
+                pass
+
+            if __name__ == "__main__":
+                orra.run()
+        """
+        try:
+            # Run the async event loop
+            asyncio.run(self._run())
+        except KeyboardInterrupt:
+            # Handle Ctrl+C gracefully
+            self._logger.info("Received shutdown signal, stopping service...")
+            asyncio.run(self.shutdown())
+
+    async def _run(self) -> None:
+        """Internal run method that keeps the service alive."""
+        try:
+            # Run until cancelled
+            await asyncio.get_event_loop().create_future()
+        except asyncio.CancelledError:
+            self._logger.debug("Run cancelled")
+            raise
+        finally:
+            # Ensure cleanup happens
+            await self.shutdown()
