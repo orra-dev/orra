@@ -8,6 +8,7 @@ import structlog
 from structlog.types import Processor, EventDict, BindableLogger
 from structlog.processors import TimeStamper
 
+
 class OrraLogger:
     def __init__(
             self,

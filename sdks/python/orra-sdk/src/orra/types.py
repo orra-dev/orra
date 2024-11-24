@@ -4,18 +4,24 @@
 
 from enum import Enum
 from pathlib import Path
-from typing import Optional, Protocol, Callable, Awaitable
+from typing import Optional, Protocol, Callable, Awaitable, TypeVar
 from pydantic import BaseModel, Field
-
 from .constants import DEFAULT_SERVICE_KEY_PATH
+
+T_Input = TypeVar('T_Input', bound=BaseModel)
+T_Output = TypeVar('T_Output', bound=BaseModel)
+
 
 class PersistenceMethod(str, Enum):
     FILE = "file"
     CUSTOM = "custom"
 
+
 class CustomPersistence(Protocol):
     async def save(self, service_id: str) -> None: ...
+
     async def load(self) -> Optional[str]: ...
+
 
 class PersistenceConfig(BaseModel):
     method: PersistenceMethod = Field(
@@ -41,9 +47,3 @@ class PersistenceConfig(BaseModel):
                 raise ValueError(
                     "Custom persistence requires both custom_save and custom_load functions"
                 )
-
-class ServiceConfig(BaseModel):
-    name: str = Field(..., description="Service name")
-    description: str = Field(..., description="Service description")
-    input_model: type[BaseModel] = Field(..., description="Pydantic model for input validation")
-    output_model: type[BaseModel] = Field(..., description="Pydantic model for output validation")
