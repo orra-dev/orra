@@ -8,13 +8,12 @@ from pathlib import Path
 import websockets
 import asyncio
 import json
-from functools import wraps
 from datetime import datetime, timezone
 
 import httpx
 
 from .constants import DEFAULT_SERVICE_KEY_PATH
-from .types import PersistenceConfig, T_Input, T_Output
+from .types import PersistenceConfig, T_Input, T_Output, ServiceHandler
 from .persistence import PersistenceManager
 from .exceptions import OrraError, ServiceRegistrationError, ConnectionError
 from .logger import OrraLogger
@@ -100,27 +99,70 @@ class OrraSDK:
             description: str,
             input_model: type[T_Input],
             output_model: type[T_Output]
-    ) -> Callable:
-        """Decorator for registering a service handler"""
+    ) -> Callable[[ServiceHandler[T_Input, T_Output]], ServiceHandler[T_Input, T_Output]]:
+        """Register a service with Orra using a decorator.
 
+        Args:
+            name: Service name (lowercase, URL-safe, max 63 chars)
+            description: Human-readable service description
+            input_model: Pydantic model defining the service input
+            output_model: Pydantic model defining the service output
+
+        Example:
+            @orra.service(
+                name="translation",
+                description="Translates text",
+                input_model=TranslationInput,
+                output_model=TranslationOutput
+            )
+            async def translate(request: TranslationInput) -> TranslationOutput:
+                return TranslationOutput(text="translated")
+        """
         def decorator(
-                func: Callable[[T_Input], Awaitable[T_Output]]
-        ) -> Callable[[T_Input], Awaitable[T_Output]]:
-            @wraps(func)
-            async def wrapper(request: T_Input) -> T_Output:
-                return await func(request)
+                handler: ServiceHandler[T_Input, T_Output]
+        ) -> ServiceHandler[T_Input, T_Output]:
+            # Create internal handler for SDK
+            async def internal_handler(raw_input: Dict[str, Any]) -> Dict[str, Any]:
+                try:
+                    # Convert and validate input
+                    self._logger.debug("Validating input", service=name)
+                    validated_input = input_model.model_validate(raw_input)
 
-            # Register service on first use
-            self._task_handler = wrapper
+                    # Execute handler
+                    self._logger.debug("Executing handler", service=name)
+                    result = await handler(validated_input)
+
+                    # Validate output type
+                    if not isinstance(result, output_model):
+                        raise TypeError(f"Handler returned {type(result)}, expected {output_model}")
+
+                    return result.model_dump()
+
+                except Exception as e:
+                    self._logger.error(
+                        "Handler error",
+                        service=name,
+                        error=str(e),
+                        error_type=type(e).__name__
+                    )
+                    raise
+
+            # Register with SDK internals
+            self._task_handler = internal_handler
             asyncio.create_task(self._register_service(
                 name=name,
                 description=description,
                 input_model=input_model,
                 output_model=output_model
             ))
-            return wrapper
+
+            # Return original handler with proper types
+            return handler
 
         return decorator
+
+    # Alias agent to service for now
+    agent = service
 
     async def _register_service(
             self,

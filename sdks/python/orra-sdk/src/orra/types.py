@@ -11,6 +11,8 @@ from .constants import DEFAULT_SERVICE_KEY_PATH
 T_Input = TypeVar('T_Input', bound=BaseModel)
 T_Output = TypeVar('T_Output', bound=BaseModel)
 
+# Type alias for handler functions
+ServiceHandler = Callable[[T_Input], Awaitable[T_Output]]
 
 class PersistenceMethod(str, Enum):
     FILE = "file"
