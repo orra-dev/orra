@@ -1,6 +1,6 @@
 {
-	"name": "@orra.dev/protocol-validator-js-tests",
-	"version": "1.0.0",
+	"name": "@orra.dev/orra-conformance-tests",
+	"version": "0.1.0",
 	"type": "module",
 	"scripts": {
 		"test": "node node_modules/jest/bin/jest.js --detectOpenHandles"

@@ -22,11 +22,11 @@ echo "🪡🪡🪡 Running the Orra SDK Conformance Suite..."
 echo ""
 
 echo "Starting test environment..."
-if [ "$REBUILD" ==   "true" ]; then
-    docker compose -f "${PROJECT_ROOT}/test-harness/docker-compose.yaml" up --build -d --quiet-pull > /dev/null 2>&1
-else
-    docker compose -f "${PROJECT_ROOT}/test-harness/docker-compose.yaml" up -d --quiet-pull > /dev/null 2>&1
-fi
+#if [ "$REBUILD" ==   "true" ]; then
+#    docker compose -f "${PROJECT_ROOT}/test-harness/docker-compose.yaml" up --build -d --quiet-pull > /dev/null 2>&1
+#else
+#    docker compose -f "${PROJECT_ROOT}/test-harness/docker-compose.yaml" up -d --quiet-pull > /dev/null 2>&1
+#fi
 
 # Function to cleanup on exit
 cleanup() {

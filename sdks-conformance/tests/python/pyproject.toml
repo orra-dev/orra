@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "orra-conformance-tests"
+version = "0.1.0"
+description = "Conformance tests for the Orra Python SDK"
+authors = ["Orra Team"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.9"
+pytest = "^7.4.0"
+pytest-asyncio = "^0.21.0"
+httpx = "^0.26.0"
+websockets = "^12.0"
+pydantic = "^2.0.0"
+orra-sdk = { path = "../../../sdks/python/orra-sdk", develop = true }
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = "test_*.py"

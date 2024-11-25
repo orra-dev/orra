@@ -66,10 +66,10 @@ class OrraSDK:
         self._persistence = PersistenceManager(persistence_config)
 
         # Initialize core state
+        self.service_id: Optional[str] = None
         self._url = url.rstrip("/")
         self._api_key = api_key
-        self._service_id: Optional[str] = None
-        self._version: int = 0
+        self.version: int = 0
         self._handlers: Dict[str, Any] = {}  # Will be typed properly in next phase
         self._ws: Optional[websockets.WebSocketClientProtocol] = None
         self._task_handler: Optional[Callable] = None
@@ -213,9 +213,9 @@ class OrraSDK:
     ) -> None:
         """Register service with control plane"""
         # Load existing service ID if any
-        self._service_id = await self._persistence.load_service_id()
+        self.service_id = await self._persistence.load_service_id()
 
-        self._logger.debug("Registering service", name=name, existing_service_id=self._service_id)
+        self._logger.debug("Registering service", name=name, existing_service_id=self.service_id)
 
         try:
             # Convert Pydantic models to JSON schema
@@ -227,28 +227,28 @@ class OrraSDK:
             response = await self._http.post(
                 "/register/service",
                 json={
-                    "id": self._service_id,
+                    "id": self.service_id,
                     "name": name,
                     "description": description,
                     "schema": schema,
-                    "version": self._version
+                    "version": self.version
                 }
             )
             response.raise_for_status()
             data = response.json()
 
             # Update service details
-            self._service_id = data["id"]
-            self._version = data["version"]
+            self.service_id = data["id"]
+            self.version = data["version"]
 
             # Update logger with service context
             self._logger.reconfigure(
-                service_id=self._service_id,
-                service_version=self._version
+                service_id=self.service_id,
+                service_version=self.version
             )
 
             # Save service ID
-            await self._persistence.save_service_id(self._service_id)
+            await self._persistence.save_service_id(self.service_id)
 
             # Start WebSocket connection
             asyncio.create_task(self._connect_websocket())
@@ -262,7 +262,7 @@ class OrraSDK:
             raise ConnectionError("Cannot connect: SDK is shutting down")
 
         ws_url = self._url.replace("http", "ws")
-        uri = f"{ws_url}/ws?serviceId={self._service_id}&apiKey={self._api_key}"
+        uri = f"{ws_url}/ws?serviceId={self.service_id}&apiKey={self._api_key}"
 
         try:
             self._ws = await websockets.connect(uri)
@@ -442,7 +442,7 @@ class OrraSDK:
             "type": "task_result",
             "taskId": task_id,
             "executionId": execution_id,
-            "serviceId": self._service_id,
+            "serviceId": self.service_id,
             "result": result,
             "error": error
         }
@@ -459,7 +459,7 @@ class OrraSDK:
             "type": "task_status",
             "taskId": task_id,
             "executionId": execution_id,
-            "serviceId": self._service_id,
+            "serviceId": self.service_id,
             "status": status,
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
@@ -467,7 +467,7 @@ class OrraSDK:
 
     async def _handle_ping(self, data: dict) -> None:
         """Handle ping message"""
-        if data.get("serviceId") != self._service_id:
+        if data.get("serviceId") != self.service_id:
             self._logger.trace(
                 "Received PING for unknown serviceId",
                 receivedId=data.get("serviceId")
@@ -483,7 +483,7 @@ class OrraSDK:
         if self._ws and self._is_connected.is_set():
             message = {
                 "type": "pong",
-                "serviceId": self._service_id
+                "serviceId": self.service_id
             }
             await self._send_message(message)
 
