@@ -48,7 +48,7 @@ describe('Exactly-Once Execution Protocol', () => {
 	
 	afterEach(async () => {
 		if (service) {
-			service.close();
+			service.shutdown();
 		}
 		
 		const orraDataPath = join(process.cwd(), DEFAULT_ORRA_DIR);

@@ -106,11 +106,12 @@ orra inspect <orchestration-id>
 ```
 
 ## SDK Integration Example
-Here's how easy it is to integrate Orra into your services. The Delivery Agent shows a complete AI integration in just a few lines:
+Here's how easy it is to integrate Orra into your services and agents. The Delivery Agent shows this integration in just a few lines:
 
 ```javascript
-// Initialize the Orra client with environment-aware persistence
-const orra = initService({
+// Initialize your Agent with environment-aware persistence
+const deliveryAgent = initAgent({
+	name: 'delivery-agent',
 	orraUrl: process.env.ORRA_URL,
 	orraKey: process.env.ORRA_API_KEY,
 	persistenceOpts: getPersistenceConfig()
@@ -121,16 +122,16 @@ app.get('/health', (req, res) => {
 	res.status(200).json({ status: 'healthy' });
 });
 
-async function startService() {
+async function startAgent() {
 	try {
 		// Register the delivery agent with Orra
-		await orra.registerAgent('delivery-agent', {
+		await deliveryAgent.register({
 			description: 'An agent that helps customers with intelligent delivery estimation dates and routing for online shopping.',
 			schema
 		});
 		
 		// Start handling delivery estimation tasks
-		orra.startHandler(async (task) => {
+		deliveryAgent.start(async (task) => {
 			console.log('Processing delivery estimation:', task.id);
 			return { response: await estimateDelivery(task.input) };
 		});
@@ -145,13 +146,13 @@ async function startService() {
 // Start the Express server and the service
 app.listen(port, () => {
 	console.log(`Server listening on port ${port}`);
-	startService().catch(console.error);
+	startAgent().catch(console.error);
 });
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
 	console.log('SIGTERM received, shutting down gracefully');
-	orra.close();
+	deliveryAgent.shutdown();
 	process.exit(0);
 });
 ```

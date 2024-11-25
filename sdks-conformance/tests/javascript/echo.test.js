@@ -43,7 +43,7 @@ describe('Echo Service', () => {
 	
 	afterEach(() => {
 		if (service) {
-			service.close();
+			service.shutdown();
 		}
 	});
 	
