@@ -605,23 +605,6 @@ async function createDirectoryIfNotExists(directoryPath, logger) {
 	}
 }
 
-// const createClient = ({
-// 	                             orraUrl,
-// 	                             orraKey,
-// 	                             persistenceOpts = {},
-//                              }) => {
-// 	if (!orraUrl || !orraKey) {
-// 		throw new Error("Cannot create an SDK client: ensure both a valid Orra URL and Orra API Key have been provided.");
-// 	}
-// 	return new OrraSDK({
-// 		connection: {
-// 			orraUrl,
-// 			orraKey
-// 		},
-// 		persistence: persistenceOpts,
-// 	});
-// }
-
 const validateName = (name, type) => {
 	if (!name || typeof name !== 'string') {
 		throw new Error(`${type} name must be a non-empty string`);
