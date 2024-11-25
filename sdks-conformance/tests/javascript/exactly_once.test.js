@@ -5,7 +5,7 @@
  */
 
 import { expect, test, describe, beforeAll, afterEach } from '@jest/globals';
-import { createClient } from '@orra.dev/sdk';
+import { initService } from '@orra.dev/sdk';
 import { rm } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
@@ -37,7 +37,7 @@ async function registerProject() {
 describe('Exactly-Once Execution Protocol', () => {
 	let apiKey;
 	let projectId;
-	let client;
+	let service;
 	let executionCount = 0;
 	
 	beforeAll(async () => {
@@ -47,8 +47,8 @@ describe('Exactly-Once Execution Protocol', () => {
 	});
 	
 	afterEach(async () => {
-		if (client) {
-			client.close();
+		if (service) {
+			service.close();
 		}
 		
 		const orraDataPath = join(process.cwd(), DEFAULT_ORRA_DIR);
@@ -60,13 +60,14 @@ describe('Exactly-Once Execution Protocol', () => {
 	});
 	
 	test('exactly once execution conformance', async () => {
-		client = createClient({
+		service = initService({
+			name: 'exactly-once-service',
 			orraUrl: TEST_HARNESS_URL,
 			orraKey: apiKey
 		});
 		
 		// Register service with required schema
-		await client.registerService('exactly-once-service', {
+		await service.register({
 			description: 'Test service for exactly-once delivery validation',
 			schema: {
 				input: {
@@ -88,7 +89,7 @@ describe('Exactly-Once Execution Protocol', () => {
 		});
 		
 		// Set up handler that tracks executions
-		client.startHandler(async (task) => {
+		service.start(async (task) => {
 			executionCount++;
 			return {
 				message: task.input.message,
@@ -105,7 +106,7 @@ describe('Exactly-Once Execution Protocol', () => {
 			},
 			body: JSON.stringify({
 				projectId,
-				serviceId: client.serviceId,
+				serviceId: service.info.id,
 				testId: 'exactly_once'
 			})
 		});

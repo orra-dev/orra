@@ -5,7 +5,7 @@
  */
 
 import { expect, test, describe, beforeAll, afterEach } from '@jest/globals';
-import { createClient } from '@orra.dev/sdk'; // The actual Orra SDK
+import { initService } from '@orra.dev/sdk'; // The actual Orra SDK
 
 const TEST_HARNESS_URL = process.env.TEST_HARNESS_URL || 'http://localhost:8006';
 const WEBHOOK_URL = process.env.WEBHOOK_URL || `http://localhost:8006/webhook-test`;
@@ -31,7 +31,7 @@ async function registerProject() {
 }
 
 describe('Echo Service', () => {
-	let client;
+	let service;
 	let apiKey;
 	let projectId;
 	
@@ -42,18 +42,17 @@ describe('Echo Service', () => {
 	});
 	
 	afterEach(() => {
-		if (client) {
-			client.close();
+		if (service) {
+			service.close();
 		}
 	});
 	
 	test('echo service protocol conformance', async () => {
-		// Verify registration
 		expect(apiKey).toBeTruthy();
 		expect(projectId).toBeTruthy();
 		
-		// Create client
-		client = createClient({
+		service = initService({
+			name: 'echo-service',
 			orraUrl: TEST_HARNESS_URL,
 			orraKey: apiKey,
 			persistenceOpts: {
@@ -67,7 +66,7 @@ describe('Echo Service', () => {
 		});
 		
 		// Register service using SDK
-		await client.registerService('echo-service', {
+		await service.register({
 			description: 'A service that can echo a message sent to it.',
 			schema: {
 				input: {
@@ -88,7 +87,7 @@ describe('Echo Service', () => {
 		});
 		
 		// Set up echo handler using SDK
-		client.startHandler(async (task) => {
+		service.start(async (task) => {
 			return {
 				message: task.input.message
 			};

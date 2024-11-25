@@ -5,7 +5,7 @@
  */
 
 import { expect, test, describe, beforeAll, afterEach } from '@jest/globals';
-import { createClient } from '@orra.dev/sdk';
+import { initService } from '@orra.dev/sdk';
 import { join } from "path";
 import { existsSync } from "fs";
 import { rm } from "fs/promises";
@@ -43,7 +43,7 @@ const poll = async (fn, timeout = 5000, interval = 500) => {
 };
 
 describe('Connection Resilience Protocol', () => {
-	let client;
+	let service;
 	let apiKey;
 	let projectId;
 	
@@ -54,8 +54,8 @@ describe('Connection Resilience Protocol', () => {
 	});
 	
 	afterEach(async () => {
-		if (client) {
-			client.close();
+		if (service) {
+			service.close();
 		}
 		
 		const orraDataPath = join(process.cwd(), DEFAULT_ORRA_DIR);
@@ -65,21 +65,22 @@ describe('Connection Resilience Protocol', () => {
 	});
 	
 	test('mid-task disconnect resilience', async () => {
-		client = createClient({
+		service = initService({
+			name: 'resilient-task-service',
 			orraUrl: TEST_HARNESS_URL,
 			orraKey: apiKey
 		});
 
 		let executionCount = 0;
-		await client.registerService('resilient-task-service', {
+		await service.register({
 			description: 'Service for testing mid-task disconnection resilience',
 			schema: {
 				input: { type: 'object', properties: { duration: { type: 'number' } } },
 				output: { type: 'object', properties: { completed: { type: 'boolean' }, executionCount: { type: 'number' } } }
 			}
 		});
-
-		client.startHandler(async (task) => {
+		
+		service.start(async (task) => {
 			executionCount++;
 			// Simulate long-running task
 			await new Promise(resolve => setTimeout(resolve, task.input.duration || 5000));
@@ -89,6 +90,8 @@ describe('Connection Resilience Protocol', () => {
 			};
 		});
 
+		console.log('service.info.id', service.info.id);
+		
 		const testResponse = await fetch(`${TEST_HARNESS_URL}/conformance-tests`, {
 			method: 'POST',
 			headers: {
@@ -96,7 +99,7 @@ describe('Connection Resilience Protocol', () => {
 				'Authorization': `Bearer ${apiKey}`
 			},
 			body: JSON.stringify({
-				serviceId: client.serviceId,
+				serviceId: service.info.id,
 				testId: 'mid_task_disconnect'
 			})
 		});
@@ -132,7 +135,8 @@ describe('Connection Resilience Protocol', () => {
 	test('handles websocket disconnect during registration', async () => {
 		let registrationAttempts = 0;
 		
-		client = createClient({
+		service = initService({
+			name: 'resilient-service',
 			orraUrl: TEST_HARNESS_URL,
 			orraKey: apiKey,
 			persistenceOpts: {
@@ -151,7 +155,7 @@ describe('Connection Resilience Protocol', () => {
 			}
 		});
 		
-		await client.registerService('resilient-service', {
+		await service.register({
 			description: 'Service for testing registration disconnect',
 			schema: {
 				input: {
@@ -166,7 +170,7 @@ describe('Connection Resilience Protocol', () => {
 		});
 		
 		// Verify requirements from spec
-		expect(client.serviceId).toBeTruthy(); // service_id_present
+		expect(service.info.id).toBeTruthy(); // service_id_present
 		expect(registrationAttempts).toBe(1); // single_registration_attempt
 	}, 15000);
 });

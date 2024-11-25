@@ -110,7 +110,7 @@ Here's how easy it is to integrate Orra into your services. The Delivery Agent s
 
 ```javascript
 // Initialize the Orra client with environment-aware persistence
-const orra = createClient({
+const orra = initService({
 	orraUrl: process.env.ORRA_URL,
 	orraKey: process.env.ORRA_API_KEY,
 	persistenceOpts: getPersistenceConfig()

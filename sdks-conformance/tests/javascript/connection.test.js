@@ -5,7 +5,7 @@
  */
 
 import { expect, test, describe, beforeAll, afterEach } from '@jest/globals';
-import { createClient } from '@orra.dev/sdk';
+import { initService } from '@orra.dev/sdk';
 import { join } from "path";
 import { existsSync } from "fs";
 import { rm } from "fs/promises";
@@ -45,7 +45,7 @@ const poll = async (fn, timeout = 5000, interval = 500) => {
 };
 
 describe('Connection Management Protocol', () => {
-	let client;
+	let service;
 	let apiKey;
 	let projectId;
 	
@@ -56,8 +56,8 @@ describe('Connection Management Protocol', () => {
 	});
 	
 	afterEach(async () => {
-		if (client) {
-			client.close();
+		if (service) {
+			service.close();
 		}
 		
 		const orraDataPath = join(process.cwd(), DEFAULT_ORRA_DIR);
@@ -68,12 +68,13 @@ describe('Connection Management Protocol', () => {
 	
 	
 	test('health check conformance', async () => {
-		client = createClient({
+		service = initService({
+			name: 'health-check-service',
 			orraUrl: TEST_HARNESS_URL,
 			orraKey: apiKey
 		});
 		
-		await client.registerService('health-check-service', {
+		await service.register({
 			description: 'Service for testing health checks',
 			schema: {
 				input: {
@@ -91,7 +92,7 @@ describe('Connection Management Protocol', () => {
 			}
 		});
 		
-		client.startHandler(async (task) => {
+		service.start(async (task) => {
 			return {
 				message: task.input.message,
 			};
@@ -104,7 +105,7 @@ describe('Connection Management Protocol', () => {
 				'Authorization': `Bearer ${apiKey}`
 			},
 			body: JSON.stringify({
-				serviceId: client.serviceId,
+				serviceId: service.info.id,
 				testId: 'health_check'
 			})
 		});
@@ -133,12 +134,13 @@ describe('Connection Management Protocol', () => {
 	}, 15000);
 	
 	test('reconnection conformance', async () => {
-		client = createClient({
+		service = initService({
+			name: 'reconnection-service',
 			orraUrl: TEST_HARNESS_URL,
 			orraKey: apiKey
 		});
 
-		await client.registerService('reconnection-service', {
+		await service.register({
 			description: 'Service for testing reconnection',
 			schema: {
 				input: {
@@ -156,7 +158,7 @@ describe('Connection Management Protocol', () => {
 			}
 		});
 
-		client.startHandler(async (task) => {
+		service.start(async (task) => {
 			return {
 				message: task.input.message,
 			};
@@ -169,7 +171,7 @@ describe('Connection Management Protocol', () => {
 				'Authorization': `Bearer ${apiKey}`
 			},
 			body: JSON.stringify({
-				serviceId: client.serviceId,
+				serviceId: service.info.id,
 				testId: 'reconnection'
 			})
 		});
@@ -198,13 +200,14 @@ describe('Connection Management Protocol', () => {
 	}, 40000);
 	
 	test('message queueing conformance', async () => {
-		client = createClient({
+		service = initService({
+			name: 'queue-service',
 			orraUrl: TEST_HARNESS_URL,
 			orraKey: apiKey
 		});
 
 		let messageCount = 0;
-		await client.registerService('queue-service', {
+		await service.register({
 			description: 'Service for testing message queueing',
 			schema: {
 				input: {
@@ -223,7 +226,7 @@ describe('Connection Management Protocol', () => {
 			}
 		});
 
-		client.startHandler(async (task) => {
+		service.start(async (task) => {
 			messageCount++;
 			return {
 				message: task.input.message,
@@ -238,7 +241,7 @@ describe('Connection Management Protocol', () => {
 				'Authorization': `Bearer ${apiKey}`
 			},
 			body: JSON.stringify({
-				serviceId: client.serviceId,
+				serviceId: service.info.id,
 				testId: 'message_queueing'
 			})
 		});
