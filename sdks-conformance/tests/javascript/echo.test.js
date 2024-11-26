@@ -5,7 +5,7 @@
  */
 
 import { expect, test, describe, beforeAll, afterEach } from '@jest/globals';
-import { initService } from '@orra.dev/sdk'; // The actual Orra SDK
+import { initService } from '@orra.dev/sdk';
 
 const TEST_HARNESS_URL = process.env.TEST_HARNESS_URL || 'http://localhost:8006';
 const WEBHOOK_URL = process.env.WEBHOOK_URL || `http://localhost:8006/webhook-test`;

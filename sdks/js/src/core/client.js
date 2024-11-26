@@ -655,7 +655,7 @@ const initOrraEntity = (type) => ({
 			return await registerMethod.call(sdk, sdk.name, opts);
 		},
 		start: sdk.startHandler.bind(sdk),
-		close: sdk.shutdown.bind(sdk),
+		shutdown: sdk.shutdown.bind(sdk),
 		info: {
 			get id() { return sdk.serviceId; },
 			get version() { return sdk.version; }

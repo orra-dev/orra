@@ -84,7 +84,7 @@ describe('Service Registration Protocol', () => {
 		expect(service.info.version).toBe(1);
 		
 		// Clean close
-		service.close();
+		service.shutdown();
 	});
 	
 	test('service registration persistence', async () => {
@@ -112,7 +112,7 @@ describe('Service Registration Protocol', () => {
 			}
 		});
 		const originalId = serviceOne.info.id;
-		serviceOne.close();
+		serviceOne.shutdown();
 		
 		// Create new service instance
 		const serviceTwo = initService({
@@ -138,7 +138,7 @@ describe('Service Registration Protocol', () => {
 		expect(serviceTwo.info.id).toBe(originalId);
 		expect(serviceTwo.info.version).toBe(2); // Version increments on re-registration
 		
-		serviceTwo.close();
+		serviceTwo.shutdown();
 	});
 	
 	test('service init throws error for empty name', () => {
@@ -160,7 +160,7 @@ describe('Service Registration Protocol', () => {
 		})).rejects.toThrow();
 		
 		// Clean up
-		invalidSchema.close();
+		invalidSchema.shutdown();
 		
 		// Test invalid API key
 		const invalidService = initService({
@@ -170,7 +170,7 @@ describe('Service Registration Protocol', () => {
 		});
 		
 		await expect(invalidService.register({})).rejects.toThrow();
-		invalidService.close();
+		invalidService.shutdown();
 	});
 	
 	test('verify finality of close()', async () => {
@@ -187,7 +187,7 @@ describe('Service Registration Protocol', () => {
 				output: { type: "object", properties: { entry: { type: "string" } } },
 			}
 		});
-		service.close();
+		service.shutdown();
 		
 		// Attempt to register after close should throw
 		await expect(service.register({})).rejects.toThrow();
