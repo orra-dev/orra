@@ -14,6 +14,7 @@ T_Output = TypeVar('T_Output', bound=BaseModel)
 # Type alias for handler functions
 ServiceHandler = Callable[[T_Input], Awaitable[T_Output]]
 
+
 class PersistenceMethod(str, Enum):
     FILE = "file"
     CUSTOM = "custom"

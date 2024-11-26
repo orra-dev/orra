@@ -10,6 +10,7 @@ from test_utils import TestHarness
 async def test_harness():
     """Provides configured test harness"""
     harness_url = os.getenv("TEST_HARNESS_URL", "http://localhost:8006")
-    harness = TestHarness(harness_url)
+    webhook_url = os.getenv("WEBHOOK_URL", "http://localhost:8006/webhook-test")
+    harness = TestHarness(harness_url, webhook_url)
     yield harness
     await harness.cleanup()

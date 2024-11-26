@@ -5,8 +5,8 @@
 import sys
 from typing import Optional, Any
 import structlog
-from structlog.types import Processor, EventDict, BindableLogger
-from structlog.processors import TimeStamper
+from structlog.types import Processor, EventDict
+from structlog import BoundLogger
 
 
 class OrraLogger:
@@ -29,6 +29,7 @@ class OrraLogger:
             pretty: Whether to use pretty printing for development
         """
         self.enabled = enabled
+
         if not self.enabled:
             # No-op logger when disabled
             self.logger = structlog.get_logger("orra").bind(enabled=False)
@@ -37,10 +38,10 @@ class OrraLogger:
         processors_list: list[Processor] = [
             structlog.stdlib.add_log_level,
             structlog.stdlib.add_log_level_number,
-            TimeStamper(fmt="iso", utc=True),
+            structlog.processors.TimeStamper(fmt="iso", utc=True),
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
-            self._add_base_context,
+            self._add_base_context
         ]
 
         if pretty:
@@ -49,14 +50,14 @@ class OrraLogger:
         else:
             # Production JSON formatting
             processors_list.append(structlog.processors.JSONRenderer())
-
         structlog.configure(
             processors=processors_list,
+            wrapper_class=BoundLogger,
             context_class=dict,
             logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
-            wrapper_class=BindableLogger,  # Type is correct here
             cache_logger_on_first_use=True,
         )
+
 
         self.logger = structlog.get_logger("orra")
         self._base_context = {

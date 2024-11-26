@@ -11,10 +11,8 @@ import json
 from datetime import datetime, timezone
 
 import httpx
-from pydantic import ValidationError
 
-from .constants import DEFAULT_SERVICE_KEY_PATH
-from .types import PersistenceConfig, T_Input, T_Output, ServiceHandler
+from .types import PersistenceConfig, T_Input, T_Output
 from .persistence import PersistenceManager
 from .exceptions import OrraError, ServiceRegistrationError, ConnectionError
 from .logger import OrraLogger
@@ -51,7 +49,7 @@ class OrraSDK:
         if not api_key.startswith("sk-orra-"):
             raise OrraError("Invalid API key format")
 
-        self._logger = OrraLogger(
+        self.logger = OrraLogger(
             level=log_level,
             enabled=True,
             pretty=log_level.upper() == "DEBUG"
@@ -59,7 +57,7 @@ class OrraSDK:
         # Initialize persistence with explicit defaults
         persistence_config = PersistenceConfig(
             method=persistence_method,
-            file_path=persistence_file_path or DEFAULT_SERVICE_KEY_PATH,
+            file_path=persistence_file_path,
             custom_save=custom_save,
             custom_load=custom_load
         )
@@ -70,7 +68,6 @@ class OrraSDK:
         self._url = url.rstrip("/")
         self._api_key = api_key
         self.version: int = 0
-        self._handlers: Dict[str, Any] = {}  # Will be typed properly in next phase
         self._ws: Optional[websockets.WebSocketClientProtocol] = None
         self._task_handler: Optional[Callable] = None
         self._message_queue: asyncio.Queue = asyncio.Queue()
@@ -94,128 +91,19 @@ class OrraSDK:
 
         self._cleanup_task = asyncio.create_task(self._cleanup_cache_periodically())
 
-    def service(
+    async def register_service_or_agent(
             self,
             name: str,
             description: str,
             input_model: type[T_Input],
-            output_model: type[T_Output]
-    ) -> Callable[[ServiceHandler[T_Input, T_Output]], ServiceHandler[T_Input, T_Output]]:
-        """Register a service with Orra using a decorator.
-
-        Args:
-            name: Service name (lowercase, URL-safe, max 63 chars)
-            description: Human-readable service description
-            input_model: Pydantic model defining the service input
-            output_model: Pydantic model defining the service output
-
-        Example:
-            @orra.service(
-                name="translation",
-                description="Translates text",
-                input_model=TranslationInput,
-                output_model=TranslationOutput
-            )
-            async def translate(request: TranslationInput) -> TranslationOutput:
-                return TranslationOutput(text="translated")
-        """
-
-        def decorator(
-                handler: ServiceHandler[T_Input, T_Output]
-        ) -> ServiceHandler[T_Input, T_Output]:
-            # Create internal handler for SDK
-            async def internal_handler(raw_input: Dict[str, Any]) -> Dict[str, Any]:
-                try:
-                    # Convert and validate input
-                    self._logger.debug("Validating input", service=name)
-                    try:
-                        validated_input = input_model.model_validate(raw_input)
-                    except ValidationError as e:
-                        self._logger.debug(
-                            "Input validation failed",
-                            service=name,
-                            errors=e.errors()
-                        )
-                        # Format validation error for control plane
-                        raise OrraError(
-                            message="Input validation failed",
-                            details={
-                                "validation_errors": [
-                                    {
-                                        "field": err["loc"][0],
-                                        "error": err["msg"],
-                                        "type": err["type"]
-                                    }
-                                    for err in e.errors()
-                                ]
-                            }
-                        )
-
-                    # Execute handler
-                    self._logger.debug("Executing handler", service=name)
-                    result = await handler(validated_input)
-
-                    # Validate output type
-                    try:
-                        if not isinstance(result, output_model):
-                            raise TypeError(f"Handler returned {type(result)}, expected {output_model}")
-                        # Ensure output matches schema
-                        return result.model_dump()
-                    except (TypeError, ValidationError) as e:
-                        self._logger.error(
-                            "Output validation failed",
-                            service=name,
-                            error=str(e)
-                        )
-                        raise OrraError(
-                            message="Output validation failed",
-                            details={"error": str(e)}
-                        )
-
-                except OrraError:
-                    # Pass through our formatted errors
-                    raise
-                except Exception as e:
-                    # Catch all other errors and format them
-                    self._logger.error(
-                        "Handler error",
-                        service=name,
-                        error=str(e),
-                        error_type=type(e).__name__
-                    )
-                    raise OrraError(
-                        message="Service error",
-                        details={"error": str(e)}
-                    )
-
-            # Register with SDK internals
-            self._task_handler = internal_handler
-            asyncio.create_task(self._register_service(
-                name=name,
-                description=description,
-                input_model=input_model,
-                output_model=output_model
-            ))
-
-            return handler
-
-        return decorator
-
-    # Alias agent to service for now
-    agent = service
-
-    async def _register_service(
-            self,
-            name: str,
-            description: str,
-            input_model: type[T_Input],
-            output_model: type[T_Output]
+            output_model: type[T_Output],
+            kind: str
     ) -> None:
         """Register service with control plane"""
         # Load existing service ID if any
         self.service_id = await self._persistence.load_service_id()
 
-        self._logger.debug("Registering service", name=name, existing_service_id=self.service_id)
+        self.logger.debug("Registering service", name=name, existing_service_id=self.service_id)
 
         try:
             # Convert Pydantic models to JSON schema
@@ -225,7 +113,7 @@ class OrraSDK:
             }
 
             response = await self._http.post(
-                "/register/service",
+                url=f"/register/{kind}",
                 json={
                     "id": self.service_id,
                     "name": name,
@@ -242,7 +130,7 @@ class OrraSDK:
             self.version = data["version"]
 
             # Update logger with service context
-            self._logger.reconfigure(
+            self.logger.reconfigure(
                 service_id=self.service_id,
                 service_version=self.version
             )
@@ -268,14 +156,14 @@ class OrraSDK:
             self._ws = await websockets.connect(uri)
             self._reconnect_attempts = 0
             self._is_connected.set()
-            self._logger.info("WebSocket connection established")
+            self.logger.info("WebSocket connection established")
 
             # Start message processing
             asyncio.create_task(self._process_messages())
             asyncio.create_task(self._process_queue())
 
         except Exception as e:
-            self._logger.error("WebSocket connection failed", error=str(e))
+            self.logger.error("WebSocket connection failed", error=str(e))
             self._is_connected.clear()
             await self._schedule_reconnect()
 
@@ -296,10 +184,10 @@ class OrraSDK:
                     elif message_type == "task_request":
                         await self._handle_task(data)
                     else:
-                        self._logger.warn(f"Unknown message type: {message_type}")
+                        self.logger.warn(f"Unknown message type: {message_type}")
 
                 except json.JSONDecodeError:
-                    self._logger.error("Failed to parse WebSocket message")
+                    self.logger.error("Failed to parse WebSocket message")
 
         except websockets.ConnectionClosed:
             self._is_connected.clear()
@@ -309,7 +197,7 @@ class OrraSDK:
     async def _schedule_reconnect(self) -> None:
         """Schedule reconnection with exponential backoff"""
         if self._reconnect_attempts >= self._max_reconnect_attempts:
-            self._logger.error("Max reconnection attempts reached")
+            self.logger.error("Max reconnection attempts reached")
             return
 
         delay = min(
@@ -318,7 +206,7 @@ class OrraSDK:
         )
         self._reconnect_attempts += 1
 
-        self._logger.info("Scheduling reconnection", attempt=self._reconnect_attempts, delay_seconds=delay)
+        self.logger.info("Scheduling reconnection", attempt=self._reconnect_attempts, delay_seconds=delay)
 
         await asyncio.sleep(delay)
         asyncio.create_task(self._connect_websocket())
@@ -329,7 +217,7 @@ class OrraSDK:
         execution_id = task.get("executionId")
         idempotency_key = task.get("idempotencyKey")
 
-        self._logger.debug(
+        self.logger.debug(
             "Task handling initiated",
             taskId=task_id,
             executionId=execution_id,
@@ -338,8 +226,9 @@ class OrraSDK:
         )
 
         if not self._task_handler:
-            self._logger.warn(
+            self.logger.warn(
                 "Received task but no handler is set",
+                idempotencyKey=idempotency_key,
                 taskId=task_id,
                 executionId=execution_id
             )
@@ -347,7 +236,7 @@ class OrraSDK:
 
         # Check cache first
         if cached_result := self._processed_tasks_cache.get(idempotency_key):
-            self._logger.debug(
+            self.logger.debug(
                 "Cache hit found",
                 taskId=task_id,
                 idempotencyKey=idempotency_key,
@@ -355,6 +244,7 @@ class OrraSDK:
             )
             await self._send_task_result(
                 task_id=task_id,
+                idempotency_key=idempotency_key,
                 execution_id=execution_id,
                 result=cached_result["result"],
                 error=cached_result.get("error")
@@ -363,13 +253,14 @@ class OrraSDK:
 
         # Check if task is already in progress
         if self._in_progress_tasks.get(idempotency_key):
-            self._logger.debug(
+            self.logger.debug(
                 "Task already in progress",
                 taskId=task_id,
                 idempotencyKey=idempotency_key
             )
             await self._send_task_status(
                 task_id=task_id,
+                idempotency_key=idempotency_key,
                 execution_id=execution_id,
                 status="in_progress"
             )
@@ -385,7 +276,7 @@ class OrraSDK:
             result = await self._task_handler(input_data)
 
             processing_time = time.time() - start_time
-            self._logger.debug(
+            self.logger.debug(
                 "Task processing completed",
                 taskId=task_id,
                 executionId=execution_id,
@@ -400,13 +291,14 @@ class OrraSDK:
 
             await self._send_task_result(
                 task_id=task_id,
+                idempotency_key=idempotency_key,
                 execution_id=execution_id,
                 result=result
             )
 
         except Exception as e:
             processing_time = time.time() - start_time
-            self._logger.error(
+            self.logger.error(
                 "Task processing failed",
                 taskId=task_id,
                 executionId=execution_id,
@@ -423,6 +315,7 @@ class OrraSDK:
 
             await self._send_task_result(
                 task_id=task_id,
+                idempotency_key=idempotency_key,
                 execution_id=execution_id,
                 error=str(e)
             )
@@ -433,6 +326,7 @@ class OrraSDK:
     async def _send_task_result(
             self,
             task_id: str,
+            idempotency_key: str,
             execution_id: str,
             result: Optional[Any] = None,
             error: Optional[str] = None
@@ -441,6 +335,7 @@ class OrraSDK:
         message = {
             "type": "task_result",
             "taskId": task_id,
+            "idempotencyKey": idempotency_key,
             "executionId": execution_id,
             "serviceId": self.service_id,
             "result": result,
@@ -451,6 +346,7 @@ class OrraSDK:
     async def _send_task_status(
             self,
             task_id: str,
+            idempotency_key: str,
             execution_id: str,
             status: str
     ) -> None:
@@ -458,6 +354,7 @@ class OrraSDK:
         message = {
             "type": "task_status",
             "taskId": task_id,
+            "idempotencyKey": idempotency_key,
             "executionId": execution_id,
             "serviceId": self.service_id,
             "status": status,
@@ -468,15 +365,15 @@ class OrraSDK:
     async def _handle_ping(self, data: dict) -> None:
         """Handle ping message"""
         if data.get("serviceId") != self.service_id:
-            self._logger.trace(
+            self.logger.trace(
                 "Received PING for unknown serviceId",
                 receivedId=data.get("serviceId")
             )
             return
 
-        self._logger.trace("Received PING")
+        self.logger.trace("Received PING")
         await self._send_pong()
-        self._logger.trace("Sent PONG")
+        self.logger.trace("Sent PONG")
 
     async def _send_pong(self) -> None:
         """Send pong response"""
@@ -490,7 +387,7 @@ class OrraSDK:
     async def _handle_ack(self, data: dict) -> None:
         """Handle message acknowledgment"""
         message_id = data.get("id")
-        self._logger.trace(
+        self.logger.trace(
             "Received message acknowledgment",
             messageId=message_id
         )
@@ -506,14 +403,14 @@ class OrraSDK:
             "payload": message
         }
 
-        self._logger.trace(
+        self.logger.trace(
             "Preparing to send message",
             messageId=message_id,
             messageType=message["type"]
         )
 
         if not self._is_connected.is_set() or not self._ws:
-            self._logger.debug(
+            self.logger.debug(
                 "Connection not ready, queueing message",
                 messageId=message_id,
                 messageType=message["type"]
@@ -523,7 +420,7 @@ class OrraSDK:
 
         try:
             await self._ws.send(json.dumps(wrapped_message))
-            self._logger.debug(
+            self.logger.debug(
                 "Message sent successfully",
                 messageId=message_id,
                 messageType=message["type"]
@@ -536,7 +433,7 @@ class OrraSDK:
             asyncio.create_task(self._handle_message_timeout(message_id))
 
         except Exception as e:
-            self._logger.error(
+            self.logger.error(
                 "Failed to send message, queueing",
                 messageId=message_id,
                 error=str(e)
@@ -547,7 +444,7 @@ class OrraSDK:
         """Handle message acknowledgment timeout"""
         await asyncio.sleep(5.0)  # 5 second timeout
         if message := self._pending_messages.pop(message_id, None):
-            self._logger.debug(
+            self.logger.debug(
                 "Message acknowledgment timeout, re-queueing",
                 messageId=message_id
             )
@@ -555,25 +452,27 @@ class OrraSDK:
 
     async def _process_queue(self) -> None:
         """Process queued messages"""
-        while True:
-            if self._user_initiated_close:
-                break
+        try:
+            while not self._user_initiated_close:
+                try:
+                    if not self._is_connected.is_set():
+                        await asyncio.sleep(1.0)
+                        continue
 
-            try:
-                if not self._is_connected.is_set():
+                    message = await self._message_queue.get()
+                    await self._send_message(message["payload"])
+                    self._message_queue.task_done()
+
+                except asyncio.CancelledError:
+                    break  # Handle cancellation gracefully
+                except Exception as e:
+                    self.logger.error(
+                        "Error processing queued message",
+                        error=str(e)
+                    )
                     await asyncio.sleep(1.0)
-                    continue
-
-                message = await self._message_queue.get()
-                await self._send_message(message["payload"])
-                self._message_queue.task_done()
-
-            except Exception as e:
-                self._logger.error(
-                    "Error processing queued message",
-                    error=str(e)
-                )
-                await asyncio.sleep(1.0)
+        finally:
+            self.logger.debug("Queue processor shutting down")
 
     async def _cleanup_cache_periodically(self) -> None:
         """Periodically clean up expired cache entries"""
@@ -596,7 +495,7 @@ class OrraSDK:
                         in_progress_tasks_removed += 1
 
                 if processed_tasks_removed or in_progress_tasks_removed:
-                    self._logger.debug(
+                    self.logger.debug(
                         "Cache cleanup completed",
                         processedTasksRemoved=processed_tasks_removed,
                         inProgressTasksRemoved=in_progress_tasks_removed,
@@ -607,7 +506,7 @@ class OrraSDK:
                 await asyncio.sleep(CLEANUP_INTERVAL)
 
             except Exception as e:
-                self._logger.error(
+                self.logger.error(
                     "Error during cache cleanup",
                     error=str(e),
                     errorType=type(e).__name__
@@ -616,30 +515,30 @@ class OrraSDK:
 
     async def shutdown(self) -> None:
         """Gracefully shutdown the SDK"""
-        self._logger.info("Initiating SDK shutdown")
+        self.logger.info("Initiating SDK shutdown")
         self._user_initiated_close = True
 
-        # Close WebSocket with normal closure code
-        if self._ws:
-            if self._ws.open:
-                self._logger.debug("Closing WebSocket connection")
-                await self._ws.close(code=1000, reason="Normal Closure")
+        # Cancel all running tasks
+        tasks = []
+        for task in asyncio.all_tasks():
+            if task is not asyncio.current_task():
+                task.cancel()
+                tasks.append(task)
 
-        # Cancel cleanup task
-        if hasattr(self, '_cleanup_task'):
-            self._logger.trace("Cancelling cache cleanup task")
-            self._cleanup_task.cancel()
-            try:
-                await self._cleanup_task
-            except asyncio.CancelledError:
-                pass
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Close WebSocket
+        if self._ws and self._ws.open:
+            self.logger.debug("Closing WebSocket connection")
+            await self._ws.close(code=1000, reason="Normal Closure")
 
         # Close HTTP client
         if hasattr(self, '_http'):
-            self._logger.debug("Closing HTTP client")
-        await self._http.aclose()
+            self.logger.debug("Closing HTTP client")
+            await self._http.aclose()
 
-        self._logger.info("SDK shutdown complete")
+        self.logger.info("SDK shutdown complete")
 
     async def __aenter__(self) -> 'OrraSDK':
         """Async context manager entry"""
@@ -648,8 +547,6 @@ class OrraSDK:
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         """Async context manager exit"""
         await self.shutdown()
-
-    # Only showing the new/modified runtime management additions to client.py
 
     def run(self) -> None:
         """
@@ -670,7 +567,7 @@ class OrraSDK:
             asyncio.run(self._run())
         except KeyboardInterrupt:
             # Handle Ctrl+C gracefully
-            self._logger.info("Received shutdown signal, stopping service...")
+            self.logger.info("Received shutdown signal, stopping service...")
             asyncio.run(self.shutdown())
 
     async def _run(self) -> None:
@@ -679,7 +576,7 @@ class OrraSDK:
             # Run until cancelled
             await asyncio.get_event_loop().create_future()
         except asyncio.CancelledError:
-            self._logger.debug("Run cancelled")
+            self.logger.debug("Run cancelled")
             raise
         finally:
             # Ensure cleanup happens

@@ -10,11 +10,11 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.11"
 pydantic = "^2.0"
 websockets = "^12.0"
 httpx = "^0.26.0"
-structlog = "^24.1.0"
+structlog = ">=24.1.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"
