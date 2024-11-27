@@ -10,6 +10,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REBUILD=${REBUILD:-true}
+TEST_IMPL=${TEST_IMPL:-"all"}
 WEBHOOK_URL=${WEBHOOK_URL:-http://sdk-test-harness:8006/webhook-test}
 
 # Check if Docker daemon is running
@@ -48,6 +49,11 @@ rm -rf "${RESULTS_DIR}/*.json"
 for IMPL_DIR in "${PROJECT_ROOT}"/tests/*/; do
   if [ -d "$IMPL_DIR" ] && [ "$(basename "$IMPL_DIR")" != "shared" ]; then
     IMPL_NAME=$(basename "$IMPL_DIR")
+
+    if [ "$TEST_IMPL" != "all" ] && [ "$TEST_IMPL" != "$IMPL_NAME" ]; then
+      continue
+    fi
+
     echo "Testing $IMPL_NAME implementation..."
 
     # Run implementation-specific test script
