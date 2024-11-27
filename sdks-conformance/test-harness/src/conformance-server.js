@@ -214,7 +214,7 @@ export class ConformanceServer {
 					...baseMessage,
 					executionId: `mid_task__${testRunId}`,
 					idempotencyKey: `mid_task__${testRunId}`,
-					input: { duration: 5000 } // 5s task
+					input: { duration: 2500 } // 4s task
 				};
 				break;
 			

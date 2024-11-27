@@ -158,9 +158,14 @@ class OrraSDK:
             self._is_connected.set()
             self.logger.info("WebSocket connection established")
 
+            self.logger.info("Resending messages that could not be previously delivered")
+            while not self._message_queue.empty():
+                message = self._message_queue.get_nowait()
+                await self._send_message(message)
+                self._message_queue.task_done()
+
             # Start message processing
             asyncio.create_task(self._process_messages())
-            asyncio.create_task(self._process_queue())
 
         except Exception as e:
             self.logger.error("WebSocket connection failed", error=str(e))
@@ -415,7 +420,7 @@ class OrraSDK:
                 messageId=message_id,
                 messageType=message["type"]
             )
-            await self._message_queue.put(wrapped_message)
+            await self._message_queue.put(message)
             return
 
         try:
@@ -425,10 +430,8 @@ class OrraSDK:
                 messageId=message_id,
                 messageType=message["type"]
             )
-            self._pending_messages[message_id] = {
-                "message": wrapped_message,
-                "timestamp": time.time()
-            }
+            self._pending_messages[message_id] = message
+
             # Schedule timeout for acknowledgment
             asyncio.create_task(self._handle_message_timeout(message_id))
 
@@ -438,7 +441,7 @@ class OrraSDK:
                 messageId=message_id,
                 error=str(e)
             )
-            await self._message_queue.put(wrapped_message)
+            await self._message_queue.put(message)
 
     async def _handle_message_timeout(self, message_id: str) -> None:
         """Handle message acknowledgment timeout"""
@@ -448,31 +451,7 @@ class OrraSDK:
                 "Message acknowledgment timeout, re-queueing",
                 messageId=message_id
             )
-            await self._message_queue.put(message["message"])
-
-    async def _process_queue(self) -> None:
-        """Process queued messages"""
-        try:
-            while not self._user_initiated_close:
-                try:
-                    if not self._is_connected.is_set():
-                        await asyncio.sleep(1.0)
-                        continue
-
-                    message = await self._message_queue.get()
-                    await self._send_message(message["payload"])
-                    self._message_queue.task_done()
-
-                except asyncio.CancelledError:
-                    break  # Handle cancellation gracefully
-                except Exception as e:
-                    self.logger.error(
-                        "Error processing queued message",
-                        error=str(e)
-                    )
-                    await asyncio.sleep(1.0)
-        finally:
-            self.logger.debug("Queue processor shutting down")
+            await self._message_queue.put(message)
 
     async def _cleanup_cache_periodically(self) -> None:
         """Periodically clean up expired cache entries"""

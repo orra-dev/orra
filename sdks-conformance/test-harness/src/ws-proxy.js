@@ -22,13 +22,62 @@ export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookRe
 		}
 		
 		setupMessageHandlers() {
-			this.clientWs.on('message', data => this.handleClientMessage(data));
-			this.controlPlaneWs.on('message', data => this.handleControlPlaneMessage(data));
-			this.clientWs.on('close', () => this.handleClose());
-			this.controlPlaneWs.on('close', () => this.clientWs.close());
+			this.clientWs.on('error', (error) => {
+				console.log('Client WebSocket error:', error);
+			});
+			
+			this.controlPlaneWs.on('error', (error) => {
+				console.log('Control plane WebSocket error:', error);
+			});
+			
+			console.log('Client WebSocket readyState:', this.clientWs.readyState);
+			console.log('Control plane WebSocket readyState:', this.controlPlaneWs.readyState);
+			
+			// this.clientWs.on('message', data => {
+			// 	console.log('clientWs.on(message) setupMessageHandlers', JSON.stringify(data))
+			// 	this.handleClientMessage(data)
+			// });
+			let messageBuffer = '';
+			
+			this.clientWs.on('message', (data) => {
+				try {
+					const message = data.toString();
+					messageBuffer += message;
+					
+					try {
+						// Try to parse complete message
+						const parsed = JSON.parse(messageBuffer);
+						messageBuffer = ''; // Clear buffer after successful parse
+						console.log('Received complete message:', parsed);
+						this.handleClientMessage(data);
+					} catch (e) {
+						// Message incomplete - keep buffering
+						console.log('Buffering message chunk');
+					}
+				} catch (e) {
+					console.error('Error processing message:', e);
+					messageBuffer = ''; // Reset on error
+				}
+			});
+			
+			this.controlPlaneWs.on('message', data => {
+				console.log('controlPlaneWs.on(message) setupMessageHandlers', JSON.stringify(data))
+				this.handleControlPlaneMessage(data)
+			});
+			
+			this.clientWs.on('close', () => {
+				console.log('Client WebSocket closed');
+				this.handleClose()
+			});
+			
+			this.controlPlaneWs.on('close', () => {
+				console.log('Control plane WebSocket closed');
+				this.clientWs.close()
+			});
 		}
 		
 		handleClientMessage(data) {
+			console.log('handleClientMessage - DATA', data);
 			try {
 				const msg = JSON.parse(data.toString());
 				const payload = msg.payload;
@@ -48,8 +97,10 @@ export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookRe
 		}
 		
 		handleControlPlaneMessage(data) {
+			console.log('handleControlPlaneMessage - DATA', data);
 			try {
 				const msg = JSON.parse(data.toString());
+				console.log('handleClientMessage - DATA', data);
 				validator.validateMessage(msg, 'sdk-inbound');
 				this.clientWs.send(JSON.stringify(msg));
 			} catch (error) {
@@ -64,6 +115,7 @@ export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookRe
 		}
 		
 		isTestResult(payload) {
+			console.log("isTestResult(payload)", JSON.stringify(payload));
 			return payload.type === 'task_result' &&
 				(
 					payload.executionId.includes('exec_test_') ||
@@ -423,15 +475,21 @@ export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookRe
 					return;
 				}
 				
+				console.log("handleConnection - url", url);
+				console.log("handleConnection - serviceId", serviceId);
+				
 				const controlPlaneWs = new WebSocket(controlPlaneUrl + req.url);
 				
 				controlPlaneWs.on('open', () => {
+					console.log('Control plane WebSocket opened');
 					const manager = new ConnectionManager(serviceId, clientWs, controlPlaneWs);
 					activeConnections.set(serviceId, manager);
 					manager.setupMessageHandlers();
+					console.log('Control plane WebSocket setupMessageHandlers completed!');
 				});
 				
 			} catch (error) {
+				console.log("handleConnection - error", error.message);
 				clientWs.close(4000, error.message);
 			}
 		},

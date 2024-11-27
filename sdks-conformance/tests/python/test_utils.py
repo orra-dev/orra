@@ -38,7 +38,7 @@ class TestHarness:
         response.raise_for_status()
         return ProjectCredentials(**response.json())
 
-    async def run_conformance_test(self, api_key:str, service_id: str, test_id: str) -> Dict[str, Any]:
+    async def run_conformance_test(self, api_key:str, service_id: str, test_id: str, poll_timeout: float = 5.0) -> Dict[str, Any]:
         """Run specific conformance test"""
         response = await self.http.post(
             "/conformance-tests",
@@ -48,7 +48,7 @@ class TestHarness:
                 "testId": test_id
             })
         response.raise_for_status()
-        return await self.poll_webhook_result(response.json()["id"], api_key)
+        return await self.poll_webhook_result(response.json()["id"], api_key, poll_timeout)
 
     async def poll_inspect_orchestration(self, result_id: str, api_key: str, timeout: float = 5.0) -> Dict[str, Any]:
         """Poll for webhook test results"""
@@ -60,7 +60,7 @@ class TestHarness:
                 data = response.json()
                 if data["status"] in ["completed", "failed"]:
                     return data
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1)
         raise TimeoutError(f"Test result not available after {timeout}s")
 
     async def poll_webhook_result(self, result_id: str, api_key: str, timeout: float = 5.0) -> Dict[str, Any]:
@@ -72,9 +72,15 @@ class TestHarness:
             if response.status_code == 200:
                 data = response.json()
                 if data["status"] in ["completed", "failed"]:
+                    print(f"WEBHOOK_RESULT: {data}")
                     return data
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1)
         raise TimeoutError(f"Test result not available after {timeout}s")
+
+    async def enable_disconnect(self, api_key: str) -> None:
+        """Enable disconnect for next WebSocket connection"""
+        await self.http.post("/test-control/enable-disconnect",
+                         headers={"Authorization": f"Bearer {api_key}"})
 
     async def cleanup(self):
         """Cleanup resources"""
