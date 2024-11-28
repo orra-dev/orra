@@ -28,12 +28,10 @@ export class ConnectionManager {
 		console.log('Client WebSocket readyState:', this.clientWs.readyState);
 		
 		this.clientWs.on('message', data => {
-			console.log('clientWs.on(message) setupMessageHandlers', JSON.stringify(data.toString()))
 			this.handleClientMessage(data)
 		});
 		
 		this.controlPlaneWs.on('message', data => {
-			console.log('controlPlaneWs.on(message) setupMessageHandlers', JSON.stringify(data))
 			this.handleControlPlaneMessage(data)
 		});
 		
@@ -49,7 +47,6 @@ export class ConnectionManager {
 	}
 	
 	handleClientMessage(data) {
-		console.log('handleClientMessage - DATA', data);
 		try {
 			const msg = JSON.parse(data.toString());
 			const payload = msg.payload;
@@ -69,10 +66,8 @@ export class ConnectionManager {
 	}
 	
 	handleControlPlaneMessage(data) {
-		console.log('handleControlPlaneMessage - DATA', data);
 		try {
 			const msg = JSON.parse(data.toString());
-			console.log('handleClientMessage - DATA', data);
 			this.validator.validateMessage(msg, 'sdk-inbound');
 			this.clientWs.send(JSON.stringify(msg));
 		} catch (error) {
@@ -87,7 +82,6 @@ export class ConnectionManager {
 	}
 	
 	isTestResult(payload) {
-		console.log("isTestResult(payload)", JSON.stringify(payload));
 		return payload.type === 'task_result' &&
 			(
 				payload.executionId.includes('exec_test_') ||
