@@ -20,7 +20,7 @@ from .logger import OrraLogger
 MAX_PROCESSED_TASKS_AGE = 24 * 60 * 60  # 24 hours in seconds
 MAX_IN_PROGRESS_AGE = 30 * 60  # 30 minutes in seconds
 CLEANUP_INTERVAL = 60 * 60  # Run every hour
-
+MAX_MESSAGE_SIZE=10_485_760 + (1024 *2) # 10.5 MB
 
 class OrraSDK:
     def __init__(
@@ -153,7 +153,10 @@ class OrraSDK:
         uri = f"{ws_url}/ws?serviceId={self.service_id}&apiKey={self._api_key}"
 
         try:
-            self._ws = await websockets.connect(uri)
+            self._ws = await websockets.connect(
+                uri,
+                max_size=MAX_MESSAGE_SIZE
+            )
             self._reconnect_attempts = 0
             self._is_connected.set()
             self.logger.info("WebSocket connection established")
