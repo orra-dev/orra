@@ -11,11 +11,13 @@ pip install orra-sdk
 ## Usage
 
 ```python
-from orra import OrraSDK
+from orra import OrraService, Task
 from pydantic import BaseModel
 
 # Initialize the SDK
-orra = OrraSDK(
+svc = OrraService(
+    name="my-service",
+    description="A simple echo service",
     url="https://api.orra.dev",
     api_key="your-api-key"
 )
@@ -28,16 +30,11 @@ class Output(BaseModel):
     response: str
 
 # Register your service
-@orra.service(
-    name="my-service",
-    description="A simple echo service",
-    input_model=Input,
-    output_model=Output
-)
-async def handle_message(request: Input) -> Output:
-    return Output(response=f"Echo: {request.message}")
+@svc.handler()
+async def handle_message(request: Task[Input]) -> Output:
+    return Output(response=f"Echo: {request.input.message}")
 
 # Run the service
 if __name__ == "__main__":
-    orra.run()
+    svc.start()
 ```

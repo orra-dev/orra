@@ -20,7 +20,8 @@ from .logger import OrraLogger
 MAX_PROCESSED_TASKS_AGE = 24 * 60 * 60  # 24 hours in seconds
 MAX_IN_PROGRESS_AGE = 30 * 60  # 30 minutes in seconds
 CLEANUP_INTERVAL = 60 * 60  # Run every hour
-MAX_MESSAGE_SIZE=10_485_760 + (1024 *2) # 10.5 MB
+MAX_MESSAGE_SIZE = 10_485_760 + (1024 * 2)  # 10.5 MB
+
 
 class OrraSDK:
     def __init__(
@@ -460,8 +461,11 @@ class OrraSDK:
 
     async def _cleanup_cache_periodically(self) -> None:
         """Periodically clean up expired cache entries"""
-        while not self._user_initiated_close:
+        while True:
             try:
+                if self._user_initiated_close:
+                    break
+
                 now = time.time()
                 processed_tasks_removed = 0
                 in_progress_tasks_removed = 0
@@ -487,8 +491,13 @@ class OrraSDK:
                         remainingInProgressTasks=len(self._in_progress_tasks)
                     )
 
-                await asyncio.sleep(CLEANUP_INTERVAL)
+                try:
+                    await asyncio.sleep(CLEANUP_INTERVAL)
+                except asyncio.CancelledError:
+                    break
 
+            except asyncio.CancelledError:
+                break
             except Exception as e:
                 self.logger.error(
                     "Error during cache cleanup",
@@ -502,7 +511,15 @@ class OrraSDK:
         self.logger.info("Initiating SDK shutdown")
         self._user_initiated_close = True
 
-        # Cancel all running tasks
+        # Cancel cleanup task first
+        if hasattr(self, '_cleanup_task'):
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
+
+        # Cancel all remaining tasks
         tasks = []
         for task in asyncio.all_tasks():
             if task is not asyncio.current_task():
@@ -532,39 +549,6 @@ class OrraSDK:
         """Async context manager exit"""
         await self.shutdown()
 
-    def run(self) -> None:
-        """
-        Run the service until interrupted. Blocks until Ctrl+C.
-
-        Example:
-            orra = OrraSDK(url="...", api_key="...")
-
-            @orra.service(...)
-            async def my_handler(request):
-                pass
-
-            if __name__ == "__main__":
-                orra.run()
-        """
-        try:
-            # Run the async event loop
-            asyncio.run(self._run())
-        except KeyboardInterrupt:
-            # Handle Ctrl+C gracefully
-            self.logger.info("Received shutdown signal, stopping service...")
-            asyncio.run(self.shutdown())
-
-    async def _run(self) -> None:
-        """Internal run method that keeps the service alive."""
-        try:
-            # Run until cancelled
-            await asyncio.get_event_loop().create_future()
-        except asyncio.CancelledError:
-            self.logger.debug("Run cancelled")
-            raise
-        finally:
-            # Ensure cleanup happens
-            await self.shutdown()
 
 def clean_schema(schema: dict) -> dict:
     """Clean schema to remove None types and simplify type definitions"""
