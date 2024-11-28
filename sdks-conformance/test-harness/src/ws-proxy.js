@@ -34,9 +34,6 @@ export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookRe
 					return;
 				}
 				
-				console.log("handleConnection - url", url);
-				console.log("handleConnection - serviceId", serviceId);
-				
 				const controlPlaneWs = new WebSocket(controlPlaneUrl + req.url);
 				
 				controlPlaneWs.on('open', () => {

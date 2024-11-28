@@ -72,7 +72,6 @@ class TestHarness:
             if response.status_code == 200:
                 data = response.json()
                 if data["status"] in ["completed", "failed"]:
-                    print(f"WEBHOOK_RESULT: {data}")
                     return data
             await asyncio.sleep(1)
         raise TimeoutError(f"Test result not available after {timeout}s")
