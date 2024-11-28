@@ -2,6 +2,8 @@
 #   License, v. 2.0. If a copy of the MPL was not distributed with this
 #   file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import logging
+import os
 import sys
 from typing import Optional, Any
 import structlog
@@ -12,12 +14,12 @@ from structlog import BoundLogger
 class OrraLogger:
     def __init__(
             self,
-            level: str = "INFO",
+            level: str = None,
             *,
             service_id: Optional[str] = None,
             service_version: Optional[int] = None,
-            enabled: bool = True,
-            pretty: bool = False
+            enabled: bool = None,
+            pretty: bool = None
     ):
         """Initialize the Orra logger
 
@@ -28,14 +30,28 @@ class OrraLogger:
             enabled: Whether logging is enabled
             pretty: Whether to use pretty printing for development
         """
-        self.enabled = enabled
+        self.enabled = (enabled if enabled is not None
+                        else os.getenv("ORRA_LOGGING", "true").lower() != "false")
 
         if not self.enabled:
             # No-op logger when disabled
             self.logger = structlog.get_logger("orra").bind(enabled=False)
             return
 
+        # Get log level from env var or parameter
+        level = level or os.getenv("ORRA_LOG_LEVEL", "error").upper()
+        pretty = pretty if pretty is not None else os.getenv("ORRA_LOG_PRETTY", "").lower() == "true"
+
+        # Set up stdlib logging
+        logging.basicConfig(
+            format="%(message)s",
+            stream=sys.stderr,
+            level=getattr(logging, level)
+        )
+
         processors_list: list[Processor] = [
+            structlog.stdlib.filter_by_level,
+            structlog.stdlib.add_logger_name,
             structlog.stdlib.add_log_level,
             structlog.stdlib.add_log_level_number,
             structlog.processors.TimeStamper(fmt="iso", utc=True),
@@ -50,14 +66,14 @@ class OrraLogger:
         else:
             # Production JSON formatting
             processors_list.append(structlog.processors.JSONRenderer())
+
         structlog.configure(
             processors=processors_list,
             wrapper_class=BoundLogger,
             context_class=dict,
-            logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
+            logger_factory=structlog.stdlib.LoggerFactory(),
             cache_logger_on_first_use=True,
         )
-
 
         self.logger = structlog.get_logger("orra")
         self._base_context = {
