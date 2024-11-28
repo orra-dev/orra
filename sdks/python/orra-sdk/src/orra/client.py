@@ -108,8 +108,8 @@ class OrraSDK:
         try:
             # Convert Pydantic models to JSON schema
             schema = {
-                "input": input_model.model_json_schema(),
-                "output": output_model.model_json_schema()
+                "input": clean_schema(input_model.model_json_schema()),
+                "output": clean_schema(output_model.model_json_schema())
             }
 
             response = await self._http.post(
@@ -562,3 +562,23 @@ class OrraSDK:
         finally:
             # Ensure cleanup happens
             await self.shutdown()
+
+def clean_schema(schema: dict) -> dict:
+    """Clean schema to remove None types and simplify type definitions"""
+    if "properties" not in schema:
+        return schema
+
+    for prop_name, prop_schema in schema["properties"].items():
+        if "anyOf" in prop_schema:
+            # Find the non-null type in anyOf
+            types = [t for t in prop_schema["anyOf"] if t.get("type") != "null"]
+            if types:
+                # Replace anyOf with the single type definition
+                prop_schema.update(types[0])
+                del prop_schema["anyOf"]
+
+        # Remove default if it exists and is None
+        if "default" in prop_schema and prop_schema["default"] is None:
+            del prop_schema["default"]
+
+    return schema

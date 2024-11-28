@@ -14,14 +14,13 @@ from orra.constants import DEFAULT_SERVICE_KEY_DIR
 
 TEST_HARNESS_URL = os.getenv("TEST_HARNESS_URL", "http://localhost:8006")
 
-
 class Input(BaseModel):
     message: str
 
 
 class Output(BaseModel):
     message: str
-    sequence: int
+    sequence: int | None = None
 
 
 @pytest.fixture(autouse=True)
@@ -31,12 +30,9 @@ async def cleanup():
     if orra_dir.exists():
         shutil.rmtree(orra_dir)
 
-
 async def test_health_check(test_harness):
     """Verify health check functionality"""
     project = await test_harness.register_project()
-
-    print("OUTPUT", Output.model_json_schema())
 
     service = OrraService(
         name="health-check-service",
