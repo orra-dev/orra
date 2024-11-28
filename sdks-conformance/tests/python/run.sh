@@ -12,14 +12,17 @@ echo "Running Python implementation tests..."
 poetry run pytest \
   --asyncio-mode=auto \
   --capture=no \
-  -vv \
+  --exitfirst \
+  -v \
   "${DIR}"/tests/
 
 EXIT_CODE=$?
 
+# Generate test results
 echo "{
   \"implementation\": \"python\",
   \"passed\": $([[ $EXIT_CODE == 0 ]] && echo "1" || echo "0"),
+  \"total\": 1,
   \"timestamp\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"
 }" > "${RESULTS_DIR:-../../test-results}/python.json"
 
