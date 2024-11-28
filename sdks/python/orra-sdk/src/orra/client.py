@@ -158,7 +158,9 @@ class OrraSDK:
             self._is_connected.set()
             self.logger.info("WebSocket connection established")
 
-            self.logger.info("Resending messages that could not be previously delivered")
+            if not self._message_queue.empty():
+                self.logger.info("Resending messages that could not be previously delivered")
+
             while not self._message_queue.empty():
                 message = self._message_queue.get_nowait()
                 await self._send_message(message)
