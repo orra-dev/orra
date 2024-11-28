@@ -42,9 +42,8 @@ async def test_large_payload(test_harness):
 
     @service.handler()
     async def handle_large_payload(task: Task[Input]) -> Output:
-        print("RECEIVED: handle_large_payload", task.input.size)
         return Output(
-            validatedSize=task.input.size,  # Use input size directly
+            validatedSize=task.input.size,
             checksum=base64.b64encode(task.input.message.encode())[:10].decode()
         )
 
