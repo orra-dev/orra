@@ -10,8 +10,8 @@ import { OrraLogger } from './logger.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 
-const DEFAULT_SERVICE_KEY_DIR= '.orra-data'
-const DEFAULT_SERVICE_KEY_FILE= 'orra-service-key.json'
+const DEFAULT_SERVICE_KEY_DIR = '.orra-data'
+const DEFAULT_SERVICE_KEY_FILE = 'orra-service-key.json'
 
 class OrraSDK {
 	#apiUrl;
@@ -33,12 +33,15 @@ class OrraSDK {
 	#inProgressTasks = new Map();
 	#maxProcessedTasksAge = 24 * 60 * 60 * 1000; // 24 hours
 	#maxInProgressAge = 30 * 60 * 1000; // 30 minutes
+	#userInitiatedClose = false;
+	#cacheCleanupIntervalId = null;
 	
-	constructor(apiUrl, apiKey, persistenceOpts={}) {
-		this.#apiUrl = apiUrl;
-		this.#apiKey = apiKey;
+	constructor({ serviceName, connection, persistence }) {
+		this.#apiUrl = connection.orraUrl;
+		this.#apiKey = connection.orraKey;
 		this.#ws = null;
 		this.#taskHandler = null;
+		this.name = serviceName
 		this.serviceId = null;
 		this.version = 0;
 		this.persistenceOpts = {
@@ -46,7 +49,7 @@ class OrraSDK {
 			filePath: path.join(process.cwd(), DEFAULT_SERVICE_KEY_DIR, DEFAULT_SERVICE_KEY_FILE),
 			customSave: null,
 			customLoad: null,
-			...persistenceOpts
+			...persistence
 		};
 		this.#startProcessedTasksCacheCleanup()
 		this.logger = new OrraLogger({});
@@ -54,7 +57,7 @@ class OrraSDK {
 	
 	async saveServiceKey() {
 		if (this.persistenceOpts.method === 'file') {
-			const data = JSON.stringify({ serviceId: this.serviceId });
+			const data = JSON.stringify({ id: this.serviceId });
 			const filePath = this.persistenceOpts.filePath
 			const directoryPath = extractDirectoryFromFilePath(filePath);
 			await createDirectoryIfNotExists(directoryPath, this.logger);
@@ -76,7 +79,7 @@ class OrraSDK {
 				
 				const data = await fs.readFile(filePath, 'utf8');
 				const parsed = JSON.parse(data);
-				this.serviceId = parsed.serviceId;
+				this.serviceId = parsed.id;
 			} else if (this.persistenceOpts.method === 'custom' && typeof this.persistenceOpts.customLoad === 'function') {
 				this.serviceId = await this.persistenceOpts.customLoad();
 			}
@@ -89,6 +92,9 @@ class OrraSDK {
 		description: undefined,
 		schema: undefined,
 	}) {
+		if (!name) {
+			throw new Error('Cannot register service: name is required');
+		}
 		return this.#registerServiceOrAgent(name, "service", opts);
 	}
 	
@@ -96,6 +102,9 @@ class OrraSDK {
 		description: undefined,
 		schema: undefined,
 	}) {
+		if (!name) {
+			throw new Error('Cannot register agent: name is required');
+		}
 		return this.#registerServiceOrAgent(name, "agent", opts);
 	}
 	
@@ -103,6 +112,9 @@ class OrraSDK {
 		description: undefined,
 		schema: undefined,
 	}) {
+		if (this.#userInitiatedClose) {
+			throw new Error(`Cannot register ${kind} after closing down SDK connections`)
+		}
 		await this.loadServiceKey(); // Try to load an existing service id
 		
 		this.logger.debug('Registering service/agent', {
@@ -162,6 +174,10 @@ class OrraSDK {
 	}
 	
 	#connect() {
+		if (this.#userInitiatedClose) {
+			throw new Error(`Cannot request halted as SDK connections closed permanently.`)
+		}
+		
 		const wsUrl = this.#apiUrl.replace('http', 'ws');
 		this.#ws = new WebSocket(`${wsUrl}/ws?serviceId=${this.serviceId}&apiKey=${this.#apiKey}`);
 		
@@ -180,12 +196,6 @@ class OrraSDK {
 		this.#ws.onmessage = (event) => {
 			const data = event.data;
 			
-			if (data === 'ping') {
-				this.logger.trace('Received ping');
-				this.#handlePing();
-				return;
-			}
-			
 			let parsedData;
 			try {
 				parsedData = JSON.parse(data);
@@ -199,6 +209,9 @@ class OrraSDK {
 			}
 			
 			switch (parsedData.type) {
+				case 'ping':
+					this.#handlePing(parsedData);
+					break;
 				case 'ACK':
 					this.#handleAcknowledgment(parsedData);
 					break;
@@ -214,6 +227,12 @@ class OrraSDK {
 		
 		this.#ws.onclose = (event) => {
 			this.#isConnected = false;
+			
+			if (this.#userInitiatedClose) {
+				this.logger.info('WebSocket closed by user', { code: event.code, reason: event.reason });
+				return; // Do not reconnect
+			}
+			
 			for (const message of this.#pendingMessages.values()) {
 				this.#messageQueue.push(message);
 			}
@@ -241,15 +260,19 @@ class OrraSDK {
 		};
 	}
 	
-	#handlePing() {
+	#handlePing(data) {
+		if (data.serviceId !== this.serviceId) {
+			this.logger.trace(`Received PING for unknown serviceId: ${data.serviceId}`);
+			return
+		}
 		this.logger.trace("Received PING");
 		this.#sendPong();
 		this.logger.trace("Sent PONG");
 	}
 	
 	#sendPong() {
-		if (this.#isConnected && this.#ws.readyState === WebSocket.OPEN) {
-			this.#ws.send(JSON.stringify({ id: "pong", payload: { type: 'pong', serviceId: this.serviceId } }));
+		if (this.#isConnected && this?.#ws?.readyState === WebSocket.OPEN) {
+			this?.#ws?.send(JSON.stringify({ id: "pong", payload: { type: 'pong', serviceId: this.serviceId } }));
 		}
 	}
 	
@@ -441,7 +464,7 @@ class OrraSDK {
 			type: message.type
 		});
 		
-		if (this.#isConnected && this.#ws.readyState === WebSocket.OPEN) {
+		if (this.#isConnected && this?.#ws?.readyState === WebSocket.OPEN) {
 			try {
 				this.#ws.send(JSON.stringify(wrappedMessage));
 				this.logger.debug('Message sent successfully', {
@@ -479,7 +502,7 @@ class OrraSDK {
 	}
 	
 	#sendQueuedMessages() {
-		while (this.#messageQueue.length > 0 && this.#isConnected && this.#ws.readyState === WebSocket.OPEN) {
+		while (this.#messageQueue.length > 0 && this.#isConnected && this?.#ws?.readyState === WebSocket.OPEN) {
 			const message = this.#messageQueue.shift();
 			this.#ws.send(JSON.stringify(message));
 			this.logger.debug('Sent queued message', {
@@ -489,19 +512,19 @@ class OrraSDK {
 	}
 	
 	#startProcessedTasksCacheCleanup() {
-		setInterval(() => {
+		this.#cacheCleanupIntervalId = setInterval(() => {
 			const now = Date.now();
 			let processedTasksRemoved = 0;
 			let inProgressTasksRemoved = 0;
 			
-			for (const [key, data] of this.#processedTasksCache.entries()) {
+			for (const [ key, data ] of this.#processedTasksCache.entries()) {
 				if (now - data.timestamp > this.#maxProcessedTasksAge) {
 					this.#processedTasksCache.delete(key);
 					processedTasksRemoved++;
 				}
 			}
 			
-			for (const [key, data] of this.#inProgressTasks.entries()) {
+			for (const [ key, data ] of this.#inProgressTasks.entries()) {
 				if (now - data.startTime > this.#maxInProgressAge) {
 					this.#inProgressTasks.delete(key);
 					inProgressTasksRemoved++;
@@ -523,9 +546,20 @@ class OrraSDK {
 		this.#taskHandler = handler;
 	}
 	
-	close() {
-		if (this.#ws) {
-			this.#ws.close();
+	shutdown() {
+		this.logger.info('User initiated WebSocket close');
+		// Set flag indicating that the closure was initiated by the user
+		this.#userInitiatedClose = true;
+		
+		// Close WebSocket cleanly with normal closure code (1000)
+		if (this?.#ws?.readyState === WebSocket.OPEN || this?.#ws?.readyState === WebSocket.CONNECTING) {
+			this?.#ws?.close(1000, 'Normal Closure');
+		}
+		
+		if (this.#cacheCleanupIntervalId !== null) {
+			clearInterval(this.#cacheCleanupIntervalId);
+			this.logger.trace('Cleared cache cleanup interval after user initiated close');
+			this.#cacheCleanupIntervalId = null;
 		}
 	}
 }
@@ -556,14 +590,14 @@ async function createDirectoryIfNotExists(directoryPath, logger) {
 		try {
 			await fs.mkdir(directoryPath, { recursive: true });
 			
-			logger.trace('Directory created successfully', {directoryPath});
+			logger.trace('Directory created successfully', { directoryPath });
 		} catch (mkdirError) {
 			logger.error('Error creating directory', {
 				error: mkdirError.message,
 				directoryPath
 			});
 		}
-	}catch (e) {
+	} catch (e) {
 		logger.error('Error creating directory', {
 			error: e.message,
 			directoryPath
@@ -571,13 +605,63 @@ async function createDirectoryIfNotExists(directoryPath, logger) {
 	}
 }
 
-export const createClient = (opts = {
-	orraUrl: undefined,
-	orraKey: undefined,
-	persistenceOpts: {},
-}) => {
-	if (!opts?.orraUrl || !opts?.orraKey) {
-		throw new Error("Cannot create an SDK client: ensure both a valid Orra URL and Orra API Key have been provided.");
+const validateName = (name, type) => {
+	if (!name || typeof name !== 'string') {
+		throw new Error(`${type} name must be a non-empty string`);
 	}
-	return new OrraSDK(opts?.orraUrl, opts?.orraKey, opts?.persistenceOpts);
-}
+	
+	if (name.length < 3 || name.length > 63) {
+		throw new Error(`${type} name must be between 3 and 63 characters`);
+	}
+	
+	const validNamePattern = /^[a-z0-9][a-z0-9.-]*[a-z0-9]$/;
+	if (!validNamePattern.test(name)) {
+		throw new Error(`${type} name must contain only lowercase alphanumeric characters, dots, and hyphens, and must start and end with an alphanumeric character`);
+	}
+};
+
+const initOrraEntity = (type) => ({
+	                                    name,
+	                                    orraUrl,
+	                                    orraKey,
+	                                    persistenceOpts = {},
+                                    }) => {
+	validateName(name, type);
+	
+	if (!name) {
+		throw new Error(`Cannot create ${type}: ensure a valid name has been provided.`);
+	}
+	
+	if (!orraUrl || !orraKey) {
+		throw new Error(`Cannot create ${type}: ensure both a valid Orra URL and Orra API Key have been provided.`);
+	}
+	
+	const sdk = new OrraSDK({
+		serviceName: name,
+		connection: {
+			orraUrl,
+			orraKey
+		},
+		persistence: {
+			filePath: path.join(process.cwd(), DEFAULT_SERVICE_KEY_DIR, `${name}-${DEFAULT_SERVICE_KEY_FILE}`),
+			...persistenceOpts
+		}
+	});
+	
+	const registerMethod = type === 'agent' ? sdk.registerAgent : sdk.registerService;
+	
+	return {
+		register: async (opts) => {
+			return await registerMethod.call(sdk, sdk.name, opts);
+		},
+		start: sdk.startHandler.bind(sdk),
+		shutdown: sdk.shutdown.bind(sdk),
+		info: {
+			get id() { return sdk.serviceId; },
+			get version() { return sdk.version; }
+		}
+	};
+};
+
+export const initService = initOrraEntity('service');
+export const initAgent = initOrraEntity('agent');

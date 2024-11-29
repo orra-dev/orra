@@ -1,0 +1,22 @@
+{
+	"name": "@orra.dev/protocol-validator",
+	"version": "1.0.0",
+	"description": "Protocol validation proxy for Orra SDK conformance testing",
+	"type": "module",
+	"scripts": {
+		"start": "node src/server.js",
+		"test": "node --test tests/",
+		"lint": "eslint src/"
+	},
+	"dependencies": {
+		"ws": "^8.14.2",
+		"yaml": "^2.3.3"
+	},
+	"devDependencies": {
+		"eslint": "^8.50.0",
+		"eslint-config-standard": "^17.1.0"
+	},
+	"engines": {
+		"node": ">=18"
+	}
+}

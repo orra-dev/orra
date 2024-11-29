@@ -4,4 +4,4 @@
  *  file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-export { createClient } from './core/client.js';
+export { initService, initAgent } from './core/client.js';

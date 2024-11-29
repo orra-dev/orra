@@ -1,0 +1,4 @@
+# Ignore service persistence data
+test-results/*
+# But keep the directory
+!test-results/.gitkeep

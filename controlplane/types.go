@@ -62,7 +62,7 @@ type Project struct {
 	ID                string   `json:"id"`
 	APIKey            string   `json:"apiKey"`
 	AdditionalAPIKeys []string `json:"additionalAPIKeys"`
-	Webhooks          []string `json:"webhook"`
+	Webhooks          []string `json:"webhooks"`
 }
 
 type OrchestrationState struct {
@@ -178,15 +178,13 @@ type TaskResult struct {
 }
 
 type Spec struct {
-	Type       string     `json:"type"`
-	Properties Properties `json:"properties,omitempty"`
-	Required   []string   `json:"required,omitempty"`
-	Format     string     `json:"format,omitempty"`
-	Minimum    int        `json:"minimum,omitempty"`
-	Maximum    int        `json:"maximum,omitempty"`
+	Type       string          `json:"type"`
+	Properties map[string]Spec `json:"properties,omitempty"`
+	Required   []string        `json:"required,omitempty"`
+	Format     string          `json:"format,omitempty"`
+	Minimum    int             `json:"minimum,omitempty"`
+	Maximum    int             `json:"maximum,omitempty"`
 }
-
-type Properties map[string]Spec
 
 type ServiceSchema struct {
 	Input  Spec `json:"input"`

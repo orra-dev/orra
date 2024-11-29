@@ -36,16 +36,17 @@ orra api-keys gen production-key
 Use the generated API key in your Node.js services:
 
 ```javascript
-import { createClient } from '@orra.dev/sdk';
+import { initService } from '@orra.dev/sdk';
 
 // Initialize with the API key from step 1
-const client = createClient({
+const svc = initService({ 
+  name: 'customer-service',
   orraUrl: process.env.ORRA_URL,
   orraKey: 'sk-orra-v1-xyz...' // From orra api-keys gen
 });
 
 // Register your service
-await client.registerService('Customer Service', {
+await svc.register({
   description: 'Handles customer interactions',
   schema: {
     input: {
@@ -59,7 +60,7 @@ await client.registerService('Customer Service', {
 });
 
 // Start handling tasks
-client.startHandler(async (task) => {
+svc.start(async (task) => {
   // Your service logic here
 });
 ```

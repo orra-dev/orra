@@ -187,7 +187,8 @@ func (wsm *WebSocketManager) pingRoutine(serviceID string) {
 			return
 		}
 
-		if err := session.Write([]byte(WSPing)); err != nil {
+		pingMessage := fmt.Sprintf(`{ "type": "%s", "serviceId": "%s" }`, WSPing, serviceID)
+		if err := session.Write([]byte(pingMessage)); err != nil {
 			wsm.logger.Warn().
 				Str("ServiceID", serviceID).
 				Err(err).

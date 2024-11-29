@@ -19,17 +19,18 @@ npm install -S @orra.dev/sdk
 The Orra SDK is designed to wrap your existing service logic with minimal changes. Here's a simple example showing how to integrate an existing chat service:
 
 ```javascript
-import { createClient } from '@orra.dev/sdk';
+import { initService } from '@orra.dev/sdk';
 import { myService } from './existing-service';  // Your existing logic
 
 // Initialize the Orra client
-const client = createClient({
+const customerSvc = initService({
+  name: 'customer-chat-service',
   orraUrl: process.env.ORRA_URL,
   orraKey: process.env.ORRA_API_KEY
 });
 
 // Register your service
-await client.registerService('Customer Chat Service', {
+await customerSvc.register({
   description: 'Handles customer chat interactions',
   schema: {
     input: {
@@ -50,7 +51,7 @@ await client.registerService('Customer Chat Service', {
 });
 
 // Wrap your existing business logic
-client.startHandler(async (task) => {
+customerSvc.start(async (task) => {
   try {
     const { customerId, message } = task.input;
     
@@ -89,41 +90,54 @@ The Orra SDK follows patterns similar to serverless functions or job processors,
 
 ## Detailed Integration Guide
 
-### 1. Service Registration
+### 1. Service/Agent Registration
+
+Services and Agents names must also follow these rules:
+- They are limited to 63 characters, and at least 3 chars in length
+- Consist of lowercase alphanumeric characters
+- Can include hyphens (-) and dots (.)
+- Must start and end with an alphanumeric character
 
 Register your service with its capabilities:
 
 ```javascript
-const client = createClient({
-  orraUrl: process.env.ORRA_URL,
-  orraKey: process.env.ORRA_API_KEY
+const client = initService({
+   name: 'service-name',
+   orraUrl: process.env.ORRA_URL,
+   orraKey: process.env.ORRA_API_KEY
 });
 
 // For stateless services
-await client.registerService('Service Name', {
-  description: 'What this service does',
-  schema: {
-    input: {
-      type: 'object',
-      properties: {
-        // Define expected inputs
+await client.register({
+   description: 'What this service does',
+   schema: {
+      input: {
+         type: 'object',
+         properties: {
+            // Define expected inputs
+         }
+      },
+      output: {
+         type: 'object',
+         properties: {
+            // Define expected outputs
+         }
       }
-    },
-    output: {
-      type: 'object',
-      properties: {
-        // Define expected outputs
-      }
-    }
-  }
+   }
 });
 
 // For AI agents
-await client.registerAgent('Agent Name', {
-  description: 'What this agent does',
-  schema: {
-    // Same schema structure as services
-  }
+const client = initAgent({
+   name: 'agent-name',
+   orraUrl: process.env.ORRA_URL,
+   orraKey: process.env.ORRA_API_KEY
+});
+
+await client.register({
+   description: 'What this agent does',
+   schema: {
+      // Same schema structure as services
+   }
 });
 ```
 
@@ -132,7 +146,7 @@ await client.registerAgent('Agent Name', {
 Implement your task handler to process requests:
 
 ```javascript
-client.startHandler(async (task) => {
+service.start(async (task) => {
   try {
     // 1. Access task information
     const { input, executionId } = task;
@@ -154,7 +168,7 @@ client.startHandler(async (task) => {
 Handle errors in your business logic:
 
 ```javascript
-client.startHandler(async (task) => {
+service.start(async (task) => {
   try {
     // Your retry logic here
     const result = await withRetries(() => riskyOperation());
@@ -189,29 +203,30 @@ async function withRetries(operation, maxAttempts = 3) {
 
 ### Persistence Configuration
 
-Orra maintains service identity across restarts using persistence. This is crucial for:
-- Maintaining service history
-- Ensuring consistent service identification
-- Supporting service upgrades
+Orra maintains service/agent identity across restarts using persistence. This is crucial for:
+- Maintaining service/agent history
+- Ensuring consistent service/agent identification
+- Supporting service/agent upgrades
 
 ```javascript
-const client = createClient({
-  orraUrl: process.env.ORRA_URL,
-  orraKey: process.env.ORRA_API_KEY,
-  persistenceOpts: {
-    // 1. File-based persistence (default)
-    method: 'file',
-    filePath: './custom/path/service-key.json',
-    
-    // 2. Custom persistence (e.g., database)
-    method: 'custom',
-    customSave: async (serviceId) => {
-      await db.services.save(serviceId);
-    },
-    customLoad: async () => {
-      return await db.services.load();
-    }
-  }
+const service = initService({
+   name: 'a-service',
+   orraUrl: process.env.ORRA_URL,
+   orraKey: process.env.ORRA_API_KEY,
+   persistenceOpts: {
+      // 1. File-based persistence (default)
+      method: 'file',
+      filePath: './custom/path/service-key.json',
+
+      // 2. Custom persistence (e.g., database)
+      method: 'custom',
+      customSave: async (id) => {
+         await db.services.save(id);
+      },
+      customLoad: async () => {
+         return await db.services.load();
+      }
+   }
 });
 ```
 
@@ -258,16 +273,17 @@ app.listen(3000);
 
 ### After (Orra Integration)
 ```javascript
-import { createClient } from '@orra.dev/sdk';
-import { analyzeImage } from './ai-service';  // Reuse existing logic
+import { initAgent } from '@orra.dev/sdk';
+import { analyzeImage } from './ai-agent';  // Reuse existing logic
 
-const client = createClient({
+const imageAgent = initAgent({
+  name: 'image-analysis-agent',
   orraUrl: process.env.ORRA_URL,
   orraKey: process.env.ORRA_API_KEY
 });
 
-await client.registerService('Image Analysis Service', {
-  description: 'Analyzes images using AI',
+await imageAgent.register({
+  description: 'Analyzes any image using AI',
   schema: {
     input: {
       type: 'object',
@@ -291,7 +307,7 @@ await client.registerService('Image Analysis Service', {
 });
 
 // Reuse your existing analysis function
-client.startHandler(async (task) => {
+imageAgent.start(async (task) => {
   try {
     const { imageUrl } = task.input;
     // Your function handles its own retries

@@ -5,7 +5,7 @@
  */
 
 import express from 'express';
-import { createClient } from '@orra.dev/sdk';
+import { initAgent } from '@orra.dev/sdk';
 import { estimateDelivery } from "./agent.js";
 import schema from './schema.json' assert { type: 'json' };
 
@@ -16,7 +16,8 @@ const app = express();
 const port = process.env.PORT || 3100;
 
 // Initialize the Orra client with environment-aware persistence
-const orra = createClient({
+const deliveryAgent = initAgent({
+	name: 'delivery-agent',
 	orraUrl: process.env.ORRA_URL,
 	orraKey: process.env.ORRA_API_KEY,
 	persistenceOpts: getPersistenceConfig()
@@ -30,13 +31,13 @@ app.get('/health', (req, res) => {
 async function startService() {
 	try {
 		// Register the delivery agent with Orra
-		await orra.registerAgent('Delivery Agent', {
+		await deliveryAgent.register({
 			description: 'An agent that helps customers with intelligent delivery estimation dates and routing for online shopping.',
 			schema
 		});
 		
 		// Start handling delivery estimation tasks
-		orra.startHandler(async (task) => {
+		deliveryAgent.start(async (task) => {
 			console.log('Processing delivery estimation:', task.id);
 			return { response: await estimateDelivery(task.input) };
 		});
@@ -57,7 +58,7 @@ app.listen(port, () => {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
 	console.log('SIGTERM received, shutting down gracefully');
-	orra.close();
+	deliveryAgent.shutdown();
 	process.exit(0);
 });
 

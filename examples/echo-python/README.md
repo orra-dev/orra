@@ -1,6 +1,6 @@
-# Echo Service Example
+# Echo Service Example (Python)
 
-A minimal example demonstrating how to build and orchestrate a service using Orra. Perfect for learning the basics of service orchestration.
+A minimal example demonstrating how to build and orchestrate a service using Orra's Python SDK.
 
 ```mermaid
 sequenceDiagram
@@ -16,17 +16,10 @@ sequenceDiagram
     Note over WH: See result in terminal
 ```
 
-## ✨ Features
-
-- 🔄 Basic service registration and orchestration
-- 📡 Real-time WebSocket communication
-- ⚡ Reliable message delivery
-- 🛡️ Built-in health monitoring
-- 🚀 Simple but production-ready patterns
-
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
+- [Poetry](https://python-poetry.org/docs/#installation)
 - [OpenAI API key](https://platform.openai.com/api-keys) for Orra's control plane
 
 ## Setup
@@ -47,7 +40,7 @@ docker compose up
 2. Setup your Orra project:
 ```bash
 # Install Orra CLI 
-curl -L https://github.com/ezodude/orra/releases/download/v0.1.1-narwhal/orra-darwin-arm64 -o /usr/local/bin/orra
+curl -L https://github.com/ezodude/orra/releases/download/v0.1.2-narwhal/orra-darwin-arm64 -o /usr/local/bin/orra
 chmod +x /usr/local/bin/orra
 
 # Create project, add a webhook and API key
@@ -58,7 +51,7 @@ orra api-keys gen echo-key
 
 3. Configure the Echo service:
 ```bash
-cd examples/echo
+cd examples/echo-python
 echo "ORRA_API_KEY=key-from-step-2" > .env
 ```
 
@@ -70,10 +63,14 @@ echo "ORRA_API_KEY=key-from-step-2" > .env
 orra verify webhooks start http://localhost:8888/webhook
 ```
 
-2. Start the Echo service:
+2. Start and register the Echo service:
 ```bash
-# Start Echo Service
-docker compose up
+# With Docker
+docker compose up --build
+
+# Or locally with Poetry
+poetry install
+poetry run python src/main.py
 ```
 
 3. Try it out:
@@ -88,50 +85,52 @@ orra inspect <orchestration-id>
 
 You should see the result both in the webhook server terminal and through the inspect command.
 
+```bash
+# This curl command is equivalent to orra verify run performs internally  
+## Send an echo orchestration request to the control plane
+
+curl -X POST http://localhost:8005/orchestrations \
+  -H "Authorization: Bearer $ORRA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": {
+      "type": "echo",
+      "content": "Echo this message"
+    },
+    "data": [
+      {
+        "field": "message",
+        "value": "Hello from curl!"
+      }
+    ],
+    "webhook": "http://host.docker.internal:8888/api/webhook"
+  }'
+```
+
 ## SDK Integration Example
-Here's the complete Echo service implementation showing how simple Orra integration can be:
 
-```javascript
-import { createClient } from '@orra.dev/sdk';
-import schema from './schema.json' assert { type: 'json' };
+The core Echo service implementation is straightforward:
 
-const orra = createClient({
-	orraUrl: process.env.ORRA_URL,
-	orraKey: process.env.ORRA_API_KEY,
-	persistenceOpts: getPersistenceConfig()
-});
+```python
+from orra import OrraService, Task
+from pydantic import BaseModel
 
-// Health check
-app.get('/health', (req, res) => {
-	res.status(200).json({ status: 'healthy' });
-});
+class EchoInput(BaseModel):
+    message: str
 
-async function startService() {
-	try {
-		// Register the echo service with Orra
-		await orra.registerService('EchoService', {
-			description: 'A simple service that echoes back the first input value it receives.',
-			schema
-		});
-		
-		orra.startHandler(async (task) => {
-			console.log('Echoing input:', task.id);
-			const message = task?.input
-			return { echo: message };
-		});
-		
-		console.log('Echo Service started successfully');
-	} catch (error) {
-		console.error('Failed to start Echo Service:', error);
-		process.exit(1);
-	}
-}
+class EchoOutput(BaseModel):
+    echo: str
 
-// Start the Express server and the service
-app.listen(port, () => {
-	console.log(`Server listening on port ${port}`);
-	startService().catch(console.error);
-});
+service = OrraService(
+    name="echo-service",
+    description="A simple echo service",
+    url=os.getenv("ORRA_URL"),
+    api_key=os.getenv("ORRA_API_KEY")
+)
+
+@service.handler()
+async def handle_echo(task: Task[EchoInput]) -> EchoOutput:
+    return EchoOutput(echo=task.input.message)
 ```
 
 That's it! Orra provides:

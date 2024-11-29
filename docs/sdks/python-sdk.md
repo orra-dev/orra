@@ -1,0 +1,295 @@
+# Orra Python SDK Documentation
+
+Orra makes it easy to add resilient, production-ready orchestration to your existing AI services and agents. This guide will help you integrate the Orra SDK with your Python applications.
+
+## Installation
+
+First, [install the Orra CLI](../cli.md).
+
+Then, install the latest version of the SDK:
+```bash
+pip install orra-sdk
+```
+
+> **Development Note**: During alpha, the control plane runs in-memory. After control plane restarts, services need to be reconfigured. See our [Reset Guide](../reset-control-plane.md) for the simple steps.
+
+## Quick Integration Example
+
+The Orra SDK is designed to wrap your existing service logic with minimal changes. Here's a simple example showing how to integrate an existing chat service:
+
+```python
+from orra import OrraService, Task
+from pydantic import BaseModel
+from existing_service import my_service  # Your existing logic
+
+# Define your models
+class ChatInput(BaseModel):
+    customer_id: str
+    message: str
+
+class ChatOutput(BaseModel):
+    response: str
+
+# Initialize the Orra service
+service = OrraService(
+    name="customer-chat-service",
+    description="Handles customer chat interactions",
+    url="https://api.orra.dev",
+    api_key="sk-orra-..."
+)
+
+# Register your handler
+@service.handler()
+async def handle_chat(task: Task[ChatInput]) -> ChatOutput:
+    try:
+        # Use your existing service function
+        # Your function handles its own retries and error recovery
+        # and Orra reacts accordingly.
+        response = await my_service(task.input.customer_id, task.input.message)
+        return ChatOutput(response=response)
+    except Exception as e:
+        # Once you determine the task should fail, throw the error.
+        # Orra will handle failure propagation to the control plane.
+        raise
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(service.start())
+```
+
+## Understanding the SDK
+
+The Orra SDK follows patterns similar to serverless functions or job processors, making it familiar for AI Engineers. Your services become event-driven handlers that:
+
+1. Register capabilities with Orra (what they can do)
+2. Process tasks when called (actual execution)
+3. Return results for orchestration
+
+### Key Concepts
+
+- **Services vs Agents**: Both use the same SDK but are registered differently
+    - Services: Stateless, function-like handlers (e.g., chat services, data processors)
+    - Agents: Stateless or stateful, sometimes long-running processes (e.g., single function-calling Agents or an Agent swarm/crew)
+
+- **Schema Definition**: Leverages Pydantic models for type-safe schemas
+- **Handler Functions**: Like serverless functions, process single tasks
+- **Health Monitoring**: Automatic health checking and reporting
+- **Service Identity**: Maintained across restarts and updates
+
+## Detailed Integration Guide
+
+### 1. Service/Agent Registration
+
+Services and Agents names must also follow these rules:
+- They are limited to 63 characters, and at least 3 chars in length
+- Consist of lowercase alphanumeric characters
+- Can include hyphens (-) and dots (.)
+- Must start and end with an alphanumeric character
+
+Register your service with its capabilities:
+
+```python
+# For stateless services
+from orra import OrraService, Task
+
+service = OrraService(
+    name="service-name",
+    description="What this service does",
+    url="https://api.orra.dev",
+    api_key="sk-orra-..."
+)
+
+class InputModel(BaseModel):
+    customer_id: str
+    message: str
+
+class OutputModel(BaseModel):
+    response: str
+
+@service.handler()
+async def handle_request(task: Task[InputModel]) -> OutputModel:
+    # Handler implementation
+    pass
+
+# For AI agents
+from orra import OrraAgent
+
+agent = OrraAgent(
+    name="agent-name",
+    description="What this agent does",
+    url="https://api.orra.dev",
+    api_key="sk-orra-..."
+)
+
+@agent.handler()
+async def handle_request(task: Task[InputModel]) -> OutputModel:
+    # Handler implementation
+    pass
+```
+
+### 2. Task Handler Implementation
+
+Implement your task handler to process requests:
+
+```python
+class InputModel(BaseModel):
+    customer_id: str
+    message: str
+
+class OutputModel(BaseModel):
+    response: str
+
+@service.handler()
+async def handle_request(task: Task[InputModel]) -> OutputModel:
+    try:
+        # 1. Access task information
+        input_data = task.input
+        
+        # 2. Your existing business logic with its own retry/recovery
+        result = await your_existing_function(input_data)
+        
+        # 3. Return results
+        return OutputModel(**result)
+    except Exception as e:
+        # After your error handling is complete, let Orra know about permanent failures
+        raise
+```
+
+### 3. Error Handling
+
+Handle errors in your business logic:
+
+```python
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+@service.handler()
+async def handle_request(task: Task[InputModel]) -> OutputModel:
+    try:
+        # Your retry logic here
+        result = await with_retries(risky_operation)
+        return OutputModel(**result)
+    except Exception as e:
+        # After your retries are exhausted, throw the error
+        # Orra will handle the failure in the orchestration
+        raise RuntimeError(f"Operation failed: {str(e)}")
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=4, max=10)
+)
+async def with_retries(operation):
+    return await operation()
+```
+
+## Advanced Features
+
+### Persistence Configuration
+
+Orra maintains service/agent identity across restarts using persistence. This is crucial for:
+- Maintaining service/agent history
+- Ensuring consistent service/agent identification
+- Supporting service/agent upgrades
+
+```python
+from pathlib import Path
+from typing import Optional
+
+def save_to_db(service_id: str) -> None:
+    # Your db save logic
+    pass
+
+def load_from_db() -> Optional[str]:
+    # Your db load logic
+    pass
+
+service = OrraService(
+    name="a-service",
+    url="https://api.orra.dev",
+    api_key="sk-orra-...",
+    # 1. File-based persistence (default)
+    persistence_method="file",
+    persistence_file_path=Path("./custom/path/service-key.json"),
+    
+    # 2. Custom persistence (e.g., database)
+    persistence_method="custom",
+    custom_save=save_to_db,
+    custom_load=load_from_db
+)
+```
+
+## Best Practices
+
+1. **Error Handling**
+    - Implement comprehensive error handling in your business logic
+    - Use retries for transient failures
+    - Only propagate errors to Orra after recovery attempts are exhausted
+
+2. **Schema Design**
+    - Use Pydantic models for type safety
+    - Include comprehensive field descriptions
+    - Keep schemas focused and minimal
+
+3. **Service Design**
+    - Keep services focused on specific capabilities
+    - Design for idempotency
+    - Include proper logging for debugging
+
+## Example: Converting Existing Code
+
+Here's how to convert an existing AI service to use Orra:
+
+### Before (FastAPI Service)
+```python
+from fastapi import FastAPI
+from ai_agent import analyze_image
+
+app = FastAPI()
+
+@app.post("/analyze")
+async def analyze(image_url: str):
+    try:
+        analysis = await analyze_image(image_url)
+        return analysis
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+```
+
+### After (Orra Integration)
+```python
+from orra import OrraAgent, Task
+from pydantic import BaseModel
+from ai_agent import analyze_image  # Reuse existing logic
+
+class ImageInput(BaseModel):
+    image_url: str
+
+class ImageOutput(BaseModel):
+    objects: list[str]
+    labels: list[str]
+    confidence: float
+
+agent = OrraAgent(
+    name="image-analysis-agent",
+    description="Analyzes any image using AI",
+    url="https://api.orra.dev",
+    api_key="sk-orra-..."
+)
+
+@agent.handler()
+async def handle_analysis(task: Task[ImageInput]) -> ImageOutput:
+    try:
+        # Your function handles its own retries
+        result = await analyze_image(task.input.image_url)
+        return ImageOutput(**result)
+    except Exception as e:
+        # After your error handling is complete, let Orra know about the failure
+        raise
+```
+
+## Next Steps
+
+1. Review the example projects for more integration patterns
+2. Join our community for support and updates
+3. Check out the action orchestration guide to start using your services
+
+Need help? Contact the Orra team or open an issue on GitHub.
