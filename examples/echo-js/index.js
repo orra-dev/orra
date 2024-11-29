@@ -5,7 +5,7 @@
  */
 
 import express from 'express';
-import { createClient } from '@orra.dev/sdk';
+import { initService } from '@orra.dev/sdk';
 import schema from './schema.json' assert { type: 'json' };
 
 import dotenv from 'dotenv';
@@ -15,7 +15,8 @@ const app = express();
 const port = process.env.PORT || 3400;
 
 // Initialize the Orra client with environment-aware persistence
-const orra = createClient({
+const echoSvc = initService({
+	name: 'echo-service',
 	orraUrl: process.env.ORRA_URL,
 	orraKey: process.env.ORRA_API_KEY,
 	persistenceOpts: getPersistenceConfig()
@@ -29,12 +30,12 @@ app.get('/health', (req, res) => {
 async function startService() {
 	try {
 		// Register the echo service with Orra
-		await orra.registerService('echo-service', {
+		await echoSvc.register({
 			description: 'A simple service that echoes back the first input value it receives.',
 			schema
 		});
 		
-		orra.startHandler(async (task) => {
+		echoSvc.start(async (task) => {
 			console.log('Echoing input:', task.id);
 			const message = task?.input
 			return { echo: message };
@@ -56,7 +57,7 @@ app.listen(port, () => {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
 	console.log('SIGTERM received, shutting down gracefully');
-	orra.close();
+	echoSvc.shutdown();
 	process.exit(0);
 });
 

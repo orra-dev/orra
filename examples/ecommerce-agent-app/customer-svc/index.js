@@ -5,7 +5,7 @@
  */
 
 import express from 'express';
-import { createClient } from '@orra.dev/sdk';
+import { initService } from '@orra.dev/sdk';
 import schema from './schema.json' assert { type: 'json' };
 
 import dotenv from 'dotenv';
@@ -15,7 +15,8 @@ const app = express();
 const port = process.env.PORT || 3200;
 
 // Initialize the Orra client with environment-aware persistence
-const orra = createClient({
+const customerSvc = initService({
+	name: 'customer-service',
 	orraUrl: process.env.ORRA_URL,
 	orraKey: process.env.ORRA_API_KEY,
 	persistenceOpts: getPersistenceConfig()
@@ -29,12 +30,12 @@ app.get('/health', (req, res) => {
 async function startService() {
 	try {
 		// Register the customer service with Orra
-		await orra.registerService('customer-service', {
+		await customerSvc.register({
 			description: 'A service that retrieves and manages customer information.',
 			schema
 		});
 		
-		orra.startHandler(async (task) => {
+		customerSvc.start(async (task) => {
 			console.log('Processing customer details:', task.id);
 			return {
 				customerId: task?.input?.customerId,

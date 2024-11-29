@@ -5,7 +5,7 @@
  */
 
 import express from 'express';
-import { createClient } from '@orra.dev/sdk';
+import { initService } from '@orra.dev/sdk';
 import schema from './schema.json' assert { type: 'json' };
 
 import dotenv from 'dotenv';
@@ -15,7 +15,8 @@ const app = express();
 const port = process.env.PORT || 3300;
 
 // Initialize the Orra client with environment-aware persistence
-const orra = createClient({
+const invSvc = initService({
+	name: 'inventory-service',
 	orraUrl: process.env.ORRA_URL,
 	orraKey: process.env.ORRA_API_KEY,
 	persistenceOpts: getPersistenceConfig()
@@ -29,13 +30,13 @@ app.get('/health', (req, res) => {
 async function startService() {
 	try {
 		// Register the inventory service with Orra
-		await orra.registerService('InventoryService', {
+		await invSvc.register({
 			description: 'An inventory service that manages and tracks the availability of ecommerce products. ' +
 				'Including, updating inventory in real-time as orders are placed',
 			schema
 		});
 		
-		orra.startHandler(async (task) => {
+		invSvc.start(async (task) => {
 			console.log('Processing inventory product:', task.id);
 			return {
 				productId: '697d1744-88dd-4139-beeb-b307dfb1a2f9',
@@ -61,7 +62,7 @@ app.listen(port, () => {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
 	console.log('SIGTERM received, shutting down gracefully');
-	orra.close();
+	invSvc.shutdown();
 	process.exit(0);
 });
 
