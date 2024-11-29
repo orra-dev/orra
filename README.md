@@ -203,6 +203,7 @@ myAgent.start(async (task) => {/*...*/});
 #### Using Python
 
 ```python
+import os
 from orra import OrraAgent, Task
 
 class InputModel(BaseModel):
@@ -215,8 +216,8 @@ class OutputModel(BaseModel):
 agent = OrraAgent(
   name="agent-name",
   description="What this agent does",
-  url="https://api.orra.dev",
-  api_key="sk-orra-..."
+  url=os.getenv(ORRA_URL),
+  api_key=os.getenv(ORRA_API_KEY)
 )
 
 @agent.handler()
