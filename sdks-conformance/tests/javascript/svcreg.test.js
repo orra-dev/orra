@@ -5,7 +5,7 @@
  */
 
 import { expect, test, describe, beforeAll, afterEach } from '@jest/globals';
-import { createClient } from '@orra.dev/sdk';
+import { initService } from '@orra.dev/sdk';
 import { rm } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
@@ -52,12 +52,13 @@ describe('Service Registration Protocol', () => {
 	});
 	
 	test('minimal service registration', async () => {
-		const client = createClient({
+		const service = initService({
+			name: 'minimal-test-service',
 			orraUrl: TEST_HARNESS_URL,
 			orraKey: apiKey,
 		});
 		
-		await client.registerService('minimal-test-service', {
+		await service.register({
 			description: "a minimal service",
 			schema: {
 				input: {
@@ -76,21 +77,46 @@ describe('Service Registration Protocol', () => {
 		});
 		
 		// Verify service ID format
-		expect(client.serviceId).toBeTruthy();
-		expect(client.serviceId).toMatch(/^s_[a-zA-Z0-9]+$/);
+		expect(service.info.id).toBeTruthy();
+		expect(service.info.id).toMatch(/^s_[a-zA-Z0-9]+$/);
 		
 		// Verify version is set
-		expect(client.version).toBe(1);
+		expect(service.info.version).toBe(1);
 		
 		// Clean close
-		client.close();
+		service.shutdown();
 	});
 	
 	test('service registration persistence', async () => {
 		let savedServiceId = null;
 		
-		// Create first client with persistence
-		const client = createClient({
+		// Create first service with persistence
+		const serviceOne = initService({
+			name: 'persistent-service',
+			orraUrl: TEST_HARNESS_URL,
+			orraKey: apiKey,
+			persistenceOpts: {
+				method: 'custom',
+				customSave: async (id) => {
+					savedServiceId = id;
+				},
+				customLoad: async () => savedServiceId
+			}
+		});
+		
+		await serviceOne.register({
+			description: "a persistent service",
+			schema: {
+				input: { type: "object", properties: { entry: { type: "string" } } },
+				output: { type: "object", properties: { entry: { type: "string" } } },
+			}
+		});
+		const originalId = serviceOne.info.id;
+		serviceOne.shutdown();
+		
+		// Create new service instance
+		const serviceTwo = initService({
+			name: 'persistent-service',
 			orraUrl: TEST_HARNESS_URL,
 			orraKey: apiKey,
 			persistenceOpts: {
@@ -102,87 +128,68 @@ describe('Service Registration Protocol', () => {
 			}
 		});
 		
-		await client.registerService('persistent-service', {
+		await serviceTwo.register({
 			description: "a persistent service",
 			schema: {
 				input: { type: "object", properties: { entry: { type: "string" } } },
 				output: { type: "object", properties: { entry: { type: "string" } } },
 			}
 		});
-		const originalId = client.serviceId;
-		client.close();
+		expect(serviceTwo.info.id).toBe(originalId);
+		expect(serviceTwo.info.version).toBe(2); // Version increments on re-registration
 		
-		// Create new client instance
-		const newClient = createClient({
-			orraUrl: TEST_HARNESS_URL,
-			orraKey: apiKey,
-			persistenceOpts: {
-				method: 'custom',
-				customSave: async (serviceId) => {
-					savedServiceId = serviceId;
-				},
-				customLoad: async () => savedServiceId
-			}
-		});
-		
-		await newClient.registerService('persistent-service', {
-			description: "a persistent service",
-			schema: {
-				input: { type: "object", properties: { entry: { type: "string" } } },
-				output: { type: "object", properties: { entry: { type: "string" } } },
-			}
-		});
-		expect(newClient.serviceId).toBe(originalId);
-		expect(newClient.version).toBe(2); // Version increments on re-registration
-		
-		newClient.close();
+		serviceTwo.shutdown();
+	});
+	
+	test('service init throws error for empty name', () => {
+		expect(() => initService({ name: '' })).toThrow();
 	});
 	
 	test('service registration error cases', async () => {
-		const client = createClient({
+		const invalidSchema = initService({
+			name: 'invalid-schema-service',
 			orraUrl: TEST_HARNESS_URL,
 			orraKey: apiKey
 		});
 		
 		// Test invalid schema
-		await expect(client.registerService('invalid-schema-service', {
+		await expect(invalidSchema.register({
 			schema: {
 				input: { invalid: true }
 			}
 		})).rejects.toThrow();
 		
-		// Test empty service name
-		await expect(client.registerService('')).rejects.toThrow();
-		
 		// Clean up
-		client.close();
+		invalidSchema.shutdown();
 		
 		// Test invalid API key
-		const invalidClient = createClient({
+		const invalidService = initService({
+			name: 'invalid-svc',
 			orraUrl: TEST_HARNESS_URL,
 			orraKey: 'sk-orra-invalid-key'
 		});
 		
-		await expect(invalidClient.registerService('invalid-auth-service')).rejects.toThrow();
-		invalidClient.close();
+		await expect(invalidService.register({})).rejects.toThrow();
+		invalidService.shutdown();
 	});
 	
 	test('verify finality of close()', async () => {
-		const client = createClient({
+		const service = initService({
+			name: 'closing-service',
 			orraUrl: TEST_HARNESS_URL,
 			orraKey: apiKey
 		});
 		
-		await client.registerService('closing-service', {
+		await service.register( {
 			description: "a closing service",
 			schema: {
 				input: { type: "object", properties: { entry: { type: "string" } } },
 				output: { type: "object", properties: { entry: { type: "string" } } },
 			}
 		});
-		client.close();
+		service.shutdown();
 		
 		// Attempt to register after close should throw
-		await expect(client.registerService('reopened-service')).rejects.toThrow();
+		await expect(service.register({})).rejects.toThrow();
 	});
 });

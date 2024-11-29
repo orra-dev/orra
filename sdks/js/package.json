@@ -1,8 +1,8 @@
 {
   "name": "@orra.dev/sdk",
-  "version": "0.1.1-narwhal",
+  "version": "0.1.2-narwhal",
   "type": "module",
-  "description": "SDK for running reliable multi-agent applications with Orra",
+  "description": "JS SDK for Orra - Build reliable multi-agent applications",
   "main": "./dist/index.js",
   "publishConfig": {
     "access": "public"

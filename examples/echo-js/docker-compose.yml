@@ -1,6 +1,6 @@
 services:
   echo-service:
-    container_name: orra-echo-service
+    container_name: orra-echo-service-js
     build:
       context: .
     ports:

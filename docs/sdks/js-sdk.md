@@ -19,17 +19,18 @@ npm install -S @orra.dev/sdk
 The Orra SDK is designed to wrap your existing service logic with minimal changes. Here's a simple example showing how to integrate an existing chat service:
 
 ```javascript
-import { createClient } from '@orra.dev/sdk';
+import { initService } from '@orra.dev/sdk';
 import { myService } from './existing-service';  // Your existing logic
 
 // Initialize the Orra client
-const client = createClient({
+const customerSvc = initService({
+  name: 'customer-chat-service',
   orraUrl: process.env.ORRA_URL,
   orraKey: process.env.ORRA_API_KEY
 });
 
 // Register your service
-await client.registerService('customer-chat-service', {
+await customerSvc.register({
   description: 'Handles customer chat interactions',
   schema: {
     input: {
@@ -50,7 +51,7 @@ await client.registerService('customer-chat-service', {
 });
 
 // Wrap your existing business logic
-client.startHandler(async (task) => {
+customerSvc.start(async (task) => {
   try {
     const { customerId, message } = task.input;
     
@@ -100,13 +101,14 @@ Services and Agents names must also follow these rules:
 Register your service with its capabilities:
 
 ```javascript
-const client = createClient({
-  orraUrl: process.env.ORRA_URL,
-  orraKey: process.env.ORRA_API_KEY
+const client = initService({
+   name: 'service-name',
+   orraUrl: process.env.ORRA_URL,
+   orraKey: process.env.ORRA_API_KEY
 });
 
 // For stateless services
-await client.registerService('service-name', {
+await client.register({
    description: 'What this service does',
    schema: {
       input: {
@@ -125,7 +127,13 @@ await client.registerService('service-name', {
 });
 
 // For AI agents
-await client.registerAgent('agent-name', {
+const client = initAgent({
+   name: 'agent-name',
+   orraUrl: process.env.ORRA_URL,
+   orraKey: process.env.ORRA_API_KEY
+});
+
+await client.register({
    description: 'What this agent does',
    schema: {
       // Same schema structure as services
@@ -138,7 +146,7 @@ await client.registerAgent('agent-name', {
 Implement your task handler to process requests:
 
 ```javascript
-client.startHandler(async (task) => {
+service.start(async (task) => {
   try {
     // 1. Access task information
     const { input, executionId } = task;
@@ -160,7 +168,7 @@ client.startHandler(async (task) => {
 Handle errors in your business logic:
 
 ```javascript
-client.startHandler(async (task) => {
+service.start(async (task) => {
   try {
     // Your retry logic here
     const result = await withRetries(() => riskyOperation());
@@ -195,13 +203,14 @@ async function withRetries(operation, maxAttempts = 3) {
 
 ### Persistence Configuration
 
-Orra maintains service identity across restarts using persistence. This is crucial for:
-- Maintaining service history
-- Ensuring consistent service identification
-- Supporting service upgrades
+Orra maintains service/agent identity across restarts using persistence. This is crucial for:
+- Maintaining service/agent history
+- Ensuring consistent service/agent identification
+- Supporting service/agent upgrades
 
 ```javascript
-const client = createClient({
+const service = initService({
+   name: 'a-service',
    orraUrl: process.env.ORRA_URL,
    orraKey: process.env.ORRA_API_KEY,
    persistenceOpts: {
@@ -211,8 +220,8 @@ const client = createClient({
 
       // 2. Custom persistence (e.g., database)
       method: 'custom',
-      customSave: async (serviceId) => {
-         await db.services.save(serviceId);
+      customSave: async (id) => {
+         await db.services.save(id);
       },
       customLoad: async () => {
          return await db.services.load();
@@ -264,15 +273,16 @@ app.listen(3000);
 
 ### After (Orra Integration)
 ```javascript
-import { createClient } from '@orra.dev/sdk';
+import { initAgent } from '@orra.dev/sdk';
 import { analyzeImage } from './ai-agent';  // Reuse existing logic
 
-const client = createClient({
+const imageAgent = initAgent({
+  name: 'image-analysis-agent',
   orraUrl: process.env.ORRA_URL,
   orraKey: process.env.ORRA_API_KEY
 });
 
-await client.registerAgent('image-analysis-agent', {
+await imageAgent.register({
   description: 'Analyzes any image using AI',
   schema: {
     input: {
@@ -297,7 +307,7 @@ await client.registerAgent('image-analysis-agent', {
 });
 
 // Reuse your existing analysis function
-client.startHandler(async (task) => {
+imageAgent.start(async (task) => {
   try {
     const { imageUrl } = task.input;
     // Your function handles its own retries

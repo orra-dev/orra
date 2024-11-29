@@ -1,0 +1,16 @@
+services:
+  echo-service:
+    container_name: orra-echo-service-python
+    build:
+      context: .
+    ports:
+      - "3500:3500"
+    environment:
+      - ORRA_URL=http://host.docker.internal:8005
+      - ORRA_API_KEY=${ORRA_API_KEY}
+      - ORRA_SERVICE_KEY_PATH=/app/data/echo-service-orra-service-key.json
+      - ORRA_LOG_LEVEL=debug
+      - ORRA_LOGGING=true
+      - SVC_ENV=development
+    volumes:
+      - ./.orra-data:/app/data

@@ -36,11 +36,12 @@ class OrraSDK {
 	#userInitiatedClose = false;
 	#cacheCleanupIntervalId = null;
 	
-	constructor({ connection, persistence }) {
+	constructor({ serviceName, connection, persistence }) {
 		this.#apiUrl = connection.orraUrl;
 		this.#apiKey = connection.orraKey;
 		this.#ws = null;
 		this.#taskHandler = null;
+		this.name = serviceName
 		this.serviceId = null;
 		this.version = 0;
 		this.persistenceOpts = {
@@ -56,7 +57,7 @@ class OrraSDK {
 	
 	async saveServiceKey() {
 		if (this.persistenceOpts.method === 'file') {
-			const data = JSON.stringify({ serviceId: this.serviceId });
+			const data = JSON.stringify({ id: this.serviceId });
 			const filePath = this.persistenceOpts.filePath
 			const directoryPath = extractDirectoryFromFilePath(filePath);
 			await createDirectoryIfNotExists(directoryPath, this.logger);
@@ -78,7 +79,7 @@ class OrraSDK {
 				
 				const data = await fs.readFile(filePath, 'utf8');
 				const parsed = JSON.parse(data);
-				this.serviceId = parsed.serviceId;
+				this.serviceId = parsed.id;
 			} else if (this.persistenceOpts.method === 'custom' && typeof this.persistenceOpts.customLoad === 'function') {
 				this.serviceId = await this.persistenceOpts.customLoad();
 			}
@@ -91,6 +92,9 @@ class OrraSDK {
 		description: undefined,
 		schema: undefined,
 	}) {
+		if (!name) {
+			throw new Error('Cannot register service: name is required');
+		}
 		return this.#registerServiceOrAgent(name, "service", opts);
 	}
 	
@@ -98,6 +102,9 @@ class OrraSDK {
 		description: undefined,
 		schema: undefined,
 	}) {
+		if (!name) {
+			throw new Error('Cannot register agent: name is required');
+		}
 		return this.#registerServiceOrAgent(name, "agent", opts);
 	}
 	
@@ -539,7 +546,7 @@ class OrraSDK {
 		this.#taskHandler = handler;
 	}
 	
-	close() {
+	shutdown() {
 		this.logger.info('User initiated WebSocket close');
 		// Set flag indicating that the closure was initiated by the user
 		this.#userInitiatedClose = true;
@@ -598,19 +605,63 @@ async function createDirectoryIfNotExists(directoryPath, logger) {
 	}
 }
 
-export const createClient = ({
-	                             orraUrl,
-	                             orraKey,
-	                             persistenceOpts = {},
-                             }) => {
-	if (!orraUrl || !orraKey) {
-		throw new Error("Cannot create an SDK client: ensure both a valid Orra URL and Orra API Key have been provided.");
+const validateName = (name, type) => {
+	if (!name || typeof name !== 'string') {
+		throw new Error(`${type} name must be a non-empty string`);
 	}
-	return new OrraSDK({
+	
+	if (name.length < 3 || name.length > 63) {
+		throw new Error(`${type} name must be between 3 and 63 characters`);
+	}
+	
+	const validNamePattern = /^[a-z0-9][a-z0-9.-]*[a-z0-9]$/;
+	if (!validNamePattern.test(name)) {
+		throw new Error(`${type} name must contain only lowercase alphanumeric characters, dots, and hyphens, and must start and end with an alphanumeric character`);
+	}
+};
+
+const initOrraEntity = (type) => ({
+	                                    name,
+	                                    orraUrl,
+	                                    orraKey,
+	                                    persistenceOpts = {},
+                                    }) => {
+	validateName(name, type);
+	
+	if (!name) {
+		throw new Error(`Cannot create ${type}: ensure a valid name has been provided.`);
+	}
+	
+	if (!orraUrl || !orraKey) {
+		throw new Error(`Cannot create ${type}: ensure both a valid Orra URL and Orra API Key have been provided.`);
+	}
+	
+	const sdk = new OrraSDK({
+		serviceName: name,
 		connection: {
 			orraUrl,
 			orraKey
 		},
-		persistence: persistenceOpts,
+		persistence: {
+			filePath: path.join(process.cwd(), DEFAULT_SERVICE_KEY_DIR, `${name}-${DEFAULT_SERVICE_KEY_FILE}`),
+			...persistenceOpts
+		}
 	});
-}
+	
+	const registerMethod = type === 'agent' ? sdk.registerAgent : sdk.registerService;
+	
+	return {
+		register: async (opts) => {
+			return await registerMethod.call(sdk, sdk.name, opts);
+		},
+		start: sdk.startHandler.bind(sdk),
+		shutdown: sdk.shutdown.bind(sdk),
+		info: {
+			get id() { return sdk.serviceId; },
+			get version() { return sdk.version; }
+		}
+	};
+};
+
+export const initService = initOrraEntity('service');
+export const initAgent = initOrraEntity('agent');

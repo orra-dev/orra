@@ -99,11 +99,11 @@ Example log sequence:
 
 ### Advanced Usage Patterns
 
-#### 1. Dynamic Service Registration
+#### 1. Dynamic Service/Agent Registration
 
-Services can update their capabilities at runtime:
+Services and Agents can update their capabilities at runtime:
 ```javascript
-await client.registerService('ai-agent', {
+await agent.register('ai-agent', {
   schema: {
     input: {
       // New capability added
@@ -124,11 +124,11 @@ await client.registerService('ai-agent', {
 Control how service identity persists:
 
 ```javascript
-const client = createClient({
+const service = initService({
 	persistenceOpts: {
 		method: 'custom',
-		customSave: async (serviceId) => {
-			await redis.set(`service:${serviceId}`, serviceId);
+		customSave: async (id) => {
+			await redis.set(`service:${id}`, id);
 		},
 		customLoad: async () => {
 			return await redis.get('service:id');

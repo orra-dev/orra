@@ -5,7 +5,7 @@
  */
 
 import { expect, test, describe, beforeAll, afterEach } from '@jest/globals';
-import { createClient } from '@orra.dev/sdk';
+import { initService } from '@orra.dev/sdk';
 import { join } from "path";
 import { existsSync } from "fs";
 import { rm } from "fs/promises";
@@ -21,7 +21,7 @@ async function registerProject() {
 		headers: {
 			'Content-Type': 'application/json'
 		},
-		body: JSON.stringify({ webhooks: [WEBHOOK_URL] })
+		body: JSON.stringify({ webhooks: [ WEBHOOK_URL ] })
 	});
 	
 	if (!response.ok) {
@@ -46,7 +46,7 @@ const poll = async (fn, timeout = 5000, interval = 500) => {
 };
 
 describe('Large Payload Execution Protocol', () => {
-	let client;
+	let service;
 	let apiKey;
 	let projectId;
 	
@@ -57,8 +57,8 @@ describe('Large Payload Execution Protocol', () => {
 	});
 	
 	afterEach(async () => {
-		if (client) {
-			client.close();
+		if (service) {
+			service.shutdown();
 		}
 		
 		const orraDataPath = join(process.cwd(), DEFAULT_ORRA_DIR);
@@ -68,13 +68,14 @@ describe('Large Payload Execution Protocol', () => {
 	});
 	
 	test('large payload conformance', async () => {
-		client = createClient({
+		service = initService({
+			name: 'large-payload-service',
 			orraUrl: TEST_HARNESS_URL,
 			orraKey: apiKey
 		});
 		
 		// Register service with large message handling
-		await client.registerService('large-payload-service', {
+		await service.register({
 			description: 'Service for testing large payload handling',
 			schema: {
 				input: {
@@ -94,7 +95,7 @@ describe('Large Payload Execution Protocol', () => {
 			}
 		});
 		
-		client.startHandler(async (task) => {
+		service.start(async (task) => {
 			return {
 				validatedSize: task.input.message.length,
 				checksum: Buffer.from(task.input.message).toString('base64').slice(0, 10)
@@ -108,7 +109,7 @@ describe('Large Payload Execution Protocol', () => {
 				'Authorization': `Bearer ${apiKey}`
 			},
 			body: JSON.stringify({
-				serviceId: client.serviceId,
+				serviceId: service.info.id,
 				testId: 'large_payload'
 			})
 		});

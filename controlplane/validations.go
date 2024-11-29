@@ -16,7 +16,7 @@ func validateSpec(spec *Spec) v.Schema {
 	baseSchema := v.Schema{
 		v.F("type", spec.Type): v.All(
 			v.Nonzero[string]().Msg("type is required"),
-			v.In("object", "string", "number", "boolean").Msg("invalid type"),
+			v.In("object", "string", "number", "integer", "boolean").Msg("invalid type"),
 		),
 	}
 
