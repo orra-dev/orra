@@ -1,7 +1,8 @@
 # 🪡Orra
 
-Build production-ready multi-agent applications without the complexity. Orra uses LLMs to dynamically orchestrate your
-services and agents, handling reliability and performance so you can focus on building features that matter.
+Build production-ready multi-agent applications without the complexity. Orra intelligently orchestrates your services and agents using LLMs, handling reliability and performance across any language or agent framework.
+
+Prototype rapidly today, scale to production tomorrow.
 
 ## Current Release: Narwal 🐋🦄 (Alpha)
 
@@ -36,9 +37,7 @@ Orra adds powerful orchestration to your agents and services. No rewrites, no in
 
 ### Prerequisites
 
-- [Docker](https://docs.docker.com/desktop/) and [Docker Compose](https://docs.docker.com/compose/install/) - For
-  running the control plane
-- [Node.js 18+](https://nodejs.org/en/download/package-manager) - For running example services
+- [Docker](https://docs.docker.com/desktop/) and [Docker Compose](https://docs.docker.com/compose/install/) - For running the control plane
 - An [OpenAI API key](https://platform.openai.com/docs/quickstart) - For LLM-powered orchestration
 
 > **Note**: The control plane currently runs in-memory. If restarting, follow our [Reset Guide](docs/reset-control-plane.md).
@@ -79,14 +78,16 @@ docker compose up --build
 
 ## Quick Start
 
-Build your first AI-orchestrated application! We'll use our [Echo service](examples/echo-js) example to show you the
-magic of intelligent service orchestration.
+Build your first Orra-orchestrated application! We'll use our [Echo service (JavaScript)](examples/echo-js) example to show you the
+magic of intelligent service orchestration. Requires [Node.js 18+](https://nodejs.org/en/download/package-manager).
 
 While simple, it showcases Orra's capabilities:
 
 - **Dynamic orchestration**: AI analyzes your instructions and creates execution plans - no manual routing needed.
 - **Resilient execution**: Service interruptions, retries, and recovery handled automatically - zero special handling
   code.
+
+If Python is more your speed, follow along using the [Echo service (Python)](examples/echo-python) example.
 
 ### 1. Configure Your Workspace
 
@@ -193,7 +194,7 @@ const myAgent = initAgent({
   orraKey: process.env.ORRA_API_KEY
 });
 
-// Turn your existing AI service into an orchestrated component
+// Turn your existing AI Agent into an orchestrated component
 await myAgent.register({/*...*/});
 myAgent.start(async (task) => {/*...*/});
 ```
@@ -213,6 +214,7 @@ class InputModel(BaseModel):
 class OutputModel(BaseModel):
   response: str
 
+# Turn your existing AI Agent into an orchestrated component
 agent = OrraAgent(
   name="agent-name",
   description="What this agent does",
@@ -222,7 +224,8 @@ agent = OrraAgent(
 
 @agent.handler()
 async def handle_request(task: Task[InputModel]) -> OutputModel:
-  # Handler implementation
+  # Handler implementation that wraps your existing Agent or crew
+  # built with your framework of choice.
   pass
 ```
 
@@ -241,7 +244,14 @@ orra verify run "Estimate delivery for customer order" \
 ### 3. Explore Examples
 
 - 🛒 [E-commerce AI Assistant](examples/ecommerce-agent-app) - E-commerce customer service with a delivery specialised agent
-- 📣 [Echo Service](examples/echo-js) - Simple example showing core concepts
+- 📣 [Echo Service (JavaScript)](examples/echo-js) - Simple example showing core concepts using JS
+- 📣 [Echo Service (Python)](examples/echo-python) - Simple example showing core concepts using Python
+
+### 4. Explore Docs and Guides
+
+- [Rapid Multi-Agent App Development with Orra](docs/rapid-agent-app-devlopment.md)
+- [Orchestrating Actions with Orra](docs/actions.md)
+- [Advanced Topics & Internals](docs/advanced.md)
 
 ## Alpha Features & Limitations
 
@@ -251,24 +261,25 @@ orra verify run "Estimate delivery for customer order" \
 * In-memory execution tracking with exactly-once guarantees
 * Smart service health handling with execution pausing and heartbeat monitoring
 * Short-term retries with exponential backoff (up to 5 attempts)
-* Simple JavaScript SDK with TypeScript support
+* Intuitive JavaScript and Python SDKs
 * CLI for Orra-powered projects management
 * Automatic parallel execution optimization
 * Built-in service discovery
+* Prototype your multi-agent app in a single file then split and deploy as containers  
 
 ### Current Limitations
 
 1. **Storage**: All state is in-memory and will be lost on control plane restart
 2. **Deployment**: Single-instance only, designed for local development
 3. **Recovery**: Limited to individual service recovery
-4. **SDKs**: JavaScript/TypeScript and Python only
+4. **SDKs**: JavaScript and Python only
 
 ### Coming Soon
 
 * Persistent storage
+* Continuous adjustment of Agent workflows during runtime
 * Additional language SDKs - Ruby, DotNet and Go very soon!
 * Streaming for superfast task processing
-* Continuous adjustment of Agent workflows during runtime
 * Resource Reallocation based on performance and changing needs
 * Distributed deployment
   ... and many more planned
