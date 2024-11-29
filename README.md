@@ -37,9 +37,7 @@ Orra adds powerful orchestration to your agents and services. No rewrites, no in
 
 ### Prerequisites
 
-- [Docker](https://docs.docker.com/desktop/) and [Docker Compose](https://docs.docker.com/compose/install/) - For
-  running the control plane
-- [Node.js 18+](https://nodejs.org/en/download/package-manager) - For running example services
+- [Docker](https://docs.docker.com/desktop/) and [Docker Compose](https://docs.docker.com/compose/install/) - For running the control plane
 - An [OpenAI API key](https://platform.openai.com/docs/quickstart) - For LLM-powered orchestration
 
 > **Note**: The control plane currently runs in-memory. If restarting, follow our [Reset Guide](docs/reset-control-plane.md).
@@ -81,7 +79,7 @@ docker compose up --build
 ## Quick Start
 
 Build your first Orra-orchestrated application! We'll use our [Echo service (JavaScript)](examples/echo-js) example to show you the
-magic of intelligent service orchestration.
+magic of intelligent service orchestration. Requires [Node.js 18+](https://nodejs.org/en/download/package-manager).
 
 While simple, it showcases Orra's capabilities:
 
