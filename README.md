@@ -1,8 +1,8 @@
 # 🪡Orra
 
-Build production-ready multi-agent applications without the complexity. Orra uses LLMs to dynamically orchestrate your services and agents - whether they're built with your preferred agent framework or your own custom implementation in any programming language - handling reliability and performance so you can focus on building features that matter.
+Build production-ready multi-agent applications without the complexity. Orra intelligently orchestrates your services and agents using LLMs, handling reliability and performance across any language or agent framework.
 
-Prototype rapidly with confidence knowing your code is production-ready from day one.
+Prototype rapidly today, scale to production tomorrow.
 
 ## Current Release: Narwal 🐋🦄 (Alpha)
 
@@ -246,6 +246,12 @@ orra verify run "Estimate delivery for customer order" \
 - 🛒 [E-commerce AI Assistant](examples/ecommerce-agent-app) - E-commerce customer service with a delivery specialised agent
 - 📣 [Echo Service (JavaScript)](examples/echo-js) - Simple example showing core concepts using JS
 - 📣 [Echo Service (Python)](examples/echo-python) - Simple example showing core concepts using Python
+
+### 4. Explore Docs and Guides
+
+- [Rapid Multi-Agent App Development with Orra](docs/rapid-agent-app-devlopment.md)
+- [Orchestrating Actions with Orra](docs/actions.md)
+- [Advanced Topics & Internals](docs/advanced.md)
 
 ## Alpha Features & Limitations
 
