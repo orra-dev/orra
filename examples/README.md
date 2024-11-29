@@ -31,4 +31,4 @@ Having deployed agent architectures in production, here's what to watch for:
 - [Control Plane Setup](../docs/reset-control-plane.md) - Required before running examples
 - [CLI Reference](../docs/cli.md) - Essential commands for development
 
-Need help? Join us on [GitHub Discussion](https://github.com/ezodude/orra/discussions).
+Need help? Join us on [GitHub Discussion](https://github.com/orra-dev/orra/discussions).
