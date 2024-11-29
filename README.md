@@ -80,7 +80,7 @@ docker compose up --build
 
 ## Quick Start
 
-Build your first Orra-orchestrated application! We'll use our [Echo service](examples/echo-js) example to show you the
+Build your first Orra-orchestrated application! We'll use our [Echo service (JavaScript)](examples/echo-js) example to show you the
 magic of intelligent service orchestration.
 
 While simple, it showcases Orra's capabilities:
@@ -88,6 +88,8 @@ While simple, it showcases Orra's capabilities:
 - **Dynamic orchestration**: AI analyzes your instructions and creates execution plans - no manual routing needed.
 - **Resilient execution**: Service interruptions, retries, and recovery handled automatically - zero special handling
   code.
+
+If Python is more your speed, follow along using the [Echo service (Python)](examples/echo-python) example.
 
 ### 1. Configure Your Workspace
 
