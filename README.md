@@ -182,20 +182,51 @@ while you focus on building your application.
 
 ### 1. Integrate Services & Agents
 
-```javascript
-import { createClient } from '@orra.dev/sdk';
+#### Using Javascript
 
-const client = createClient({
+```javascript
+import { initAgent } from '@orra.dev/sdk';
+
+const myAgent = initAgent({
+  name: 'ai-agent',
   orraUrl: process.env.ORRA_URL,
   orraKey: process.env.ORRA_API_KEY
 });
 
 // Turn your existing AI service into an orchestrated component
-await client.registerService('AI Service', {/*...*/});
-client.startHandler(async (task) => {/*...*/});
+await myAgent.register({/*...*/});
+myAgent.start(async (task) => {/*...*/});
 ```
 
 → [JS SDK Integration Guide](docs/sdks/js-sdk.md)
+
+#### Using Python
+
+```python
+import os
+from orra import OrraAgent, Task
+
+class InputModel(BaseModel):
+  customer_id: str
+  message: str
+
+class OutputModel(BaseModel):
+  response: str
+
+agent = OrraAgent(
+  name="agent-name",
+  description="What this agent does",
+  url=os.getenv(ORRA_URL),
+  api_key=os.getenv(ORRA_API_KEY)
+)
+
+@agent.handler()
+async def handle_request(task: Task[InputModel]) -> OutputModel:
+  # Handler implementation
+  pass
+```
+
+→ [Python SDK Integration Guide](docs/sdks/python-sdk.md)
 
 ### 2. Orchestrate Actions
 
@@ -230,12 +261,12 @@ orra verify run "Estimate delivery for customer order" \
 1. **Storage**: All state is in-memory and will be lost on control plane restart
 2. **Deployment**: Single-instance only, designed for local development
 3. **Recovery**: Limited to individual service recovery
-4. **SDKs**: JavaScript/TypeScript only
+4. **SDKs**: JavaScript/TypeScript and Python only
 
 ### Coming Soon
 
 * Persistent storage
-* Additional language SDKs - Python and Ruby very soon!
+* Additional language SDKs - Ruby, DotNet and Go very soon!
 * Streaming for superfast task processing
 * Continuous adjustment of Agent workflows during runtime
 * Resource Reallocation based on performance and changing needs
