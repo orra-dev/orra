@@ -6,7 +6,7 @@ We're starting with JavaScript and more languages are coming soon.
 
 ## Available Examples
 
-### [Echo Service](echo)
+### [Echo Service](echo-js)
 The "Hello World" of Orra - perfect for learning the basics of service orchestration.
 
 ### [AI E-commerce Assistant](ecommerce-agent-app)

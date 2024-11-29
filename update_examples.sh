@@ -72,7 +72,8 @@ EXAMPLES_DIR="./examples"
 
 # Array of example directories
 example_dirs=(
-  "echo"
+  "echo-js"
+  "echo-python"
   "ecommerce-agent-app/chat-ui"
   "ecommerce-agent-app/customer-svc"
   "ecommerce-agent-app/delivery-agent"
