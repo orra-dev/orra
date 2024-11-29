@@ -6,8 +6,11 @@ We're starting with JavaScript and more languages are coming soon.
 
 ## Available Examples
 
-### [Echo Service](echo-js)
-The "Hello World" of Orra - perfect for learning the basics of service orchestration.
+### [Echo Service (JavaScript)](echo-js)
+The "Hello World" of Orra for JS developers - perfect for learning the basics of service orchestration.
+
+### [Echo Service (Python)](echo-python)
+The "Hello World" of Orra for Pythonistas - perfect for learning the basics of service orchestration.
 
 ### [AI E-commerce Assistant](ecommerce-agent-app)
 Complete e-commerce example with multiple services, AI agent integration, and real-time updates.
@@ -28,4 +31,4 @@ Having deployed agent architectures in production, here's what to watch for:
 - [Control Plane Setup](../docs/reset-control-plane.md) - Required before running examples
 - [CLI Reference](../docs/cli.md) - Essential commands for development
 
-Need help? Join us on [GitHub Discussion](https://github.com/ezodude/orra/discussions).
+Need help? Join us on [GitHub Discussion](https://github.com/orra-dev/orra/discussions).
