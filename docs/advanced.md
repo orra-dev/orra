@@ -18,21 +18,21 @@ When you submit an action, Orra's AI analyzes your intent and creates an executi
     },
     {
       "id": "task1",
-      "service": "CustomerService",
+      "service": "customer-service",
       "input": {
         "customerId": "$task0.customerId"
       }
     },
     {
       "id": "task2",
-      "service": "OrderSystem",
+      "service": "order-system",
       "input": {
         "orderId": "$task0.orderId"
       }
     },
     {
       "id": "task3",
-      "service": "AIAgent",
+      "service": "ai-agent",
       "input": {
         "customerData": "$customer_context",
         "orderData": "$order_details"
@@ -48,7 +48,7 @@ When you submit an action, Orra's AI analyzes your intent and creates an executi
 
 Key features:
 - `task0` holds your original parameters
-- Services reference data using `$task.field` syntax
+- Services and agents reference data using `$task.field` syntax
 - `parallel_groups` maximizes performance by running independent tasks together
 
 ### Exactly-Once Task Execution
