@@ -49,6 +49,10 @@ Let's see how this works in practice...
 
 ## Quick Example
 
+First, follow the [Echo Example](../examples/echo-python) setup instructions to run Orra locally and create your project. 
+
+Then start prototyping:
+
 ```python
 from orra import OrraService, OrraAgent, Task
 from pydantic import BaseModel, Field
@@ -224,4 +228,4 @@ Orra orchestrates them the same way!
     - Parallel execution
     - Webhook notifications
 
-Need help? Check out our [examples](../examples) or join our Discord!
+Need help? Check out our [examples](../examples) or join us on [GitHub Discussion](https://github.com/orra-dev/orra/discussions).
