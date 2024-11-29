@@ -271,7 +271,7 @@ orra verify run "Estimate delivery for customer order" \
 * Continuous adjustment of Agent workflows during runtime
 * Resource Reallocation based on performance and changing needs
 * Distributed deployment
-  .. and many more planned
+  ... and many more planned
 
 ## Join Our Alpha Testing Community
 
@@ -284,7 +284,7 @@ orra verify run "Estimate delivery for customer order" \
 
 **Connect With Us:**
 
-- [GitHub Discussions](https://github.com/ezodude/orra/discussions) - Share your experience and ideas
+- [GitHub Discussions](https://github.com/orra-dev/orra/discussions) - Share your experience and ideas
 - Office Hours - Weekly calls with the team
 
 ## License
