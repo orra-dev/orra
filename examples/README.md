@@ -28,7 +28,7 @@ Having deployed agent architectures in production, here's what to watch for:
 ## Quick Links
 
 - [Documentation](../docs) - Everything you need to know
-- [Control Plane Setup](../docs/reset-control-plane.md) - Required before running examples
+- [Control Plane Setup](../README.md#2-get-orra-running) - Required before running examples
 - [CLI Reference](../docs/cli.md) - Essential commands for development
 
 Need help? Join us on [GitHub Discussion](https://github.com/orra-dev/orra/discussions).
