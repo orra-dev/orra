@@ -192,6 +192,7 @@ type Spec struct {
 type ServiceSchema struct {
 	Input  Spec `json:"input"`
 	Output Spec `json:"output"`
+	Revert Spec `json:"revert,omitempty"` // Optional revert specification
 }
 
 type ServiceInfo struct {
@@ -320,4 +321,40 @@ type VectorCache struct {
 	maxSize       int // Per project
 	group         singleflight.Group
 	logger        zerolog.Logger
+}
+
+// CompensationResult stores the outcome of a compensation attempt
+type CompensationResult struct {
+	Status  CompensationStatus   `json:"status"`
+	Error   string               `json:"error,omitempty"`
+	Partial *PartialCompensation `json:"partial,omitempty"`
+}
+
+// PartialCompensation tracks progress of partial compensation completion
+type PartialCompensation struct {
+	Completed []string `json:"completed"`
+	Remaining []string `json:"remaining"`
+}
+
+// CompensationState tracks the full state of a task's compensation
+type CompensationState struct {
+	TaskID        string              `json:"taskId"`
+	Status        CompensationStatus  `json:"status"`
+	AttemptCount  int                 `json:"attemptCount"`
+	LastAttempted time.Time           `json:"lastAttempted"`
+	TTL           time.Duration       `json:"ttl"`
+	ExpiresAt     time.Time           `json:"expiresAt"`
+	Result        *CompensationResult `json:"result,omitempty"`
+}
+
+// CompensationMeta contains metadata for compensation operations
+type CompensationMeta struct {
+	TTL       time.Duration `json:"ttl"`
+	ExpiresAt time.Time     `json:"expiresAt"`
+}
+
+// CompensationData wraps the data needed for compensation with metadata
+type CompensationData struct {
+	Data json.RawMessage  `json:"data"`
+	Meta CompensationMeta `json:"meta"`
 }

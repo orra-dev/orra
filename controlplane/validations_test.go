@@ -170,6 +170,90 @@ func TestServiceSchemaValidation(t *testing.T) {
 	}
 }
 
+func TestServiceSchemaValidation_WithRevert(t *testing.T) {
+	tests := []struct {
+		name    string
+		schema  ServiceSchema
+		wantErr bool
+	}{
+		{
+			name: "valid schema with revert",
+			schema: ServiceSchema{
+				Input: Spec{
+					Type: "object",
+					Properties: map[string]Spec{
+						"orderId": {Type: "string"},
+					},
+				},
+				Output: Spec{
+					Type: "object",
+					Properties: map[string]Spec{
+						"status": {Type: "string"},
+					},
+				},
+				Revert: Spec{
+					Type: "object",
+					Properties: map[string]Spec{
+						"transactionId": {Type: "string"},
+						"amount":        {Type: "number"},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid schema without revert",
+			schema: ServiceSchema{
+				Input: Spec{
+					Type: "object",
+					Properties: map[string]Spec{
+						"orderId": {Type: "string"},
+					},
+				},
+				Output: Spec{
+					Type: "object",
+					Properties: map[string]Spec{
+						"status": {Type: "string"},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid revert - not object type",
+			schema: ServiceSchema{
+				Input: Spec{
+					Type: "object",
+					Properties: map[string]Spec{
+						"orderId": {Type: "string"},
+					},
+				},
+				Output: Spec{
+					Type: "object",
+					Properties: map[string]Spec{
+						"status": {Type: "string"},
+					},
+				},
+				Revert: Spec{
+					Type: "string",
+				},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := v.Validate(tt.schema.Validation())
+			if tt.wantErr {
+				assert.NotEmpty(t, errs, "Expected validation errors")
+			} else {
+				assert.Empty(t, errs, "Expected no validation errors")
+			}
+		})
+	}
+}
+
 func TestServiceInfoValidation(t *testing.T) {
 	tests := []struct {
 		name    string

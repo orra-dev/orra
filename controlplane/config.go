@@ -17,13 +17,16 @@ import (
 )
 
 const (
-	TaskZero               = "task0"
-	ResultAggregatorID     = "result_aggregator"
-	FailureTrackerID       = "failure_tracker"
-	WSPing                 = "ping"
-	WSPong                 = "pong"
+	TaskZero           = "task0"
+	ResultAggregatorID = "result_aggregator"
+	FailureTrackerID   = "failure_tracker"
+	WSPing             = "ping"
+	WSPong             = "pong"
 	HealthCheckGracePeriod = 30 * time.Minute
 	TaskTimeout            = 30 * time.Second
+	CompensationDataStored = "compensation_stored"
+	CompensationAttempted  = "compensation_attempted"
+	CompensationComplete   = "compensation_complete"
 )
 
 var (
@@ -143,6 +146,63 @@ func (st *ServiceType) UnmarshalJSON(data []byte) error {
 		*st = Service
 	default:
 		return fmt.Errorf("invalid ServiceType: %s", s)
+	}
+	return nil
+}
+
+type CompensationStatus int
+
+const (
+	CompensationPending CompensationStatus = iota
+	CompensationInProgress
+	CompensationSucceeded
+	CompensationFailed
+	CompensationPartial
+	CompensationExpired
+)
+
+func (s CompensationStatus) String() string {
+	switch s {
+	case CompensationPending:
+		return "pending"
+	case CompensationInProgress:
+		return "in_progress"
+	case CompensationSucceeded:
+		return "succeeded"
+	case CompensationFailed:
+		return "failed"
+	case CompensationPartial:
+		return "partial"
+	case CompensationExpired:
+		return "expired"
+	default:
+		return "unknown"
+	}
+}
+
+func (s CompensationStatus) MarshalJSON() ([]byte, error) { return json.Marshal(s.String()) }
+
+func (s *CompensationStatus) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+
+	switch str {
+	case "pending":
+		*s = CompensationPending
+	case "in_progress":
+		*s = CompensationInProgress
+	case "succeeded":
+		*s = CompensationSucceeded
+	case "failed":
+		*s = CompensationFailed
+	case "partial":
+		*s = CompensationPartial
+	case "expired":
+		*s = CompensationExpired
+	default:
+		return fmt.Errorf("invalid Compensation Status: %s", s)
 	}
 	return nil
 }

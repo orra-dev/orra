@@ -201,6 +201,81 @@ func (lm *LogManager) AppendTaskStatusEvent(
 	return nil
 }
 
+// AppendCompensationDataStored creates a log entry for stored compensation data
+func (lm *LogManager) AppendCompensationDataStored(
+	orchestrationID string,
+	taskID string,
+	data *CompensationData,
+) error {
+	dataBytes, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal compensation data: %w", err)
+	}
+
+	lm.AppendToLog(
+		orchestrationID,
+		CompensationDataStored,
+		fmt.Sprintf("comp_%s_%s", taskID, shortuuid.New()),
+		dataBytes,
+		taskID,
+		0,
+	)
+	return nil
+}
+
+// AppendCompensationAttempted creates a log entry for a compensation attempt
+func (lm *LogManager) AppendCompensationAttempted(
+	orchestrationID string,
+	taskID string,
+	attemptNo int,
+) error {
+	meta := struct {
+		TaskID    string    `json:"taskId"`
+		Timestamp time.Time `json:"timestamp"`
+	}{
+		TaskID:    taskID,
+		Timestamp: time.Now().UTC(),
+	}
+
+	metaBytes, err := json.Marshal(meta)
+	if err != nil {
+		return fmt.Errorf("failed to marshal compensation attempt metadata: %w", err)
+	}
+
+	lm.AppendToLog(
+		orchestrationID,
+		CompensationAttempted,
+		fmt.Sprintf("comp_attempt_%s_%s", taskID, shortuuid.New()),
+		metaBytes,
+		taskID,
+		attemptNo,
+	)
+	return nil
+}
+
+// AppendCompensationComplete creates a log entry for a completed compensation
+func (lm *LogManager) AppendCompensationComplete(
+	orchestrationID string,
+	taskID string,
+	result *CompensationResult,
+	attemptNo int,
+) error {
+	resultBytes, err := json.Marshal(result)
+	if err != nil {
+		return fmt.Errorf("failed to marshal compensation result: %w", err)
+	}
+
+	lm.AppendToLog(
+		orchestrationID,
+		CompensationComplete,
+		fmt.Sprintf("comp_complete_%s_%s", taskID, shortuuid.New()),
+		resultBytes,
+		taskID,
+		attemptNo,
+	)
+	return nil
+}
+
 func (lm *LogManager) FinalizeOrchestration(
 	orchestrationID string,
 	status Status,
