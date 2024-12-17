@@ -363,7 +363,7 @@ export async function estimateDelivery(opts) {
 			role: "tool",
 			name: functionName,
 			content: functionResult,
-			tool_call_id: toolCall.id,
+			toolCallId: toolCall.id,
 		});
 	}
 	
