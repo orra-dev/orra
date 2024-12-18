@@ -144,7 +144,7 @@ func (lm *LogManager) AppendToLog(orchestrationID, entryType, id string, value j
 	log.Append(newEntry)
 }
 
-func (lm *LogManager) AppendFailureToLog(orchestrationID, id, producerID, failure string, attemptNo int, skipWebhook bool) error {
+func (lm *LogManager) AppendTaskFailureToLog(orchestrationID, id, producerID, failure string, attemptNo int, skipWebhook bool) error {
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 
@@ -158,7 +158,7 @@ func (lm *LogManager) AppendFailureToLog(orchestrationID, id, producerID, failur
 		return fmt.Errorf("failed to marshal failure for log entry: %w", err)
 	}
 
-	failureID := fmt.Sprintf("fail_%s_%s", strings.ToLower(id), shortuuid.New())
+	failureID := fmt.Sprintf("task_fail_%s_%s", strings.ToLower(id), shortuuid.New())
 	lm.AppendToLog(orchestrationID, "task_failure", failureID, value, producerID, attemptNo)
 	return nil
 }
@@ -207,16 +207,19 @@ func (lm *LogManager) AppendCompensationDataStored(
 	taskID string,
 	data *CompensationData,
 ) error {
-	dataBytes, err := json.Marshal(data)
+	lm.mu.Lock()
+	defer lm.mu.Unlock()
+
+	value, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("failed to marshal compensation data: %w", err)
 	}
 
 	lm.AppendToLog(
 		orchestrationID,
-		CompensationDataStored,
+		CompensationDataStoredLogType,
 		fmt.Sprintf("comp_%s_%s", taskID, shortuuid.New()),
-		dataBytes,
+		value,
 		taskID,
 		0,
 	)
@@ -227,26 +230,36 @@ func (lm *LogManager) AppendCompensationDataStored(
 func (lm *LogManager) AppendCompensationAttempted(
 	orchestrationID string,
 	taskID string,
+	uuid string,
+	attemptPayload json.RawMessage,
 	attemptNo int,
 ) error {
-	meta := struct {
-		TaskID    string    `json:"taskId"`
-		Timestamp time.Time `json:"timestamp"`
+	lm.mu.Lock()
+	defer lm.mu.Unlock()
+
+	attemptId := fmt.Sprintf("comp_attempt_%s_%s", taskID, uuid)
+	compensationAttempt := struct {
+		ID        string          `json:"id"`
+		TaskID    string          `json:"taskId"`
+		Input     json.RawMessage `json:"input"`
+		Timestamp time.Time       `json:"timestamp"`
 	}{
+		ID:        attemptId,
 		TaskID:    taskID,
+		Input:     attemptPayload,
 		Timestamp: time.Now().UTC(),
 	}
 
-	metaBytes, err := json.Marshal(meta)
+	attemptData, err := json.Marshal(compensationAttempt)
 	if err != nil {
 		return fmt.Errorf("failed to marshal compensation attempt metadata: %w", err)
 	}
 
 	lm.AppendToLog(
 		orchestrationID,
-		CompensationAttempted,
-		fmt.Sprintf("comp_attempt_%s_%s", taskID, shortuuid.New()),
-		metaBytes,
+		CompensationAttemptedLogType,
+		attemptId,
+		attemptData,
 		taskID,
 		attemptNo,
 	)
@@ -260,16 +273,53 @@ func (lm *LogManager) AppendCompensationComplete(
 	result *CompensationResult,
 	attemptNo int,
 ) error {
-	resultBytes, err := json.Marshal(result)
+	lm.mu.Lock()
+	defer lm.mu.Unlock()
+
+	compensationCompleted := struct {
+		*CompensationResult
+		Timestamp time.Time `json:"timestamp"`
+	}{
+		CompensationResult: result,
+		Timestamp:          time.Now().UTC(),
+	}
+
+	compCompleted, err := json.Marshal(compensationCompleted)
 	if err != nil {
 		return fmt.Errorf("failed to marshal compensation result: %w", err)
 	}
 
 	lm.AppendToLog(
 		orchestrationID,
-		CompensationComplete,
-		fmt.Sprintf("comp_complete_%s_%s", taskID, shortuuid.New()),
-		resultBytes,
+		CompensationCompleteLogType,
+		fmt.Sprintf("comp_complete_%s", taskID),
+		compCompleted,
+		taskID,
+		attemptNo,
+	)
+	return nil
+}
+
+func (lm *LogManager) AppendCompensationFailure(
+	orchestrationID,
+	taskID string,
+	failure CompensationResult,
+	attemptNo int,
+) error {
+	lm.mu.Lock()
+	defer lm.mu.Unlock()
+
+	value, err := json.Marshal(failure)
+	if err != nil {
+		return fmt.Errorf("failed to marshal compensation failure for log entry: %w", err)
+	}
+
+	failureID := fmt.Sprintf("comp_fail_%s", strings.ToLower(taskID))
+	lm.AppendToLog(
+		orchestrationID,
+		CompensationFailureLogType,
+		failureID,
+		value,
 		taskID,
 		attemptNo,
 	)

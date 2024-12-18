@@ -117,7 +117,7 @@ func (r *ResultAggregator) processEntry(entry LogEntry, orchestrationID string) 
 		Msgf("All result aggregator dependencies have been processed for orchestration: %s", orchestrationID)
 
 	if err := r.LogManager.MarkTaskCompleted(orchestrationID, entry.ID(), time.Now().UTC()); err != nil {
-		return r.LogManager.AppendFailureToLog(
+		return r.LogManager.AppendTaskFailureToLog(
 			orchestrationID,
 			ResultAggregatorID,
 			ResultAggregatorID,
@@ -132,7 +132,7 @@ func (r *ResultAggregator) processEntry(entry LogEntry, orchestrationID string) 
 
 	if err := r.LogManager.FinalizeOrchestration(orchestrationID, completed, nil, results[len(results)-1], false); err != nil {
 		skipWebhook := strings.Contains(err.Error(), "failed to trigger webhook")
-		return r.LogManager.AppendFailureToLog(
+		return r.LogManager.AppendTaskFailureToLog(
 			orchestrationID,
 			ResultAggregatorID,
 			ResultAggregatorID,

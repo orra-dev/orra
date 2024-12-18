@@ -336,15 +336,10 @@ type PartialCompensation struct {
 	Remaining []string `json:"remaining"`
 }
 
-// CompensationState tracks the full state of a task's compensation
-type CompensationState struct {
-	TaskID        string              `json:"taskId"`
-	Status        CompensationStatus  `json:"status"`
-	AttemptCount  int                 `json:"attemptCount"`
-	LastAttempted time.Time           `json:"lastAttempted"`
-	TTL           time.Duration       `json:"ttl"`
-	ExpiresAt     time.Time           `json:"expiresAt"`
-	Result        *CompensationResult `json:"result,omitempty"`
+// CompensationData wraps the data needed for compensation with metadata
+type CompensationData struct {
+	Data json.RawMessage  `json:"data"`
+	Meta CompensationMeta `json:"meta"`
 }
 
 // CompensationMeta contains metadata for compensation operations
@@ -353,8 +348,12 @@ type CompensationMeta struct {
 	ExpiresAt time.Time     `json:"expiresAt"`
 }
 
-// CompensationData wraps the data needed for compensation with metadata
-type CompensationData struct {
-	Data json.RawMessage  `json:"data"`
-	Meta CompensationMeta `json:"meta"`
+type CompensationWorker struct {
+	OrchestrationID string
+	LogManager      *LogManager
+	Dependencies    DependencyKeys
+	logState        *LogState
+	backOff         *backoff.ExponentialBackOff
+	attemptCounts   map[string]int     // track attempts per task
+	cancel          context.CancelFunc // Store cancel function
 }

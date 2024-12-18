@@ -124,7 +124,7 @@ func (f *FailureTracker) processEntry(entry LogEntry, orchestrationID string) er
 
 	if err := f.LogManager.FinalizeOrchestration(orchestrationID, failed, reason, nil, failure.SkipWebhook); err != nil {
 		isWebHookErr := strings.Contains(err.Error(), "failed to trigger webhook")
-		return f.LogManager.AppendFailureToLog(
+		return f.LogManager.AppendTaskFailureToLog(
 			orchestrationID,
 			FailureTrackerID,
 			FailureTrackerID,
