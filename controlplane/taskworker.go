@@ -156,7 +156,7 @@ func (w *TaskWorker) processEntry(ctx context.Context, entry LogEntry, orchestra
 	}
 
 	// Execute our task
-	output, err := w.executeTaskWithRetry(ctx, orchestrationID)
+	taskOutput, err := w.executeTaskWithRetry(ctx, orchestrationID)
 	if err != nil {
 		w.LogManager.Logger.Error().Err(err).Msgf("Cannot execute task %s for orchestration %s", w.TaskID, orchestrationID)
 		failedTs := time.Now().UTC()
@@ -182,7 +182,51 @@ func (w *TaskWorker) processEntry(ctx context.Context, entry LogEntry, orchestra
 		return w.LogManager.AppendTaskFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error(), w.consecutiveErrs, false)
 	}
 
-	w.LogManager.AppendToLog(orchestrationID, "task_output", w.TaskID, output, w.Service.ID, w.consecutiveErrs)
+	return w.processTaskResult(orchestrationID, taskOutput)
+}
+
+func (w *TaskWorker) processTaskResult(orchestrationID string, output json.RawMessage) error {
+	var resultPayload TaskResultPayload
+	if err := json.Unmarshal(output, &resultPayload); err != nil {
+		return w.LogManager.AppendTaskFailureToLog(
+			orchestrationID,
+			w.TaskID,
+			w.Service.ID,
+			fmt.Sprintf("failed to unmarshal task result: %v", err),
+			w.consecutiveErrs,
+			false,
+		)
+	}
+
+	// Store the task result first
+	w.LogManager.AppendToLog(
+		orchestrationID,
+		"task_output",
+		w.TaskID,
+		resultPayload.Task,
+		w.Service.ID,
+		w.consecutiveErrs,
+	)
+
+	if canCompensate := resultPayload.Compensation != nil; !canCompensate {
+		return nil
+	}
+
+	if err := w.LogManager.AppendCompensationDataStored(
+		orchestrationID,
+		w.TaskID,
+		resultPayload.Compensation,
+	); err != nil {
+		return w.LogManager.AppendTaskFailureToLog(
+			orchestrationID,
+			w.TaskID,
+			w.Service.ID,
+			fmt.Sprintf("failed to store compensation data: %v", err),
+			w.consecutiveErrs,
+			false,
+		)
+	}
+
 	return nil
 }
 

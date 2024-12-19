@@ -180,6 +180,11 @@ type TaskResult struct {
 	Status         string          `json:"status,omitempty"`
 }
 
+type TaskResultPayload struct {
+	Task         json.RawMessage   `json:"task"`
+	Compensation *CompensationData `json:"compensation"`
+}
+
 type Spec struct {
 	Type       string          `json:"type"`
 	Properties map[string]Spec `json:"properties,omitempty"`

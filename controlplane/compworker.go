@@ -225,12 +225,12 @@ func (w *CompensationWorker) getCompensationData(taskID string) (*CompensationDa
 	// Read all entries from beginning
 	entries := logStream.ReadFrom(0)
 	for _, entry := range entries {
-		if entry.Type() == "compensation_stored" && entry.ProducerID() == taskID {
-			var data CompensationData
-			if err := json.Unmarshal(entry.Value(), &data); err != nil {
+		if entry.Type() == CompensationDataStoredLogType && entry.ProducerID() == taskID {
+			var compData CompensationData
+			if err := json.Unmarshal(entry.Value(), &compData); err != nil {
 				return nil, fmt.Errorf("failed to unmarshal compensation data: %w", err)
 			}
-			return &data, nil
+			return &compData, nil
 		}
 	}
 

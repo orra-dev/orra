@@ -218,7 +218,7 @@ func (lm *LogManager) AppendCompensationDataStored(
 	lm.AppendToLog(
 		orchestrationID,
 		CompensationDataStoredLogType,
-		fmt.Sprintf("comp_%s_%s", taskID, shortuuid.New()),
+		fmt.Sprintf("comp_data_%s", strings.ToLower(taskID)),
 		value,
 		taskID,
 		0,
@@ -237,7 +237,7 @@ func (lm *LogManager) AppendCompensationAttempted(
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 
-	attemptId := fmt.Sprintf("comp_attempt_%s_%s", taskID, uuid)
+	attemptId := fmt.Sprintf("comp_attempt_%s_%s", strings.ToLower(taskID), uuid)
 	compensationAttempt := struct {
 		ID        string          `json:"id"`
 		TaskID    string          `json:"taskId"`
@@ -292,7 +292,7 @@ func (lm *LogManager) AppendCompensationComplete(
 	lm.AppendToLog(
 		orchestrationID,
 		CompensationCompleteLogType,
-		fmt.Sprintf("comp_complete_%s", taskID),
+		fmt.Sprintf("comp_complete_%s", strings.ToLower(taskID)),
 		compCompleted,
 		taskID,
 		attemptNo,
