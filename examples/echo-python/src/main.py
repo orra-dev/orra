@@ -19,8 +19,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from orra import OrraService, Task
 
-from .schema import EchoInput, EchoOutput
-from .config import get_persistence_config
+from schema import EchoInput, EchoOutput
+from config import get_persistence_config
 
 # Load environment variables
 load_dotenv()
