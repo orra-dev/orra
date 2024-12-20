@@ -140,12 +140,13 @@ if $CLEAN_SVC_KEYS; then
         echo "Attempting to remove service key in $full_dir"
 
         # Clean up orra-service-key.json files
-        service_key_file="$full_dir/.orra-data/orra-service-key.json"
-        if [ -f "$service_key_file" ]; then
+        find "$full_dir" -type f \( -name "orra-service-key.json" -o -name "*-orra-service-key.json" \) | while read -r service_key_file; do
             echo "Removing $service_key_file"
             rm "$service_key_file"
-        else
-          echo "No service key file to remove in $full_dir"
+        done
+
+        if [ $? -ne 0 ]; then
+            echo "No service key files found in $full_dir"
         fi
     done
 fi
