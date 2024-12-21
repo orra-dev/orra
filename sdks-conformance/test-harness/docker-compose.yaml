@@ -8,7 +8,7 @@ services:
       target: final
     environment:
       - PORT=8005
-      - OPEN_API_KEY=${OPEN_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
       interval: 5s
