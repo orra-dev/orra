@@ -53,6 +53,7 @@ type OrchestrationRequest struct {
 		Content string
 	} `json:"action"`
 	Data    []map[string]string `json:"data"`
+	Timeout string              `json:"timeout"`
 	Webhook string              `json:"webhook"`
 }
 

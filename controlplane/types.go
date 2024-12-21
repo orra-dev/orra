@@ -10,6 +10,7 @@ import (
 	"container/list"
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 
@@ -137,6 +138,7 @@ type TaskWorker struct {
 	Service         *ServiceInfo
 	TaskID          string
 	Dependencies    DependencyKeys
+	Timeout         time.Duration
 	LogManager      *LogManager
 	logState        *LogState
 	backOff         *backoff.ExponentialBackOff
@@ -212,8 +214,35 @@ type Orchestration struct {
 	Status    Status              `json:"status"`
 	Error     json.RawMessage     `json:"error,omitempty"`
 	Timestamp time.Time           `json:"timestamp"`
+	Timeout   *Duration           `json:"timeout,omitempty"`
 	Webhook   string              `json:"webhook"`
 	taskZero  json.RawMessage
+}
+
+type Duration struct {
+	time.Duration
+}
+
+func (d *Duration) UnmarshalJSON(b []byte) error {
+	var v interface{}
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+
+	switch value := v.(type) {
+	case string:
+		var err error
+		d.Duration, err = time.ParseDuration(value)
+		if err != nil {
+			return err
+		}
+	case float64:
+		d.Duration = time.Duration(value)
+	default:
+		return fmt.Errorf("invalid duration")
+	}
+
+	return nil
 }
 
 type Action struct {
