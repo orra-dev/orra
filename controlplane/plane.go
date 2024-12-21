@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	v "github.com/RussellLuo/validating/v3"
 	"github.com/google/uuid"
@@ -206,6 +207,13 @@ func (p *ControlPlane) GetProjectIDForService(serviceID string) (string, error) 
 		}
 	}
 	return "", fmt.Errorf("no project found for service %s", serviceID)
+}
+
+func (o *Orchestration) GetTimeout() time.Duration {
+	if o.Timeout == nil {
+		return 30 * time.Second
+	}
+	return o.Timeout.Duration
 }
 
 func (o *Orchestration) FailedBeforeDecomposition() bool {

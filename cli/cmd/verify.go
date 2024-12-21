@@ -43,6 +43,7 @@ func newVerifyRunCmd(opts *CliOpts) *cobra.Command {
 	var (
 		data       []string
 		webhookUrl string
+		timeout    string
 		quiet      bool
 	)
 
@@ -62,6 +63,10 @@ execute the required project services`,
 
 			if len(webhookUrl) == 0 {
 				webhookUrl = proj.Webhooks[0]
+			}
+
+			if len(timeout) == 0 {
+				timeout = "30s"
 			}
 
 			if !contains(proj.Webhooks, webhookUrl) {
@@ -85,6 +90,7 @@ execute the required project services`,
 					Content: action,
 				},
 				Data:    actionParams,
+				Timeout: timeout,
 				Webhook: webhookUrl,
 			})
 			if err != nil {
@@ -119,6 +125,8 @@ execute the required project services`,
 	cmd.Flags().StringSliceVarP(&data, "data", "d", []string{}, "Data to supplement action in format param:value")
 	cmd.Flags().StringVarP(&webhookUrl, "webhook", "w", "", `Webhook url to accept results 
 (defaults to first configured webhook)`)
+	cmd.Flags().StringVarP(&timeout, "timeout", "t", "", `Set timeout duration
+(defaults to 30s)`)
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, `Suppress extra explanation
 (defaults to false)`)
 

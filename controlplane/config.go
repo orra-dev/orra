@@ -33,8 +33,8 @@ var (
 )
 
 type Config struct {
-	Port       int `envconfig:"default=8005"`
-	OpenApiKey string
+	Port         int `envconfig:"default=8005"`
+	OpenaiApiKey string
 }
 
 func Load() (Config, error) {

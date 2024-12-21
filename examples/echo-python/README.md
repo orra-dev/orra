@@ -76,7 +76,7 @@ poetry run python src/main.py
 3. Try it out:
 ```bash
 # Send a test message
-orra verify run "Echo this message" --data message:"Hello from Orra!"
+orra verify run 'Echo this message' --data message:'Hello from Orra!'
 
 # Check the result
 orra ps

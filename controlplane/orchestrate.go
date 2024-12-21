@@ -115,7 +115,7 @@ func (p *ControlPlane) ExecuteOrchestration(orchestration *Orchestration) {
 	log := p.LogManager.PrepLogForOrchestration(orchestration.ProjectID, orchestration.ID, orchestration.Plan)
 
 	p.Logger.Debug().Msgf("About to create and start workers for orchestration %s", orchestration.ID)
-	p.createAndStartWorkers(orchestration.ID, orchestration.Plan)
+	p.createAndStartWorkers(orchestration.ID, orchestration.Plan, orchestration.GetTimeout())
 
 	initialEntry := NewLogEntry("task_output", TaskZero, orchestration.taskZero, "control-panel", 0)
 
@@ -294,7 +294,7 @@ func (p *ControlPlane) addServiceDetails(services []*ServiceInfo, subTasks []*Su
 	return nil
 }
 
-func (p *ControlPlane) createAndStartWorkers(orchestrationID string, plan *ServiceCallingPlan) {
+func (p *ControlPlane) createAndStartWorkers(orchestrationID string, plan *ServiceCallingPlan, taskTimeout time.Duration) {
 	p.workerMu.Lock()
 	defer p.workerMu.Unlock()
 
@@ -327,6 +327,7 @@ func (p *ControlPlane) createAndStartWorkers(orchestrationID string, plan *Servi
 			service,
 			task.ID,
 			deps,
+			taskTimeout,
 			p.LogManager,
 		)
 		ctx, cancel := context.WithCancel(context.Background())

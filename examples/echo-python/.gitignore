@@ -162,3 +162,10 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+# orra
+.orra-data/orra-service-key.json
+
+# Ignore service persistence data
+.orra-data/*
+# But keep the directory
+!.orra-data/.gitkeep

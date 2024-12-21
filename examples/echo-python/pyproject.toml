@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "Example Echo service using Orra Python SDK"
 authors = ["Orra Team"]
 readme = "README.md"
+packages = [
+    { include = "src" }
+]
 package-mode = false
 
 [tool.poetry.dependencies]
@@ -12,6 +15,9 @@ orra-sdk = "^0.1.2"
 python-dotenv = "^1.0.0"
 uvicorn = "^0.27.0"
 fastapi = "^0.109.0"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
 
 [build-system]
 requires = ["poetry-core"]

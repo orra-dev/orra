@@ -20,8 +20,7 @@ import (
 )
 
 var (
-	maxRetries               = 5
-	maxExecutionTimeOutDelay = 30 * time.Second
+	maxRetries = 5
 )
 
 type RetryableError struct {
@@ -32,7 +31,13 @@ func (e RetryableError) Error() string {
 	return fmt.Sprintf("retryable error: %v", e.Err)
 }
 
-func NewTaskWorker(service *ServiceInfo, taskID string, dependencies DependencyKeys, logManager *LogManager) LogWorker {
+func NewTaskWorker(
+	service *ServiceInfo,
+	taskID string,
+	dependencies DependencyKeys,
+	timeout time.Duration,
+	logManager *LogManager,
+) LogWorker {
 	expBackoff := backoff.NewExponentialBackOff()
 
 	// Configure backoff parameters
@@ -49,6 +54,7 @@ func NewTaskWorker(service *ServiceInfo, taskID string, dependencies DependencyK
 		Service:      service,
 		TaskID:       taskID,
 		Dependencies: dependencies,
+		Timeout:      timeout,
 		LogManager:   logManager,
 		logState: &LogState{
 			LastOffset:      0,
@@ -323,7 +329,7 @@ func (w *TaskWorker) waitForResult(ctx context.Context, key IdempotencyKey) (jso
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
-	maxWait := time.After(maxExecutionTimeOutDelay)
+	maxWait := time.After(w.Timeout)
 
 	for {
 		select {

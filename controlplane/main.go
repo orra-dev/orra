@@ -31,9 +31,9 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	plane := NewControlPlane(cfg.OpenApiKey)
+	plane := NewControlPlane(cfg.OpenaiApiKey)
 	wsManager := NewWebSocketManager(app.Logger)
-	vCache := NewVectorCache(cfg.OpenApiKey, 1000, 24*time.Hour, app.Logger)
+	vCache := NewVectorCache(cfg.OpenaiApiKey, 1000, 24*time.Hour, app.Logger)
 	logManager := NewLogManager(ctx, LogsRetentionPeriod, plane)
 	logManager.Logger = app.Logger
 	plane.Initialise(ctx, logManager, wsManager, vCache, app.Logger)
