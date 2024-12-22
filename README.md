@@ -1,8 +1,8 @@
 # 🪡Orra
 
-Build production-ready multi-agent applications without the complexity. Orra intelligently orchestrates your services and agents using LLMs, handling reliability and performance across any language or agent framework.
+Move beyond simple Crews and Agents. Build production-ready multi-agent applications that handle complex real-world interactions. Orra orchestrates your services and agents with built-in reliability and intelligent reasoning — across any language or agent framework.
 
-Prototype rapidly today, scale to production tomorrow.
+Prototype rapidly today, scale to production tomorrow. No complex infrastructure required.
 
 ## Current Release: Narwal 🐋🦄 (Alpha)
 
@@ -13,8 +13,8 @@ Our current release is codenamed "Narwal". This release brings the ✨Alpha✨ v
 - **Dynamic LLM Orchestration**: Stop hard-coding agent workflows. Orra automatically creates and adapts execution plans
   based on your agents' plus services' capabilities and real-time context.
 
-- **Production-Ready Reliability**: Built-in fault tolerance with automatic retries, health checks, and stateful
-  execution tracking. No more building your own reliability layer.
+- **Production-Ready Reliability**: Built-in fault tolerance and durability with automatic retries, health checks, and
+  stateful execution tracking. No more building your own reliability layer.
 
 - **High-Throughput Performance**: Parallel execution, efficient task routing, and smart caching ensure your multi-agent
   apps stay responsive under load.
@@ -23,24 +23,33 @@ Our current release is codenamed "Narwal". This release brings the ✨Alpha✨ v
 
 If you're building multi-agent applications, this probably sounds familiar:
 
-**Production Reliability**: Your agents work perfectly in demos, but in production they're brittle. One hiccup in a chain of agent calls and everything falls apart.
+**Production Reliability**: Your agents work perfectly in demos, but in production they're brittle. One hiccup in a
+chain of agent calls and everything falls apart.
 
-**Workflow Hell**: Your code is a maze of hard-wired sequences between agents and services. Adding a new integration or changing a workflow means rewriting orchestration logic, updating schemas, and praying you didn't break existing flows.
+**Workflow Hell**: Your code is a maze of hard-wired sequences between agents and services. Adding a new integration or
+changing a workflow means rewriting orchestration logic, updating schemas, and praying you didn't break existing flows.
 
-**Scaling Pains**: Scaling beyond a few concurrent users means juggling queues, caches, and distributed state across agents and backend services. What started as "just a few agents talking to each other" has become a distributed systems problem.
+**Scaling Pains**: Scaling beyond a few concurrent users means juggling queues, caches, and distributed state across
+agents and backend services. What started as "just a few agents talking to each other" has become a distributed systems
+problem.
 
-**LLM Chain Explosion**: Your research agents are drowning in unnecessary LLM function calls. Each extra call adds latency, risks hallucination, and degrades reliability. What should be precise AI interactions become endless chains of "just one more try."
+**LLM Chain Explosion**: Your research agents are drowning in unnecessary LLM function calls. Each extra call adds
+latency, risks hallucination, and degrades reliability. What should be precise AI interactions become endless chains
+of "just one more try."
 
-Orra adds powerful orchestration to your agents and services. No rewrites, no infrastructure headaches - just predictable, intelligent routing that lets your LLMs think once and think right.
+Orra adds powerful orchestration to your agents and services. No rewrites, no infrastructure headaches - just
+predictable, intelligent routing that lets your LLMs think once and think right.
 
 ## Install
 
 ### Prerequisites
 
-- [Docker](https://docs.docker.com/desktop/) and [Docker Compose](https://docs.docker.com/compose/install/) - For running the control plane
+- [Docker](https://docs.docker.com/desktop/) and [Docker Compose](https://docs.docker.com/compose/install/) - For
+  running the control plane
 - An [OpenAI API key](https://platform.openai.com/docs/quickstart) - For LLM-powered orchestration
 
-> **Note**: The control plane currently runs in-memory. If restarting, follow our [Reset Guide](docs/reset-control-plane.md).
+> **Note**: The control plane currently runs in-memory. If restarting, follow
+> our [Reset Guide](docs/reset-control-plane.md).
 
 ### 1. Install Orra CLI
 
@@ -78,7 +87,8 @@ docker compose up --build
 
 ## Quick Start
 
-Build your first Orra-orchestrated application! We'll use our [Echo service (JavaScript)](examples/echo-js) example to show you the
+Build your first Orra-orchestrated application! We'll use our [Echo service (JavaScript)](examples/echo-js) example to
+show you the
 magic of intelligent service orchestration. Requires [Node.js 18+](https://nodejs.org/en/download/package-manager).
 
 While simple, it showcases Orra's capabilities:
@@ -179,7 +189,7 @@ You've just experienced:
 The best part? This same pattern works for complex multi-service and multi-agent scenarios. Orra handles the complexity
 while you focus on building your application.
 
-## Next Steps 
+## Next Steps
 
 ### 1. Integrate Services & Agents
 
@@ -189,14 +199,15 @@ while you focus on building your application.
 import { initAgent } from '@orra.dev/sdk';
 
 const myAgent = initAgent({
-  name: 'ai-agent',
-  orraUrl: process.env.ORRA_URL,
-  orraKey: process.env.ORRA_API_KEY
+	name: 'ai-agent',
+	orraUrl: process.env.ORRA_URL,
+	orraKey: process.env.ORRA_API_KEY
 });
 
 // Turn your existing AI Agent into an orchestrated component
-await myAgent.register({/*...*/});
-myAgent.start(async (task) => {/*...*/});
+await myAgent.register({/*...*/ });
+myAgent.start(async (task) => {/*...*/
+});
 ```
 
 → [JS SDK Integration Guide](docs/sdks/js-sdk.md)
@@ -207,26 +218,30 @@ myAgent.start(async (task) => {/*...*/});
 import os
 from orra import OrraAgent, Task
 
+
 class InputModel(BaseModel):
-  customer_id: str
-  message: str
+    customer_id: str
+    message: str
+
 
 class OutputModel(BaseModel):
-  response: str
+    response: str
 
-# Turn your existing AI Agent into an orchestrated component
-agent = OrraAgent(
-  name="agent-name",
-  description="What this agent does",
-  url=os.getenv(ORRA_URL),
-  api_key=os.getenv(ORRA_API_KEY)
-)
 
-@agent.handler()
-async def handle_request(task: Task[InputModel]) -> OutputModel:
-  # Handler implementation that wraps your existing Agent or crew
-  # built with your framework of choice.
-  pass
+async def main():
+    # Turn your existing AI Agent into an orchestrated component
+    agent = OrraAgent(
+        name="agent-name",
+        description="What this agent does",
+        url=os.getenv(ORRA_URL),
+        api_key=os.getenv(ORRA_API_KEY)
+    )
+
+    @agent.handler()
+    async def handle_request(task: Task[InputModel]) -> OutputModel:
+    # Handler implementation that wraps your existing Agent or crew
+    # built with your framework of choice.
+        pass
 ```
 
 → [Python SDK Integration Guide](docs/sdks/python-sdk.md)
@@ -243,7 +258,8 @@ orra verify run "Estimate delivery for customer order" \
 
 ### 3. Explore Examples
 
-- 🛒 [E-commerce AI Assistant](examples/ecommerce-agent-app) - E-commerce customer service with a delivery specialised agent
+- 🛒 [E-commerce AI Assistant](examples/ecommerce-agent-app) - E-commerce customer service with a delivery specialised
+  agent
 - 📣 [Echo Service (JavaScript)](examples/echo-js) - Simple example showing core concepts using JS
 - 📣 [Echo Service (Python)](examples/echo-python) - Simple example showing core concepts using Python
 
@@ -265,7 +281,7 @@ orra verify run "Estimate delivery for customer order" \
 * CLI for Orra-powered projects management
 * Automatic parallel execution optimization
 * Built-in service discovery
-* Prototype your multi-agent app in a single file then split and deploy as containers  
+* Prototype your multi-agent app in a single file then split and deploy as containers
 
 ### Current Limitations
 
