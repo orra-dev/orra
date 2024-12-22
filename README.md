@@ -1,6 +1,6 @@
 # 🪡Orra
 
-Move beyond simple Crews and Agents. Orra helps you build production-ready multi-agent applications that handle complex real-world interactions, orchestrating your services and agents with built-in reliability and intelligent reasoning — across any language or agent framework.
+Move beyond simple Crews and Agents. Build production-ready multi-agent applications that handle complex real-world interactions. Orra orchestrates your services and agents with built-in reliability and intelligent reasoning — across any language or agent framework.
 
 Prototype rapidly today, scale to production tomorrow. No complex infrastructure required.
 
