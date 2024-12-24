@@ -1,13 +1,14 @@
 [tool.poetry]
-name = "ghost-agents"
+name = "ghost-writers"
 version = "0.1.0"
-description = "Ghost agents are ghost writer powered by the Orra Python SDK"
+description = "Ghost writers are an agents crewai implementation powered by the Orra Python SDK"
 authors = ["David Tang"]
 readme = "README.md"
 packages = [
     { include = "src" }
 ]
 package-mode = false
+license = "MPL-2.0"
 
 [tool.poetry.dependencies]
 python = ">=3.11,<=3.13"

@@ -171,8 +171,17 @@ cython_debug/
 .pypirc
 
 # Orra
-.orra-data/
 .idea/
+
+# Orra: Ignore service persistence data
+.orra-data/*
+# But keep the directory
+!.orra-data/.gitkeep
+
+# Drafts: Ignore drafted blog entry
+drafts/*
+# But keep the directory
+!drafts/.gitkeep
 
 # pyenv
 .python-version
