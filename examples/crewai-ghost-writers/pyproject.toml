@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "ghost-writers"
+version = "0.1.0"
+description = "Ghost writers are an agents crewai implementation powered by the Orra Python SDK"
+authors = ["David Tang"]
+readme = "README.md"
+packages = [
+    { include = "src" }
+]
+package-mode = false
+license = "MPL-2.0"
+
+[tool.poetry.dependencies]
+python = ">=3.11,<=3.13"
+orra-sdk = "^0.1.2"
+pydantic = "^2.0"
+python-dotenv = "^1.0.0"
+crewai = "^0.80.0"
+crewai-tools = "^0.14.0"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
