@@ -208,7 +208,7 @@ func (w *TaskWorker) processTaskResult(orchestrationID string, output json.RawMe
 		w.consecutiveErrs,
 	)
 
-	if canCompensate := resultPayload.Compensation != nil; !canCompensate {
+	if !w.Service.Revertible {
 		return nil
 	}
 
