@@ -344,14 +344,8 @@ type PartialCompensation struct {
 
 // CompensationData wraps the data needed for compensation with metadata
 type CompensationData struct {
-	Data json.RawMessage  `json:"data"`
-	Meta CompensationMeta `json:"meta"`
-}
-
-// CompensationMeta contains metadata for compensation operations
-type CompensationMeta struct {
-	TTL       time.Duration `json:"ttl"`
-	ExpiresAt time.Time     `json:"expiresAt"`
+	Input json.RawMessage `json:"data"`
+	TTLMs int64           `json:"ttl"`
 }
 
 type CompensationWorker struct {

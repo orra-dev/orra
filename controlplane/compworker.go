@@ -252,16 +252,12 @@ func (w *CompensationWorker) executeCompensation(ctx context.Context, entry LogE
 		}
 
 		ttl := DefaultCompensationTTL
-		if data.Meta.TTL > 0 {
-			ttl = data.Meta.TTL
+		if data.TTLMs > 0 {
+			ttl = time.Duration(data.TTLMs) * time.Millisecond
 		}
 
-		expiresAt := data.Meta.ExpiresAt
-		if expiresAt.IsZero() {
-			expiresAt = time.Now().Add(ttl)
-		}
-
-		if time.Now().After(expiresAt) {
+		expiresAt := time.Now().UTC().Add(ttl)
+		if time.Now().UTC().After(expiresAt) {
 			err := fmt.Errorf("compensation data expired for task %s", entry.ID())
 			return backoff.Permanent(err)
 		}
@@ -311,7 +307,7 @@ func (w *CompensationWorker) executeCompensation(ctx context.Context, entry LogE
 			ExecutionID:     executionID,
 			IdempotencyKey:  key,
 			ServiceID:       service.ID,
-			Input:           data.Data,
+			Input:           data.Input,
 			OrchestrationID: w.OrchestrationID,
 			ProjectID:       service.ProjectID,
 			Status:          Processing,
