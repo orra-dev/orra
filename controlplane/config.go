@@ -17,19 +17,21 @@ import (
 )
 
 const (
-	TaskZero           = "task0"
-	ResultAggregatorID = "result_aggregator"
-	FailureTrackerID   = "failure_tracker"
-	WSPing             = "ping"
-	WSPong             = "pong"
+	TaskZero                      = "task0"
+	ResultAggregatorID            = "result_aggregator"
+	FailureTrackerID              = "failure_tracker"
+	WSPing                        = "ping"
+	WSPong                        = "pong"
 	HealthCheckGracePeriod = 30 * time.Minute
 	TaskTimeout            = 30 * time.Second
-	CompensationDataStored = "compensation_stored"
-	CompensationAttempted  = "compensation_attempted"
-	CompensationComplete   = "compensation_complete"
+	CompensationDataStoredLogType = "compensation_stored"
+	CompensationAttemptedLogType  = "compensation_attempted"
+	CompensationCompleteLogType   = "compensation_complete"
+	CompensationFailureLogType    = "compensation_failure"
 )
 
 var (
+	Version                   = "0.2.0"
 	LogsRetentionPeriod       = time.Hour * 24
 	DependencyPattern         = regexp.MustCompile(`^\$([^.]+)\.`)
 	WSWriteTimeOut            = time.Second * 120

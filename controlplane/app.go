@@ -44,6 +44,8 @@ func NewApp(cfg Config, args []string) (*App, error) {
 }
 
 func (app *App) configureRoutes() *App {
+	app.Router.Use(app.VersionHeaderMiddleware)
+
 	app.Router.HandleFunc("/health", app.healthHandler).Methods(http.MethodGet)
 	app.Router.HandleFunc("/register/project", app.RegisterProject).Methods(http.MethodPost)
 	app.Router.HandleFunc("/apikeys", app.APIKeyMiddleware(app.CreateAdditionalApiKey)).Methods(http.MethodPost)
