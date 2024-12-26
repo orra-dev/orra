@@ -45,7 +45,7 @@ func (s Spec) Validation() v.Schema {
 }
 
 func (s ServiceSchema) Validation() v.Schema {
-	schema := v.Schema{
+	return v.Schema{
 		v.F("input", s.Input): v.All(
 			validateSpec(&s.Input),
 			v.Is(func(spec Spec) bool {
@@ -59,20 +59,6 @@ func (s ServiceSchema) Validation() v.Schema {
 			}).Msg("top-level output spec must be of type 'object'"),
 		),
 	}
-
-	if isEmptySpec(s.Revert) {
-		return schema
-	}
-
-	// Add validation for revert if present and not empty
-	schema[v.F("revert", s.Revert)] = v.All(
-		validateSpec(&s.Revert),
-		v.Is(func(spec Spec) bool {
-			return spec.Type == "object"
-		}).Msg("top-level revert spec must be of type 'object'"),
-	)
-
-	return schema
 }
 
 func (si *ServiceInfo) Validation() v.Schema {
@@ -85,8 +71,4 @@ func (si *ServiceInfo) Validation() v.Schema {
 		v.F("description", si.Description): v.Nonzero[string]().Msg("empty description"),
 		v.F("schema", si.Schema):           si.Schema.Validation(),
 	}
-}
-
-func isEmptySpec(spec Spec) bool {
-	return spec.Type == "" && len(spec.Properties) == 0
 }
