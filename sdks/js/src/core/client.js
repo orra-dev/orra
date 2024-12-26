@@ -115,12 +115,14 @@ class OrraSDK {
 		if (this.#userInitiatedClose) {
 			throw new Error(`Cannot register ${kind} after closing down SDK connections`)
 		}
+		this.#validateSchema(opts, kind);
 		await this.loadServiceKey(); // Try to load an existing service id
 		
 		this.logger.debug('Registering service/agent', {
 			kind,
 			name,
-			existingServiceId: this.serviceId
+			existingServiceId: this.serviceId,
+			hasRevertSchema: !!opts?.schema?.revert
 		});
 		
 		const response = await fetch(`${this.#apiUrl}/register/${kind}`, {
@@ -171,6 +173,19 @@ class OrraSDK {
 		await this.saveServiceKey(); // Save the new or updated key
 		this.#connect();
 		return this;
+	}
+	
+	#validateSchema(opts, kind) {
+		if (opts?.schema) {
+			if (!opts.schema?.input || !opts.schema?.output) {
+				throw new Error(`${kind} schema must contain input and output specifications`);
+			}
+			
+			// If revert schema is provided, validate it's an object spec
+			if (opts.schema?.revert && typeof opts.schema?.revert !== 'object') {
+				throw new Error(`${kind} revert schema must be a valid specification object`);
+			}
+		}
 	}
 	
 	#connect() {
