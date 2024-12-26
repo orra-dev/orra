@@ -18,6 +18,7 @@ class OrraSDK {
 	#apiKey;
 	#ws;
 	#taskHandler;
+	#revertHandler;
 	#revertible = false;
 	serviceId;
 	version;
@@ -561,6 +562,14 @@ class OrraSDK {
 		}, 60 * 60 * 1000); // Run cleanup every hour
 	}
 	
+	revertHandler(handler) {
+		if (typeof handler !== 'function') {
+			throw new Error('Revert handler must be a function');
+		}
+		this.#revertHandler = handler;
+		this.logger.debug('Revert handler registered');
+	}
+	
 	startHandler(handler) {
 		if (typeof handler !== 'function') {
 			throw new Error('Start handler must be a function');
@@ -676,6 +685,7 @@ const initOrraEntity = (type) => ({
 		register: async (opts) => {
 			return await registerMethod.call(sdk, sdk.name, opts);
 		},
+		onRevert: sdk.revertHandler.bind(sdk),
 		start: sdk.startHandler.bind(sdk),
 		shutdown: sdk.shutdown.bind(sdk),
 		info: {
