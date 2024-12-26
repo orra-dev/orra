@@ -20,6 +20,7 @@ class OrraSDK {
 	#taskHandler;
 	#revertHandler;
 	#revertible = false;
+	#revertTTL = 24 * 60 * 60 * 1000;
 	serviceId;
 	version;
 	persistenceOpts;
@@ -112,19 +113,27 @@ class OrraSDK {
 	
 	async #registerServiceOrAgent(name, kind, opts = {
 		description: undefined,
-		schema: undefined,
 		revertible: undefined,
+		revertTTL: undefined,
+		schema: undefined,
 	}) {
 		if (this.#userInitiatedClose) {
 			throw new Error(`Cannot register ${kind} after closing down SDK connections`)
 		}
+		
+		this.#validateSchema(opts, kind);
 		
 		if (opts.revertible !== undefined) {
 			if (typeof opts.revertible !== 'boolean') throw new Error(`${kind} revertible must be boolean (true or false)`);
 			this.#revertible = opts.revertible
 		}
 		
-		this.#validateSchema(opts, kind);
+		if (opts.revertTTL !== undefined) {
+			if (typeof opts.revertTTL !== 'number') throw new Error(`${kind} revert TTL must be a number of milliseconds`);
+			if (opts.revertTTL <= 100) throw new Error(`${kind} If specified, revert TTL must be greater than 100 milliseconds`);
+			this.#revertTTL = opts.revertTTL
+		}
+		
 		await this.loadServiceKey(); // Try to load an existing service id
 		
 		this.logger.debug('Registering service/agent', {
@@ -399,7 +408,16 @@ class OrraSDK {
 				});
 				
 				this.#inProgressTasks.delete(idempotencyKey);
-				this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, result);
+				this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, {
+					task: result,
+					compensation: this.#revertible ? {
+						data: {
+							originalTask: task,
+							taskResult: result
+						},
+						ttl: this.#revertTTL,
+					} : null
+				});
 			})
 			.catch((error) => {
 				const processingTime = Date.now() - startTime;
@@ -689,8 +707,12 @@ const initOrraEntity = (type) => ({
 		start: sdk.startHandler.bind(sdk),
 		shutdown: sdk.shutdown.bind(sdk),
 		info: {
-			get id() { return sdk.serviceId; },
-			get version() { return sdk.version; }
+			get id() {
+				return sdk.serviceId;
+			},
+			get version() {
+				return sdk.version;
+			}
 		}
 	};
 };
