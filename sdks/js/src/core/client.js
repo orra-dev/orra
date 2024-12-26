@@ -18,6 +18,7 @@ class OrraSDK {
 	#apiKey;
 	#ws;
 	#taskHandler;
+	#revertible = false;
 	serviceId;
 	version;
 	persistenceOpts;
@@ -111,10 +112,17 @@ class OrraSDK {
 	async #registerServiceOrAgent(name, kind, opts = {
 		description: undefined,
 		schema: undefined,
+		revertible: undefined,
 	}) {
 		if (this.#userInitiatedClose) {
 			throw new Error(`Cannot register ${kind} after closing down SDK connections`)
 		}
+		
+		if (opts.revertible !== undefined) {
+			if (typeof opts.revertible !== 'boolean') throw new Error(`${kind} revertible must be boolean (true or false)`);
+			this.#revertible = opts.revertible
+		}
+		
 		this.#validateSchema(opts, kind);
 		await this.loadServiceKey(); // Try to load an existing service id
 		
@@ -122,7 +130,7 @@ class OrraSDK {
 			kind,
 			name,
 			existingServiceId: this.serviceId,
-			hasRevertSchema: !!opts?.schema?.revert
+			revertible: this.#revertible
 		});
 		
 		const response = await fetch(`${this.#apiUrl}/register/${kind}`, {
@@ -136,6 +144,7 @@ class OrraSDK {
 				name: name,
 				description: opts?.description,
 				schema: opts?.schema,
+				revertible: this.#revertible,
 				version: this.version,
 			}),
 		});
@@ -179,11 +188,6 @@ class OrraSDK {
 		if (opts?.schema) {
 			if (!opts.schema?.input || !opts.schema?.output) {
 				throw new Error(`${kind} schema must contain input and output specifications`);
-			}
-			
-			// If revert schema is provided, validate it's an object spec
-			if (opts.schema?.revert && typeof opts.schema?.revert !== 'object') {
-				throw new Error(`${kind} revert schema must be a valid specification object`);
 			}
 		}
 	}
@@ -558,6 +562,9 @@ class OrraSDK {
 	}
 	
 	startHandler(handler) {
+		if (typeof handler !== 'function') {
+			throw new Error('Start handler must be a function');
+		}
 		this.#taskHandler = handler;
 	}
 	
@@ -636,11 +643,11 @@ const validateName = (name, type) => {
 };
 
 const initOrraEntity = (type) => ({
-	                                    name,
-	                                    orraUrl,
-	                                    orraKey,
-	                                    persistenceOpts = {},
-                                    }) => {
+	                                  name,
+	                                  orraUrl,
+	                                  orraKey,
+	                                  persistenceOpts = {},
+                                  }) => {
 	validateName(name, type);
 	
 	if (!name) {
