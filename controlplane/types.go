@@ -206,6 +206,7 @@ type ServiceInfo struct {
 	Name             string            `json:"name"`
 	Description      string            `json:"description"`
 	Schema           ServiceSchema     `json:"schema"`
+	Revertible       bool              `json:"revertible"`
 	ProjectID        string            `json:"-"`
 	Version          int64             `json:"version"`
 	IdempotencyStore *IdempotencyStore `json:"-"`
