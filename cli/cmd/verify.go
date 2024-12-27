@@ -41,10 +41,11 @@ func newVerifyCmd(opts *CliOpts) *cobra.Command {
 
 func newVerifyRunCmd(opts *CliOpts) *cobra.Command {
 	var (
-		data       []string
-		webhookUrl string
-		timeout    string
-		quiet      bool
+		data                   []string
+		webhookUrl             string
+		timeout                string
+		healthCheckGracePeriod string
+		quiet                  bool
 	)
 
 	cmd := &cobra.Command{
@@ -89,9 +90,10 @@ execute the required project services`,
 				Action: struct{ Content string }{
 					Content: action,
 				},
-				Data:    actionParams,
-				Timeout: timeout,
-				Webhook: webhookUrl,
+				Data:                   actionParams,
+				Timeout:                timeout,
+				HealthCheckGracePeriod: healthCheckGracePeriod,
+				Webhook:                webhookUrl,
 			})
 			if err != nil {
 				return fmt.Errorf("failed to create orchestration: %w", err)
@@ -110,7 +112,7 @@ execute the required project services`,
 			fmt.Printf("\nWhat's happening:\n")
 			fmt.Printf("1. Orra is analyzing your action using AI\n")
 			fmt.Printf("2. Creating an execution plan\n")
-			fmt.Printf("3. Orchestrating available services\n\n")
+			fmt.Printf("3. Orchestrating available services and/or agents\n\n")
 
 			fmt.Printf("Available commands:\n")
 			fmt.Printf("- View progress:                orra inspect %s\n", orchestration.ID)
@@ -125,8 +127,10 @@ execute the required project services`,
 	cmd.Flags().StringSliceVarP(&data, "data", "d", []string{}, "Data to supplement action in format param:value")
 	cmd.Flags().StringVarP(&webhookUrl, "webhook", "w", "", `Webhook url to accept results 
 (defaults to first configured webhook)`)
-	cmd.Flags().StringVarP(&timeout, "timeout", "t", "", `Set timeout duration
+	cmd.Flags().StringVarP(&timeout, "timeout", "t", "", `Set execution timeout duration per service/agent
 (defaults to 30s)`)
+	cmd.Flags().StringVarP(&healthCheckGracePeriod, "health-check-grace-period", "g", "", `Set grace period for an unhealthy service or agent before terminating an orchestration
+(defaults to 30m)`)
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, `Suppress extra explanation
 (defaults to false)`)
 
