@@ -135,15 +135,16 @@ type LoggedFailure struct {
 }
 
 type TaskWorker struct {
-	Service         *ServiceInfo
-	TaskID          string
-	Dependencies    DependencyKeys
-	Timeout         time.Duration
-	LogManager      *LogManager
-	logState        *LogState
-	backOff         *backoff.ExponentialBackOff
-	pauseStart      time.Time // Track pause duration
-	consecutiveErrs int       // Track consecutive failures
+	Service                *ServiceInfo
+	TaskID                 string
+	Dependencies           DependencyKeys
+	Timeout                time.Duration
+	HealthCheckGracePeriod time.Duration
+	LogManager             *LogManager
+	logState               *LogState
+	backOff                *backoff.ExponentialBackOff
+	pauseStart             time.Time // Track pause duration
+	consecutiveErrs        int       // Track consecutive failures
 }
 
 type TaskStatusEvent struct {
@@ -205,18 +206,19 @@ type ServiceInfo struct {
 }
 
 type Orchestration struct {
-	ID        string              `json:"id"`
-	ProjectID string              `json:"-"`
-	Action    Action              `json:"action"`
-	Params    ActionParams        `json:"data"`
-	Plan      *ServiceCallingPlan `json:"plan"`
-	Results   []json.RawMessage   `json:"results"`
-	Status    Status              `json:"status"`
-	Error     json.RawMessage     `json:"error,omitempty"`
-	Timestamp time.Time           `json:"timestamp"`
-	Timeout   *Duration           `json:"timeout,omitempty"`
-	Webhook   string              `json:"webhook"`
-	taskZero  json.RawMessage
+	ID                     string              `json:"id"`
+	ProjectID              string              `json:"-"`
+	Action                 Action              `json:"action"`
+	Params                 ActionParams        `json:"data"`
+	Plan                   *ServiceCallingPlan `json:"plan"`
+	Results                []json.RawMessage   `json:"results"`
+	Status                 Status              `json:"status"`
+	Error                  json.RawMessage     `json:"error,omitempty"`
+	Timestamp              time.Time           `json:"timestamp"`
+	Timeout                *Duration           `json:"timeout,omitempty"`
+	HealthCheckGracePeriod *Duration           `json:"healthCheckGracePeriod,omitempty"`
+	Webhook                string              `json:"webhook"`
+	taskZero               json.RawMessage
 }
 
 type Duration struct {

@@ -209,6 +209,13 @@ func (p *ControlPlane) GetProjectIDForService(serviceID string) (string, error) 
 	return "", fmt.Errorf("no project found for service %s", serviceID)
 }
 
+func (o *Orchestration) GetHealthCheckGracePeriod() time.Duration {
+	if o.HealthCheckGracePeriod == nil {
+		return HealthCheckGracePeriod
+	}
+	return o.HealthCheckGracePeriod.Duration
+}
+
 func (o *Orchestration) GetTimeout() time.Duration {
 	if o.Timeout == nil {
 		return 30 * time.Second

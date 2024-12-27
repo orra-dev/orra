@@ -17,12 +17,12 @@ import (
 )
 
 const (
-	TaskZero           = "task0"
-	ResultAggregatorID = "result_aggregator"
-	FailureTrackerID   = "failure_tracker"
-	WSPing             = "ping"
-	WSPong             = "pong"
-	MaxServiceDowntime = 30 * time.Minute
+	TaskZero               = "task0"
+	ResultAggregatorID     = "result_aggregator"
+	FailureTrackerID       = "failure_tracker"
+	WSPing                 = "ping"
+	WSPong                 = "pong"
+	HealthCheckGracePeriod = 30 * time.Minute
 )
 
 var (
