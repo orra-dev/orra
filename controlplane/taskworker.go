@@ -36,6 +36,7 @@ func NewTaskWorker(
 	taskID string,
 	dependencies DependencyKeys,
 	timeout time.Duration,
+	healthCheckGracePeriod time.Duration,
 	logManager *LogManager,
 ) LogWorker {
 	expBackoff := backoff.NewExponentialBackOff()
@@ -51,11 +52,12 @@ func NewTaskWorker(
 	expBackoff.Reset()
 
 	return &TaskWorker{
-		Service:      service,
-		TaskID:       taskID,
-		Dependencies: dependencies,
-		Timeout:      timeout,
-		LogManager:   logManager,
+		Service:                service,
+		TaskID:                 taskID,
+		Dependencies:           dependencies,
+		Timeout:                timeout,
+		HealthCheckGracePeriod: healthCheckGracePeriod,
+		LogManager:             logManager,
 		logState: &LogState{
 			LastOffset:      0,
 			Processed:       make(map[string]bool),
@@ -254,9 +256,9 @@ func (w *TaskWorker) checkServiceHealth(orchestrationID string) error {
 	}
 
 	// Check if we've exceeded MaxServiceDowntime
-	if time.Since(w.pauseStart) >= MaxServiceDowntime {
+	if time.Since(w.pauseStart) >= w.HealthCheckGracePeriod {
 		return backoff.Permanent(fmt.Errorf("service %s remained unhealthy beyond maximum duration of %v",
-			w.Service.ID, MaxServiceDowntime))
+			w.Service.ID, w.HealthCheckGracePeriod))
 	}
 
 	return RetryableError{Err: fmt.Errorf("service %s is not healthy", w.Service.ID)}

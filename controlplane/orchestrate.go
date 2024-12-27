@@ -115,7 +115,12 @@ func (p *ControlPlane) ExecuteOrchestration(orchestration *Orchestration) {
 	log := p.LogManager.PrepLogForOrchestration(orchestration.ProjectID, orchestration.ID, orchestration.Plan)
 
 	p.Logger.Debug().Msgf("About to create and start workers for orchestration %s", orchestration.ID)
-	p.createAndStartWorkers(orchestration.ID, orchestration.Plan, orchestration.GetTimeout())
+	p.createAndStartWorkers(
+		orchestration.ID,
+		orchestration.Plan,
+		orchestration.GetTimeout(),
+		orchestration.GetHealthCheckGracePeriod(),
+	)
 
 	initialEntry := NewLogEntry("task_output", TaskZero, orchestration.taskZero, "control-panel", 0)
 
@@ -294,7 +299,12 @@ func (p *ControlPlane) addServiceDetails(services []*ServiceInfo, subTasks []*Su
 	return nil
 }
 
-func (p *ControlPlane) createAndStartWorkers(orchestrationID string, plan *ServiceCallingPlan, taskTimeout time.Duration) {
+func (p *ControlPlane) createAndStartWorkers(
+	orchestrationID string,
+	plan *ServiceCallingPlan,
+	taskTimeout,
+	healthCheckGracePeriod time.Duration,
+) {
 	p.workerMu.Lock()
 	defer p.workerMu.Unlock()
 
@@ -328,6 +338,7 @@ func (p *ControlPlane) createAndStartWorkers(orchestrationID string, plan *Servi
 			task.ID,
 			deps,
 			taskTimeout,
+			healthCheckGracePeriod,
 			p.LogManager,
 		)
 		ctx, cancel := context.WithCancel(context.Background())
