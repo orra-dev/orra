@@ -218,7 +218,7 @@ func (o *Orchestration) GetHealthCheckGracePeriod() time.Duration {
 
 func (o *Orchestration) GetTimeout() time.Duration {
 	if o.Timeout == nil {
-		return 30 * time.Second
+		return TaskTimeout
 	}
 	return o.Timeout.Duration
 }

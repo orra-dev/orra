@@ -23,6 +23,7 @@ const (
 	WSPing                 = "ping"
 	WSPong                 = "pong"
 	HealthCheckGracePeriod = 30 * time.Minute
+	TaskTimeout            = 30 * time.Second
 )
 
 var (
