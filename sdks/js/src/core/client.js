@@ -20,7 +20,7 @@ class OrraSDK {
 	#taskHandler;
 	#revertHandler;
 	#revertible = false;
-	#revertTTL = 24 * 60 * 60 * 1000;
+	#revertTTL = 24 * 60 * 60 * 1000; // 24 hours
 	serviceId;
 	version;
 	persistenceOpts;
@@ -247,6 +247,9 @@ class OrraSDK {
 				case 'task_request':
 					this.#handleTask(parsedData);
 					break;
+				case 'compensation_request':
+					this.#handleRevert(parsedData);
+					break;
 				default:
 					this.logger.warn('Received unknown message type', {
 						type: parsedData.type
@@ -441,6 +444,132 @@ class OrraSDK {
 			});
 	}
 	
+	#handleRevert(task) {
+		const { id: taskId, executionId, idempotencyKey, input } = task;
+		
+		this.logger.trace('Revert task handling initiated', {
+			taskId,
+			executionId,
+			idempotencyKey,
+			handlerPresent: !!this.#taskHandler,
+			timestamp: new Date().toISOString()
+		});
+		
+		if (!this.#revertHandler) {
+			this.logger.warn('Received revert task but no revert handler is set', {
+				taskId,
+				executionId
+			});
+			return;
+		}
+		
+		this.logger.trace('Checking task cache for revert task', {
+			taskId,
+			idempotencyKey,
+			cacheSize: this.#processedTasksCache.size,
+			checkTimestamp: new Date().toISOString()
+		});
+		
+		const processedResult = this.#processedTasksCache.get(idempotencyKey);
+		if (processedResult) {
+			this.logger.debug('Cache hit found', {
+				taskId,
+				idempotencyKey,
+				resultAge: Date.now() - processedResult.timestamp,
+				hasError: !!processedResult.error
+			});
+			this.#sendTaskResult(
+				taskId,
+				executionId,
+				this.serviceId,
+				idempotencyKey,
+				processedResult.result,
+				processedResult.error
+			);
+			return;
+		}
+		
+		this.logger.trace('Checking in-progress reverts', {
+			taskId,
+			idempotencyKey,
+			inProgressCount: this.#inProgressTasks.size,
+			checkTimestamp: new Date().toISOString()
+		});
+		
+		if (this.#inProgressTasks.has(idempotencyKey)) {
+			this.logger.debug('Revert already in progress', {
+				taskId,
+				idempotencyKey,
+				startTime: this.#inProgressTasks.get(idempotencyKey).startTime
+			});
+			
+			this.#sendTaskStatus(
+				taskId,
+				executionId,
+				this.serviceId,
+				idempotencyKey,
+				'in_progress'
+			);
+			return;
+		}
+		
+		const startTime = Date.now();
+		this.logger.trace('Starting new revert processing', {
+			taskId,
+			executionId,
+			idempotencyKey,
+			startTime: new Date(startTime).toISOString()
+		});
+		
+		this.#inProgressTasks.set(idempotencyKey, { startTime });
+		
+		Promise.resolve()
+			.then(() => this.#revertHandler(input.originalTask, input.taskResult))
+			.then((rawResult) => {
+				const result = processRevertResult(rawResult, this.logger, taskId, executionId);
+				
+				const processingTime = Date.now() - startTime;
+				this.logger.trace('Revert processing completed', {
+					taskId,
+					executionId,
+					idempotencyKey,
+					processingTimeMs: processingTime,
+					resultSize: JSON.stringify(result).length
+				});
+				
+				this.#processedTasksCache.set(idempotencyKey, {
+					result: result,
+					error: null,
+					timestamp: Date.now()
+				});
+				
+				this.#inProgressTasks.delete(idempotencyKey);
+				this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, result);
+			})
+			.catch((error) => {
+				const processingTime = Date.now() - startTime;
+				this.logger.trace('Revert processing failed', {
+					taskId,
+					executionId,
+					idempotencyKey,
+					processingTimeMs: processingTime,
+					errorType: error.constructor.name,
+					errorMessage: error.message,
+					stackTrace: error.stack
+				});
+				
+				this.#processedTasksCache.set(idempotencyKey, {
+					result: null,
+					error: error.message,
+					timestamp: Date.now()
+				});
+				this.#inProgressTasks.delete(idempotencyKey);
+				this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, {
+					status: 'failed',
+					error: error.message
+				});
+			});
+	}
 	
 	#reconnect() {
 		if (this.#reconnectAttempts >= this.#maxReconnectAttempts) {
@@ -613,7 +742,6 @@ class OrraSDK {
 	}
 }
 
-
 function extractDirectoryFromFilePath(filePath) {
 	return path.dirname(filePath);
 }
@@ -652,6 +780,50 @@ async function createDirectoryIfNotExists(directoryPath, logger) {
 			directoryPath
 		});
 	}
+}
+
+function validatePartialResult(raw) {
+	if (!raw?.partial) {
+		return { valid: false, error: 'Missing partial field' };
+	}
+	
+	const { completed, remaining } = raw.partial;
+	
+	if (!Array.isArray(completed)) {
+		return { valid: false, error: 'completed must be an array' };
+	}
+	
+	if (!Array.isArray(remaining)) {
+		return { valid: false, error: 'remaining must be an array' };
+	}
+	
+	return { valid: true, value: raw };
+}
+
+function processRevertResult(v, logger, taskId, executionId) {
+	if (v === undefined) {
+		return {
+			status: 'succeeded',
+		};
+	}
+	
+	const validation = validatePartialResult(v);
+	if (validation.valid) {
+		return {
+			status: 'partial',
+			...validation.value
+		};
+	}
+	
+	logger.warn('Revert result reporting failed', {
+		taskId,
+		executionId,
+		error: validation.error
+	});
+	
+	return {
+		status: 'succeeded',
+	};
 }
 
 const validateName = (name, type) => {
