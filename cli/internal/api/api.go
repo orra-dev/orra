@@ -53,9 +53,9 @@ type OrchestrationRequest struct {
 		Content string
 	} `json:"action"`
 	Data                   []map[string]string `json:"data"`
-	Timeout                string              `json:"timeout"`
-	HealthCheckGracePeriod string              `json:"healthCheckGracePeriod,omitempty"`
 	Webhook                string              `json:"webhook"`
+	Timeout                string              `json:"timeout,omitempty"`
+	HealthCheckGracePeriod string              `json:"healthCheckGracePeriod,omitempty"`
 }
 
 type Status string

@@ -66,10 +66,6 @@ execute the required project services`,
 				webhookUrl = proj.Webhooks[0]
 			}
 
-			if len(timeout) == 0 {
-				timeout = "30s"
-			}
-
 			if !contains(proj.Webhooks, webhookUrl) {
 				return fmt.Errorf("unknown webhook for project %s", projectName)
 			}
@@ -91,9 +87,9 @@ execute the required project services`,
 					Content: action,
 				},
 				Data:                   actionParams,
+				Webhook:                webhookUrl,
 				Timeout:                timeout,
 				HealthCheckGracePeriod: healthCheckGracePeriod,
-				Webhook:                webhookUrl,
 			})
 			if err != nil {
 				return fmt.Errorf("failed to create orchestration: %w", err)
