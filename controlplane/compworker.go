@@ -23,7 +23,7 @@ const (
 	CompensationBackoffMax  = 1 * time.Minute
 )
 
-func NewCompensationWorker(orchestrationID string, logManager *LogManager, taskIDs []string, cancel context.CancelFunc) LogWorker {
+func NewCompensationWorker(orchestrationID string, logManager *LogManager, candidates []CompensationCandidate, cancel context.CancelFunc) LogWorker {
 	expBackoff := backoff.NewExponentialBackOff()
 	expBackoff.InitialInterval = 2 * time.Second
 	expBackoff.MaxInterval = CompensationBackoffMax
@@ -31,235 +31,69 @@ func NewCompensationWorker(orchestrationID string, logManager *LogManager, taskI
 	expBackoff.RandomizationFactor = 0.1
 	expBackoff.MaxElapsedTime = 0 // No max elapsed time - we'll control via attempts
 
-	dependencies := make(DependencyKeySet)
-	for _, taskID := range taskIDs {
-		dependencies[taskID] = struct{}{}
-	}
-
-	logManager.Logger.
-		Debug().
-		Interface("dependencies", dependencies).
-		Str("orchestrationID", orchestrationID).
-		Msg("Attempting to compensate dependencies")
-
 	return &CompensationWorker{
 		OrchestrationID: orchestrationID,
 		LogManager:      logManager,
-		logState: &LogState{
-			LastOffset:      0,
-			Processed:       make(map[string]bool),
-			DependencyState: make(map[string]json.RawMessage),
-		},
-		Dependencies:  dependencies,
-		backOff:       expBackoff,
-		attemptCounts: make(map[string]int),
-		cancel:        cancel,
+		Candidates:      candidates,
+		backOff:         expBackoff,
+		attemptCounts:   make(map[string]int),
+		cancel:          cancel,
 	}
 }
 
 func (w *CompensationWorker) Start(ctx context.Context, orchestrationID string) {
-	logStream := w.LogManager.GetLog(orchestrationID)
-	if logStream == nil {
-		w.LogManager.Logger.Error().
-			Str("orchestrationID", orchestrationID).
-			Msg("Log stream not found for compensation")
-		return
-	}
+	for _, candidate := range w.Candidates {
+		if err := w.processCandidate(ctx, candidate); err != nil {
+			w.LogManager.Logger.Error().
+				Err(err).
+				Str("orchestrationID", orchestrationID).
+				Interface("candidate", candidate).
+				Msg("Compensation worker failed to process candidate")
 
-	// Channel to receive new log entries
-	entriesChan := make(chan LogEntry, 100)
-
-	// Start polling log
-	go w.PollLog(ctx, orchestrationID, logStream, entriesChan)
-
-	// Process entries as they come in
-	for {
-		select {
-		case entry := <-entriesChan:
-			if err := w.processEntry(ctx, entry); err != nil {
+			// Log the compensation failure
+			failureResult := CompensationResult{
+				Status: CompensationFailed,
+				Error:  err.Error(),
+			}
+			if err := w.LogManager.AppendCompensationFailure(
+				orchestrationID,
+				candidate.TaskID,
+				failureResult,
+				w.attemptCounts[candidate.TaskID],
+			); err != nil {
 				w.LogManager.Logger.Error().
 					Err(err).
-					Str("orchestrationID", orchestrationID).
-					Interface("entry", entry).
-					Msg("Compensation worker failed to process entry")
-
-				// Log the compensation failure
-				failureResult := CompensationResult{
-					Status: CompensationFailed,
-					Error:  err.Error(),
-				}
-				if err := w.LogManager.AppendCompensationFailure(
-					orchestrationID,
-					entry.ID(),
-					failureResult,
-					w.attemptCounts[entry.ID()],
-				); err != nil {
-					w.LogManager.Logger.Error().
-						Err(err).
-						Msg("Failed to log compensation failure")
-				}
+					Msg("Failed to log compensation failure")
 			}
-
-			if w.hasCompensatedAllDependencies() {
-				w.LogManager.Logger.Info().
-					Str("orchestrationID", w.OrchestrationID).
-					Int("totalTasks", len(w.Dependencies)).
-					Msg("All compensations complete, worker stopping")
-				w.cancel() // Self cleanup
-			}
-
-		case <-ctx.Done():
-			w.LogManager.Logger.Info().
-				Str("orchestrationID", orchestrationID).
-				Msg("Compensation worker stopping")
-			return
 		}
 	}
 }
 
-func (w *CompensationWorker) hasCompensatedAllDependencies() bool {
-	for taskID := range w.Dependencies {
-		if !w.logState.Processed[taskID] {
-			return false
-		}
-	}
-	return true
+func (w *CompensationWorker) PollLog(_ context.Context, _ string, _ *Log, _ chan<- LogEntry) {
+	// no-op
 }
 
-func (w *CompensationWorker) PollLog(ctx context.Context, orchestrationID string, logStream *Log, entriesChan chan<- LogEntry) {
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			var processableEntries []LogEntry
-
-			entries := logStream.ReadFrom(w.logState.LastOffset)
-			for _, entry := range entries {
-				if !w.shouldProcess(entry) {
-					continue
-				}
-
-				processableEntries = append(processableEntries, entry)
-				select {
-				case entriesChan <- entry:
-					w.logState.LastOffset = entry.Offset() + 1
-				case <-ctx.Done():
-					return
-				}
-			}
-
-			w.LogManager.Logger.Trace().
-				Interface("entries", processableEntries).
-				Msgf("polling entries for compensating orchestration %s", orchestrationID)
-
-		case <-ctx.Done():
-			return
-		}
-	}
+func (w *CompensationWorker) processCandidate(ctx context.Context, candidate CompensationCandidate) error {
+	return w.executeCompensation(ctx, candidate)
 }
 
-func (w *CompensationWorker) shouldProcess(entry LogEntry) bool {
-	_, isDependency := w.Dependencies[entry.ID()]
-	return entry.Type() == "task_output" && isDependency && !w.logState.Processed[entry.ID()]
-}
-
-func (w *CompensationWorker) processEntry(ctx context.Context, entry LogEntry) error {
-	w.logState.DependencyState[entry.ID()] = entry.Value()
-
-	// Get compensation data for the task
-	compensationData, err := w.getCompensationData(entry.ID())
-	if err != nil {
-		return fmt.Errorf("failed to get compensation data: %w", err)
-	}
-
-	if compensationData == nil {
-		w.LogManager.Logger.Debug().
-			Str("taskID", entry.ID()).
-			Msg("No compensation data found for task, marking as processed")
-		w.logState.Processed[entry.ID()] = true
-		return nil
-	}
-
-	// Execute compensation
-	if err := w.executeCompensation(ctx, entry, compensationData); err != nil {
-		return err
-	}
-
-	// Mark as processed
-	w.logState.Processed[entry.ID()] = true
-
-	return nil
-	//
-	//// Check TTL if provided
-	//ttl := DefaultCompensationTTL
-	//if compensationData.Meta.TTL > 0 {
-	//	ttl = compensationData.Meta.TTL
-	//}
-	//
-	//expiresAt := compensationData.Meta.ExpiresAt
-	//if expiresAt.IsZero() {
-	//	expiresAt = time.Now().Add(ttl)
-	//}
-	//
-	//if time.Now().After(expiresAt) {
-	//	return fmt.Errorf("compensation data expired for task %s", entry.ID())
-	//}
-	//
-	//if err := w.executeWithRetry(ctx, entry.ID(), compensationData); err != nil {
-	//	return err
-	//}
-	//
-	//processingTs := time.Now().UTC()
-	//if err := w.LogManager.MarkCompensationCompleted(w.OrchestrationID, entry.ID(), processingTs); err != nil {
-	//	return err
-	//}
-}
-
-func (w *CompensationWorker) getCompensationData(taskID string) (*CompensationData, error) {
-	logStream := w.LogManager.GetLog(w.OrchestrationID)
-	if logStream == nil {
-		return nil, fmt.Errorf("log stream not found")
-	}
-
-	// Read all entries from beginning
-	entries := logStream.ReadFrom(0)
-	for _, entry := range entries {
-		if entry.Type() == CompensationDataStoredLogType && entry.ProducerID() == taskID {
-			var compData CompensationData
-			if err := json.Unmarshal(entry.Value(), &compData); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal compensation data: %w", err)
-			}
-			return &compData, nil
-		}
-	}
-
-	return nil, nil // No compensation data is not an error
-}
-
-func (w *CompensationWorker) executeCompensation(ctx context.Context, entry LogEntry, data *CompensationData) error {
-	taskID := entry.ID()
-	serviceID := entry.ProducerID()
+func (w *CompensationWorker) executeCompensation(ctx context.Context, candidate CompensationCandidate) error {
+	taskID := candidate.TaskID
+	service := candidate.Service
+	compData := candidate.Compensation
 
 	w.attemptCounts[taskID]++
 	currentAttempt := w.attemptCounts[taskID]
 
 	operation := func() error {
-		// Don't block on health checks, but log status
-		service, err := w.LogManager.controlPlane.GetServiceByID(serviceID)
-		if err != nil {
-			return backoff.Permanent(fmt.Errorf("failed to get service: %w", err))
-		}
-
 		ttl := DefaultCompensationTTL
-		if data.TTLMs > 0 {
-			ttl = time.Duration(data.TTLMs) * time.Millisecond
+		if compData.TTLMs > 0 {
+			ttl = time.Duration(compData.TTLMs) * time.Millisecond
 		}
 
 		expiresAt := time.Now().UTC().Add(ttl)
 		if time.Now().UTC().After(expiresAt) {
-			err := fmt.Errorf("compensation data expired for task %s", entry.ID())
+			err := fmt.Errorf("compensation data expired for task %s", taskID)
 			return backoff.Permanent(err)
 		}
 
@@ -308,7 +142,7 @@ func (w *CompensationWorker) executeCompensation(ctx context.Context, entry LogE
 			ExecutionID:     executionID,
 			IdempotencyKey:  key,
 			ServiceID:       service.ID,
-			Input:           data.Input,
+			Input:           compData.Input,
 			OrchestrationID: w.OrchestrationID,
 			ProjectID:       service.ProjectID,
 			Status:          Processing,

@@ -203,11 +203,7 @@ func (lm *LogManager) AppendTaskStatusEvent(
 }
 
 // AppendCompensationDataStored creates a log entry for stored compensation data
-func (lm *LogManager) AppendCompensationDataStored(
-	orchestrationID string,
-	taskID string,
-	data *CompensationData,
-) error {
+func (lm *LogManager) AppendCompensationDataStored(orchestrationID string, taskID string, serviceID string, data *CompensationData) error {
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 
@@ -221,7 +217,7 @@ func (lm *LogManager) AppendCompensationDataStored(
 		CompensationDataStoredLogType,
 		fmt.Sprintf("comp_data_%s", strings.ToLower(taskID)),
 		value,
-		taskID,
+		serviceID,
 		0,
 	)
 	return nil
@@ -333,9 +329,6 @@ func (lm *LogManager) FinalizeOrchestration(
 	reason, result json.RawMessage,
 	skipWebhook bool,
 ) error {
-	lm.mu.Lock()
-	defer lm.mu.Unlock()
-
 	if err := lm.controlPlane.FinalizeOrchestration(orchestrationID, status, reason, []json.RawMessage{result}, skipWebhook); err != nil {
 		return fmt.Errorf("failed to finalize orchestration: %w", err)
 	}
@@ -344,42 +337,59 @@ func (lm *LogManager) FinalizeOrchestration(
 		return nil
 	}
 
-	state, exists := lm.orchestrations[orchestrationID]
-	if !exists {
-		return fmt.Errorf("orchestration %s not found", orchestrationID)
-	}
+	log := lm.GetLog(orchestrationID)
+	entries := log.ReadFrom(0)
 
-	lm.Logger.Trace().
-		Interface("OrchestrationState", state).
-		Str("OrchestrationID", orchestrationID).
-		Msg("Post finalizing failed orchestration")
-
-	var completedTasks []string
-	for taskID, status := range state.TasksStatuses {
-		if status == Completed && taskID != TaskZero {
-			completedTasks = append(completedTasks, taskID)
+	var candidates []CompensationCandidate
+	for _, entry := range entries {
+		if entry.entryType != CompensationDataStoredLogType {
+			continue
 		}
+
+		svc, err := lm.controlPlane.GetServiceByID(entry.producerID)
+		if err != nil {
+			return err
+		}
+		if !svc.Revertible {
+			continue
+		}
+
+		taskID, _ := strings.CutPrefix(entry.id, "comp_data_")
+		var compensation CompensationData
+		if err := json.Unmarshal(entry.Value(), &compensation); err != nil {
+			return err
+		}
+		candidates = append(candidates, CompensationCandidate{
+			TaskID:       taskID,
+			Service:      svc,
+			Compensation: &compensation,
+		})
 	}
 
-	sort.Slice(completedTasks, func(i, j int) bool {
-		return completedTasks[i] > completedTasks[j]
-	})
-
-	if len(completedTasks) == 0 {
+	if len(candidates) == 0 {
 		lm.Logger.Info().
 			Str("OrchestrationID", orchestrationID).
 			Msg("Orchestration has no completed tasks to compensate")
 		return nil
 	}
 
-	lm.triggerCompensation(orchestrationID, completedTasks)
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].TaskID > candidates[j].TaskID
+	})
+
+	lm.Logger.Trace().
+		Interface("CompensationCandidates", candidates).
+		Str("OrchestrationID", orchestrationID).
+		Msg("Preparing sorted compensation candidates")
+
+	lm.triggerCompensation(orchestrationID, candidates)
 
 	return nil
 }
 
-func (lm *LogManager) triggerCompensation(orchestrationID string, tasks []string) {
+func (lm *LogManager) triggerCompensation(orchestrationID string, candidates []CompensationCandidate) {
 	ctx, cancel := context.WithCancel(context.Background())
-	worker := NewCompensationWorker(orchestrationID, lm, tasks, cancel)
+	worker := NewCompensationWorker(orchestrationID, lm, candidates, cancel)
 	go worker.Start(ctx, orchestrationID)
 }
 

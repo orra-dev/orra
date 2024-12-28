@@ -215,6 +215,7 @@ func (w *TaskWorker) processTaskResult(orchestrationID string, output json.RawMe
 	if err := w.LogManager.AppendCompensationDataStored(
 		orchestrationID,
 		w.TaskID,
+		w.Service.ID,
 		resultPayload.Compensation,
 	); err != nil {
 		return w.LogManager.AppendTaskFailureToLog(

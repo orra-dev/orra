@@ -348,11 +348,16 @@ type CompensationData struct {
 	TTLMs int64           `json:"ttl"`
 }
 
+type CompensationCandidate struct {
+	TaskID       string
+	Service      *ServiceInfo
+	Compensation *CompensationData
+}
+
 type CompensationWorker struct {
 	OrchestrationID string
 	LogManager      *LogManager
-	Dependencies    DependencyKeySet
-	logState        *LogState
+	Candidates      []CompensationCandidate
 	backOff         *backoff.ExponentialBackOff
 	attemptCounts   map[string]int     // track attempts per task
 	cancel          context.CancelFunc // Store cancel function
