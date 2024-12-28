@@ -392,7 +392,6 @@ class OrraSDK:
             message = { "id": "pong", "payload": { "type": 'pong', "serviceId": self.service_id } }
             await self._ws.send(json.dumps(message))
 
-
     async def _handle_ack(self, data: dict) -> None:
         """Handle message acknowledgment"""
         message_id = data.get("id")
