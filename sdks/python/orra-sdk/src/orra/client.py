@@ -389,11 +389,9 @@ class OrraSDK:
     async def _send_pong(self) -> None:
         """Send pong response"""
         if self._ws and self._is_connected.is_set():
-            message = {
-                "type": "pong",
-                "serviceId": self.service_id
-            }
-            await self._send_message(message)
+            message = { "id": "pong", "payload": { "type": 'pong', "serviceId": self.service_id } }
+            await self._ws.send(json.dumps(message))
+
 
     async def _handle_ack(self, data: dict) -> None:
         """Handle message acknowledgment"""
