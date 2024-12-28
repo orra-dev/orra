@@ -119,7 +119,7 @@ type LogWorker interface {
 }
 
 type ResultAggregator struct {
-	Dependencies DependencyKeys
+	Dependencies DependencyKeySet
 	LogManager   *LogManager
 	logState     *LogState
 }
@@ -137,7 +137,7 @@ type LoggedFailure struct {
 type TaskWorker struct {
 	Service                *ServiceInfo
 	TaskID                 string
-	Dependencies           DependencyKeys
+	Dependencies           DependencyKeySet
 	Timeout                time.Duration
 	HealthCheckGracePeriod time.Duration
 	LogManager             *LogManager
@@ -275,7 +275,7 @@ type ServiceCallingPlan struct {
 
 type ParallelGroup []string
 
-type DependencyKeys map[string]struct{}
+type DependencyKeySet map[string]struct{}
 
 // SubTask represents a single task in the ServiceCallingPlan
 type SubTask struct {
@@ -351,7 +351,7 @@ type CompensationData struct {
 type CompensationWorker struct {
 	OrchestrationID string
 	LogManager      *LogManager
-	Dependencies    DependencyKeys
+	Dependencies    DependencyKeySet
 	logState        *LogState
 	backOff         *backoff.ExponentialBackOff
 	attemptCounts   map[string]int     // track attempts per task

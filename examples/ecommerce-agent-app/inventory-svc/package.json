@@ -12,7 +12,7 @@
   "author": "Orra Team",
   "license": "MPL2.0",
   "dependencies": {
-    "@orra.dev/sdk": "0.1.2-narwhal",
+    "@orra.dev/sdk": "file:../../../sdks/js",
     "dotenv": "^16.4.5",
     "express": "^4.21.1"
   }

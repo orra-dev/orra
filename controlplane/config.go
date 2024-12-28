@@ -22,12 +22,13 @@ const (
 	FailureTrackerID              = "failure_tracker"
 	WSPing                        = "ping"
 	WSPong                        = "pong"
-	HealthCheckGracePeriod = 30 * time.Minute
-	TaskTimeout            = 30 * time.Second
+	HealthCheckGracePeriod        = 30 * time.Minute
+	TaskTimeout                   = 30 * time.Second
 	CompensationDataStoredLogType = "compensation_stored"
 	CompensationAttemptedLogType  = "compensation_attempted"
 	CompensationCompleteLogType   = "compensation_complete"
 	CompensationFailureLogType    = "compensation_failure"
+	VersionHeader                 = "X-Orra-CP-Version"
 )
 
 var (

@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-func NewResultAggregator(dependencies DependencyKeys, logManager *LogManager) LogWorker {
+func NewResultAggregator(dependencies DependencyKeySet, logManager *LogManager) LogWorker {
 	return &ResultAggregator{
 		Dependencies: dependencies,
 		LogManager:   logManager,

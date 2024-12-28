@@ -721,6 +721,9 @@ class OrraSDK {
 		if (typeof handler !== 'function') {
 			throw new Error('Start handler must be a function');
 		}
+		if(this.#revertible && !this.#revertHandler){
+			throw new Error('onRevert handler is missing');
+		}
 		this.#taskHandler = handler;
 	}
 	

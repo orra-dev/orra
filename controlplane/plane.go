@@ -231,8 +231,8 @@ func (o *Orchestration) Executable() bool {
 	return o.Status != NotActionable && o.Status != Failed
 }
 
-func (s *SubTask) extractDependencies() DependencyKeys {
-	out := make(DependencyKeys)
+func (s *SubTask) extractDependencies() DependencyKeySet {
+	out := make(DependencyKeySet)
 	for _, source := range s.Input {
 		if dep := extractDependencyID(source); dep != "" {
 			out[dep] = struct{}{}

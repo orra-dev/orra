@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -335,7 +336,51 @@ func (lm *LogManager) FinalizeOrchestration(
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 
-	return lm.controlPlane.FinalizeOrchestration(orchestrationID, status, reason, []json.RawMessage{result}, skipWebhook)
+	if err := lm.controlPlane.FinalizeOrchestration(orchestrationID, status, reason, []json.RawMessage{result}, skipWebhook); err != nil {
+		return fmt.Errorf("failed to finalize orchestration: %w", err)
+	}
+
+	if status != Failed {
+		return nil
+	}
+
+	state, exists := lm.orchestrations[orchestrationID]
+	if !exists {
+		return fmt.Errorf("orchestration %s not found", orchestrationID)
+	}
+
+	lm.Logger.Trace().
+		Interface("OrchestrationState", state).
+		Str("OrchestrationID", orchestrationID).
+		Msg("Post finalizing failed orchestration")
+
+	var completedTasks []string
+	for taskID, status := range state.TasksStatuses {
+		if status == Completed && taskID != TaskZero {
+			completedTasks = append(completedTasks, taskID)
+		}
+	}
+
+	sort.Slice(completedTasks, func(i, j int) bool {
+		return completedTasks[i] > completedTasks[j]
+	})
+
+	if len(completedTasks) == 0 {
+		lm.Logger.Info().
+			Str("OrchestrationID", orchestrationID).
+			Msg("Orchestration has no completed tasks to compensate")
+		return nil
+	}
+
+	lm.triggerCompensation(orchestrationID, completedTasks)
+
+	return nil
+}
+
+func (lm *LogManager) triggerCompensation(orchestrationID string, tasks []string) {
+	ctx, cancel := context.WithCancel(context.Background())
+	worker := NewCompensationWorker(orchestrationID, lm, tasks, cancel)
+	go worker.Start(ctx, orchestrationID)
 }
 
 func NewLog() *Log {

@@ -33,16 +33,23 @@ async function startService() {
 		await invSvc.register({
 			description: 'An inventory service that manages and tracks the availability of ecommerce products. ' +
 				'Including, updating inventory in real-time as orders are placed',
+			revertible: true,
 			schema
 		});
 		
+		invSvc.onRevert(async (task, result) => {
+			console.log('Reverting inventory product for task:', task.id);
+			console.log('Reverting inventory product hold from:', result?.hold, 'to:', false);
+		})
+		
 		invSvc.start(async (task) => {
-			console.log('Processing inventory product:', task.id);
+			console.log('Processing inventory product for task:', task.id);
 			return {
 				productId: '697d1744-88dd-4139-beeb-b307dfb1a2f9',
 				productDescription: task?.input?.productDescription,
 				productAvailability: 'AVAILABLE',
-				warehouseAddress: 'Unit 1 Cairnrobin Way, Portlethen, Aberdeen AB12 4NJ'
+				warehouseAddress: 'Unit 1 Cairnrobin Way, Portlethen, Aberdeen AB12 4NJ',
+				hold: true
 			};
 		});
 		

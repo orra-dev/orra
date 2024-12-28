@@ -34,7 +34,7 @@ func (e RetryableError) Error() string {
 func NewTaskWorker(
 	service *ServiceInfo,
 	taskID string,
-	dependencies DependencyKeys,
+	dependencies DependencyKeySet,
 	timeout time.Duration,
 	healthCheckGracePeriod time.Duration,
 	logManager *LogManager,

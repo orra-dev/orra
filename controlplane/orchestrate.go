@@ -160,44 +160,6 @@ func (p *ControlPlane) FinalizeOrchestration(
 
 	p.cleanupLogWorkers(orchestration.ID)
 
-	if err := p.startCompensation(orchestration.ID); err != nil {
-		p.Logger.Error().Err(err).Msg("Failed to start compensation")
-	}
-
-	return nil
-}
-
-func (p *ControlPlane) startCompensation(orchestrationID string) error {
-	// Get orchestration state under lock
-	p.LogManager.mu.Lock()
-	state, exists := p.LogManager.orchestrations[orchestrationID]
-	if !exists {
-		p.LogManager.mu.Unlock()
-		return fmt.Errorf("orchestration %s not found", orchestrationID)
-	}
-
-	// Collect completed tasks that need compensation
-	completedTasks := make([]string, 0)
-	for taskID, status := range state.TasksStatuses {
-		if status == Completed {
-			completedTasks = append(completedTasks, taskID)
-		}
-	}
-
-	if len(completedTasks) == 0 {
-		p.LogManager.mu.Unlock()
-		p.Logger.Info().
-			Str("OrchestrationID", orchestrationID).
-			Msg("Orchestration has no completed tasks to compensate")
-		return nil
-	}
-	p.LogManager.mu.Unlock()
-
-	// Start compensation worker with collected tasks
-	ctx, cancel := context.WithCancel(context.Background())
-	worker := NewCompensationWorker(orchestrationID, p.LogManager, completedTasks, cancel)
-	go worker.Start(ctx, orchestrationID)
-
 	return nil
 }
 
@@ -348,7 +310,7 @@ func (p *ControlPlane) createAndStartWorkers(
 
 	p.logWorkers[orchestrationID] = make(map[string]context.CancelFunc)
 
-	resultDependencies := make(DependencyKeys)
+	resultDependencies := make(DependencyKeySet)
 
 	for _, task := range plan.Tasks {
 		deps := task.extractDependencies()

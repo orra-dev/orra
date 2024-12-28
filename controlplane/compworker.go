@@ -31,10 +31,16 @@ func NewCompensationWorker(orchestrationID string, logManager *LogManager, taskI
 	expBackoff.RandomizationFactor = 0.1
 	expBackoff.MaxElapsedTime = 0 // No max elapsed time - we'll control via attempts
 
-	dependencies := make(DependencyKeys)
+	dependencies := make(DependencyKeySet)
 	for _, taskID := range taskIDs {
 		dependencies[taskID] = struct{}{}
 	}
+
+	logManager.Logger.
+		Debug().
+		Interface("dependencies", dependencies).
+		Str("orchestrationID", orchestrationID).
+		Msg("Attempting to compensate dependencies")
 
 	return &CompensationWorker{
 		OrchestrationID: orchestrationID,
@@ -93,6 +99,15 @@ func (w *CompensationWorker) Start(ctx context.Context, orchestrationID string) 
 						Msg("Failed to log compensation failure")
 				}
 			}
+
+			if w.hasCompensatedAllDependencies() {
+				w.LogManager.Logger.Info().
+					Str("orchestrationID", w.OrchestrationID).
+					Int("totalTasks", len(w.Dependencies)).
+					Msg("All compensations complete, worker stopping")
+				w.cancel() // Self cleanup
+			}
+
 		case <-ctx.Done():
 			w.LogManager.Logger.Info().
 				Str("orchestrationID", orchestrationID).
@@ -100,6 +115,15 @@ func (w *CompensationWorker) Start(ctx context.Context, orchestrationID string) 
 			return
 		}
 	}
+}
+
+func (w *CompensationWorker) hasCompensatedAllDependencies() bool {
+	for taskID := range w.Dependencies {
+		if !w.logState.Processed[taskID] {
+			return false
+		}
+	}
+	return true
 }
 
 func (w *CompensationWorker) PollLog(ctx context.Context, orchestrationID string, logStream *Log, entriesChan chan<- LogEntry) {
@@ -142,10 +166,6 @@ func (w *CompensationWorker) shouldProcess(entry LogEntry) bool {
 }
 
 func (w *CompensationWorker) processEntry(ctx context.Context, entry LogEntry) error {
-	if !w.shouldProcess(entry) {
-		return nil
-	}
-
 	w.logState.DependencyState[entry.ID()] = entry.Value()
 
 	// Get compensation data for the task
@@ -169,25 +189,6 @@ func (w *CompensationWorker) processEntry(ctx context.Context, entry LogEntry) e
 
 	// Mark as processed
 	w.logState.Processed[entry.ID()] = true
-
-	// Check if we're done
-	allProcessed := true
-	for taskID := range w.Dependencies {
-		if !w.logState.Processed[taskID] {
-			allProcessed = false
-			break
-		}
-	}
-
-	if !allProcessed {
-		return nil
-	}
-
-	w.LogManager.Logger.Info().
-		Str("orchestrationID", w.OrchestrationID).
-		Int("totalTasks", len(w.Dependencies)).
-		Msg("All compensations complete, worker stopping")
-	w.cancel() // Self cleanup
 
 	return nil
 	//
