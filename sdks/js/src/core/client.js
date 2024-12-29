@@ -804,9 +804,9 @@ function validatePartialResult(raw) {
 }
 
 function processRevertResult(v, logger, taskId, executionId) {
-	if (v === undefined) {
+	if (v === undefined || typeof v !== 'object') {
 		return {
-			status: 'succeeded',
+			status: 'completed',
 		};
 	}
 	
@@ -825,7 +825,7 @@ function processRevertResult(v, logger, taskId, executionId) {
 	});
 	
 	return {
-		status: 'succeeded',
+		status: 'completed',
 	};
 }
 
