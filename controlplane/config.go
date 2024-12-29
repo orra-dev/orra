@@ -157,7 +157,9 @@ func (st *ServiceType) UnmarshalJSON(data []byte) error {
 type CompensationStatus int
 
 const (
-	CompensationSucceeded CompensationStatus = iota
+	CompensationPending CompensationStatus = iota
+	CompensationProcessing
+	CompensationCompleted
 	CompensationFailed
 	CompensationPartial
 	CompensationExpired
@@ -165,8 +167,12 @@ const (
 
 func (s CompensationStatus) String() string {
 	switch s {
-	case CompensationSucceeded:
-		return "succeeded"
+	case CompensationPending:
+		return "pending"
+	case CompensationProcessing:
+		return "processing"
+	case CompensationCompleted:
+		return "completed"
 	case CompensationFailed:
 		return "failed"
 	case CompensationPartial:
@@ -187,8 +193,12 @@ func (s *CompensationStatus) UnmarshalJSON(data []byte) error {
 	}
 
 	switch str {
-	case "succeeded":
-		*s = CompensationSucceeded
+	case "pending":
+		*s = CompensationPending
+	case "processing":
+		*s = CompensationProcessing
+	case "completed":
+		*s = CompensationCompleted
 	case "failed":
 		*s = CompensationFailed
 	case "partial":
