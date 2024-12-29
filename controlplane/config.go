@@ -27,6 +27,7 @@ const (
 	CompensationDataStoredLogType = "compensation_stored"
 	CompensationAttemptedLogType  = "compensation_attempted"
 	CompensationCompleteLogType   = "compensation_complete"
+	CompensationPartialLogType    = "compensation_partial"
 	CompensationFailureLogType    = "compensation_failure"
 	CompensationExpiredLogType    = "compensation_expired"
 	VersionHeader                 = "X-Orra-CP-Version"

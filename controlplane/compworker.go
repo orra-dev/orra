@@ -189,9 +189,15 @@ func (w *CompensationWorker) executeCompensation(ctx context.Context, candidate 
 			return fmt.Errorf("invalid compensation result format: %w", err)
 		}
 
+		logType := CompensationCompleteLogType
+		if compResult.Status == CompensationPartial {
+			logType = CompensationPartialLogType
+		}
+
 		return w.LogManager.AppendCompensationComplete(
 			w.OrchestrationID,
 			taskID,
+			logType,
 			&compResult,
 			currentAttempt,
 		)

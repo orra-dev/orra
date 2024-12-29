@@ -267,6 +267,7 @@ func (lm *LogManager) AppendCompensationAttempted(
 func (lm *LogManager) AppendCompensationComplete(
 	orchestrationID string,
 	taskID string,
+	logType string,
 	result *CompensationResult,
 	attemptNo int,
 ) error {
@@ -288,7 +289,7 @@ func (lm *LogManager) AppendCompensationComplete(
 
 	lm.AppendToLog(
 		orchestrationID,
-		CompensationCompleteLogType,
+		logType,
 		fmt.Sprintf("comp_complete_%s", strings.ToLower(taskID)),
 		compCompleted,
 		taskID,
