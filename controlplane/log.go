@@ -300,6 +300,7 @@ func (lm *LogManager) AppendCompensationComplete(
 func (lm *LogManager) AppendCompensationFailure(
 	orchestrationID,
 	taskID string,
+	logType string,
 	failure CompensationResult,
 	attemptNo int,
 ) error {
@@ -314,7 +315,7 @@ func (lm *LogManager) AppendCompensationFailure(
 	failureID := fmt.Sprintf("comp_fail_%s", strings.ToLower(taskID))
 	lm.AppendToLog(
 		orchestrationID,
-		CompensationFailureLogType,
+		logType,
 		failureID,
 		value,
 		taskID,

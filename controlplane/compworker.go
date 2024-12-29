@@ -11,6 +11,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -50,14 +51,23 @@ func (w *CompensationWorker) Start(ctx context.Context, orchestrationID string) 
 				Interface("candidate", candidate).
 				Msg("Compensation worker failed to process candidate")
 
+			status := CompensationFailed
+			logType := CompensationFailureLogType
+
+			if strings.Contains(err.Error(), "expired") {
+				status = CompensationExpired
+				logType = CompensationExpiredLogType
+			}
+
 			// Log the compensation failure
 			failureResult := CompensationResult{
-				Status: CompensationFailed,
+				Status: status,
 				Error:  err.Error(),
 			}
 			if err := w.LogManager.AppendCompensationFailure(
 				orchestrationID,
 				candidate.TaskID,
+				logType,
 				failureResult,
 				w.attemptCounts[candidate.TaskID],
 			); err != nil {

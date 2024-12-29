@@ -28,6 +28,7 @@ const (
 	CompensationAttemptedLogType  = "compensation_attempted"
 	CompensationCompleteLogType   = "compensation_complete"
 	CompensationFailureLogType    = "compensation_failure"
+	CompensationExpiredLogType    = "compensation_expired"
 	VersionHeader                 = "X-Orra-CP-Version"
 )
 
@@ -156,9 +157,7 @@ func (st *ServiceType) UnmarshalJSON(data []byte) error {
 type CompensationStatus int
 
 const (
-	CompensationPending CompensationStatus = iota
-	CompensationInProgress
-	CompensationSucceeded
+	CompensationSucceeded CompensationStatus = iota
 	CompensationFailed
 	CompensationPartial
 	CompensationExpired
@@ -166,10 +165,6 @@ const (
 
 func (s CompensationStatus) String() string {
 	switch s {
-	case CompensationPending:
-		return "pending"
-	case CompensationInProgress:
-		return "in_progress"
 	case CompensationSucceeded:
 		return "succeeded"
 	case CompensationFailed:
@@ -192,10 +187,6 @@ func (s *CompensationStatus) UnmarshalJSON(data []byte) error {
 	}
 
 	switch str {
-	case "pending":
-		*s = CompensationPending
-	case "in_progress":
-		*s = CompensationInProgress
 	case "succeeded":
 		*s = CompensationSucceeded
 	case "failed":
