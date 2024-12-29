@@ -70,11 +70,41 @@ func (s Status) String() string {
 }
 
 type OrchestrationView struct {
-	ID        string          `json:"id"`
-	Action    string          `json:"action"`
-	Status    Status          `json:"status"`
-	Error     json.RawMessage `json:"error,omitempty"`
-	Timestamp time.Time       `json:"timestamp"`
+	ID           string               `json:"id"`
+	Action       string               `json:"action"`
+	Status       Status               `json:"status"`
+	Error        json.RawMessage      `json:"error,omitempty"`
+	Timestamp    time.Time            `json:"timestamp"`
+	Compensation *CompensationSummary `json:"compensation,omitempty"`
+}
+
+type CompensationSummary struct {
+	Active    bool `json:"active"`    // Are any compensations still running?
+	Total     int  `json:"total"`     // Total number of compensatable tasks
+	Completed int  `json:"completed"` // Number of completed compensations
+	Failed    int  `json:"failed"`    // Number of failed compensations
+}
+
+func (cs *CompensationSummary) String() string {
+	if cs == nil {
+		return ""
+	}
+
+	remaining := cs.Total - cs.Completed - cs.Failed
+
+	if cs.Active && remaining > 0 {
+		return fmt.Sprintf("Active (%d/%d)", cs.Completed+cs.Failed, cs.Total)
+	}
+
+	if cs.Failed > 0 {
+		return fmt.Sprintf("Failed (%d/%d)", cs.Failed, cs.Total)
+	}
+
+	if cs.Completed == cs.Total {
+		return fmt.Sprintf("Completed (%d/%d)", cs.Total, cs.Total)
+	}
+
+	return ""
 }
 
 type OrchestrationListView struct {

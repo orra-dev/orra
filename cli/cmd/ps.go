@@ -64,14 +64,15 @@ func newPsCmd(opts *CliOpts) *cobra.Command {
 				{"ID", func(o api.OrchestrationView) string { return o.ID }, 25},
 				{"ACTION", func(o api.OrchestrationView) string { return truncateString(o.Action, 34) }, 36},
 				{"STATUS", func(o api.OrchestrationView) string { return formatStatus(o.Status.String()) }, 18},
+				{"COMPENSATIONS", func(o api.OrchestrationView) string { return formatCompensationSummary(o.Compensation.String()) }, 20},
 				{"CREATED", func(o api.OrchestrationView) string { return getRelativeTime(o.Timestamp) }, 10},
 			}
 
 			if wide {
 				columns = append(columns, column{
 					"ERROR",
-					func(o api.OrchestrationView) string { return truncateString(formatListError(o.Error), 50) },
-					52,
+					func(o api.OrchestrationView) string { return truncateString(formatListError(o.Error), 35) },
+					37,
 				})
 			}
 
@@ -182,6 +183,19 @@ func formatStatus(status string) string {
 		return symbolNotActionable + status
 	default:
 		return "  " + status // Double space to align with other symbols
+	}
+}
+
+func formatCompensationSummary(summary string) string {
+	switch {
+	case strings.HasPrefix(strings.ToLower(summary), "active"):
+		return symbolProcessing + summary
+	case strings.HasPrefix(strings.ToLower(summary), "completed"):
+		return symbolCompleted + summary
+	case strings.HasPrefix(strings.ToLower(summary), "failed"):
+		return symbolFailed + summary
+	default:
+		return "─"
 	}
 }
 

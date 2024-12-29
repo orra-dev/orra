@@ -17,11 +17,19 @@ import (
 )
 
 type OrchestrationView struct {
-	ID        string          `json:"id"`
-	Action    string          `json:"action"`
-	Status    Status          `json:"status"`
-	Error     json.RawMessage `json:"error,omitempty"`
-	Timestamp time.Time       `json:"timestamp"`
+	ID           string               `json:"id"`
+	Action       string               `json:"action"`
+	Status       Status               `json:"status"`
+	Error        json.RawMessage      `json:"error,omitempty"`
+	Timestamp    time.Time            `json:"timestamp"`
+	Compensation *CompensationSummary `json:"compensation,omitempty"`
+}
+
+type CompensationSummary struct {
+	Active    bool `json:"active"`    // Are any compensations still running?
+	Total     int  `json:"total"`     // Total number of compensatable tasks
+	Completed int  `json:"completed"` // Number of completed compensations
+	Failed    int  `json:"failed"`    // Number of failed compensations
 }
 
 type OrchestrationListView struct {
@@ -78,6 +86,13 @@ func (p *ControlPlane) GetOrchestrationList(projectID string) OrchestrationListV
 			Timestamp: o.Timestamp,
 		}
 
+		if o.Status == Failed {
+			if log := p.LogManager.GetLog(o.ID); log != nil {
+				entries := log.ReadFrom(0)
+				view.Compensation = p.processCompensationSummary(entries, o.Plan)
+			}
+		}
+
 		grouped[o.Status] = append(grouped[o.Status], view)
 	}
 
@@ -95,6 +110,72 @@ func (p *ControlPlane) GetOrchestrationList(projectID string) OrchestrationListV
 		Failed:        grouped[Failed],
 		NotActionable: grouped[NotActionable],
 	}
+}
+
+func (p *ControlPlane) processCompensationSummary(entries []LogEntry, plan *ServiceCallingPlan) *CompensationSummary {
+	if plan == nil {
+		return nil
+	}
+
+	// Count revertible services in the plan
+	var revertibleTasks int
+	for _, task := range plan.Tasks {
+		if task.ID == TaskZero {
+			continue
+		}
+
+		service, err := p.GetServiceByID(task.Service)
+		if err != nil {
+			continue
+		}
+
+		if service.Revertible {
+			revertibleTasks++
+		}
+	}
+
+	if revertibleTasks == 0 {
+		return nil
+	}
+
+	summary := &CompensationSummary{
+		Total: revertibleTasks,
+	}
+
+	// Track the latest state for each task
+	taskStates := make(map[string]string)
+
+	for _, entry := range entries {
+		switch entry.Type() {
+		case CompensationAttemptedLogType:
+			summary.Active = true
+			taskStates[entry.ProducerID()] = "processing"
+
+		case CompensationCompleteLogType, CompensationPartialLogType:
+			taskStates[entry.ProducerID()] = "completed"
+			summary.Completed++
+
+		case CompensationFailureLogType, CompensationExpiredLogType:
+			taskStates[entry.ProducerID()] = "failed"
+			summary.Failed++
+		}
+	}
+
+	// Check if any compensations are still active
+	summary.Active = false
+	for _, state := range taskStates {
+		if state == "processing" {
+			summary.Active = true
+			break
+		}
+	}
+
+	p.Logger.
+		Trace().
+		Interface("taskStates", taskStates).
+		Msg("processCompensationSummary")
+
+	return summary
 }
 
 func (p *ControlPlane) getProjectOrchestrations(projectID string) []*Orchestration {
