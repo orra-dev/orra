@@ -199,6 +199,22 @@ func formatCompensationSummary(summary string) string {
 	}
 }
 
+func formatCompensation(status string) string {
+	s := strings.ToLower(status)
+	switch {
+	case strings.Contains(s, "pending"):
+		return symbolPending + status
+	case strings.Contains(s, "processing"):
+		return symbolProcessing + status
+	case strings.Contains(s, "completed"):
+		return symbolCompleted + status
+	case strings.Contains(s, "expired"), strings.Contains(s, "failed"):
+		return symbolFailed + status
+	default:
+		return "─"
+	}
+}
+
 func getRelativeTime(t time.Time) string {
 	duration := time.Since(t)
 	switch {

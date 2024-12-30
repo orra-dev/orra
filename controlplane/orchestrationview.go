@@ -52,15 +52,24 @@ type OrchestrationInspectResponse struct {
 }
 
 type TaskInspectResponse struct {
-	ID            string            `json:"id"`
-	ServiceID     string            `json:"serviceId"`
-	ServiceName   string            `json:"serviceName"` // Added service name
-	Status        Status            `json:"status"`
-	StatusHistory []TaskStatusEvent `json:"statusHistory"`
-	Input         json.RawMessage   `json:"input,omitempty"`
-	Output        json.RawMessage   `json:"output,omitempty"`
-	Error         string            `json:"error,omitempty"`
-	Duration      time.Duration     `json:"duration"` // Time between first Processing and last status
+	ID            string                  `json:"id"`
+	ServiceID     string                  `json:"serviceId"`
+	ServiceName   string                  `json:"serviceName"` // Added service name
+	Status        Status                  `json:"status"`
+	StatusHistory []TaskStatusEvent       `json:"statusHistory"`
+	Input         json.RawMessage         `json:"input,omitempty"`
+	Output        json.RawMessage         `json:"output,omitempty"`
+	Error         string                  `json:"error,omitempty"`
+	Duration      time.Duration           `json:"duration"` // Time between first Processing and last status
+	Compensation  *TaskCompensationStatus `json:"compensation,omitempty"`
+	IsRevertible  bool                    `json:"isRevertible"`
+}
+
+type TaskCompensationStatus struct {
+	State       CompensationStatus `json:"state"`        // pending, processing, completed, failed
+	Attempt     int                `json:"attempt"`      // Current attempt number (1-based)
+	MaxAttempts int                `json:"max_attempts"` // Maximum attempts allowed
+	Timestamp   time.Time          `json:"timestamp"`    // When compensation started
 }
 
 type taskLookupMaps struct {
@@ -453,7 +462,84 @@ func (p *ControlPlane) buildSingleTaskResponse(
 		taskResp.Error = history[len(history)-1].Error
 	}
 
+	service, err := p.GetServiceByID(task.Service)
+	if err != nil {
+		return TaskInspectResponse{}, fmt.Errorf("error getting service: %w", err)
+	}
+
+	taskResp.IsRevertible = service.Revertible
+	log := p.LogManager.GetLog(orchestration.ID)
+	if service.Revertible {
+		taskResp.Compensation = p.processTaskCompensation(log.ReadFrom(0), task.ID)
+	}
+
 	return taskResp, nil
+}
+
+func (p *ControlPlane) processTaskCompensation(entries []LogEntry, taskID string) *TaskCompensationStatus {
+	var status *TaskCompensationStatus
+
+	for _, entry := range entries {
+		// Only process entries for this task
+		if !strings.Contains(entry.ID(), strings.ToLower(taskID)) {
+			continue
+		}
+
+		switch entry.Type() {
+		case CompensationDataStoredLogType:
+			// Initialize compensation tracking
+			status = &TaskCompensationStatus{
+				State:       CompensationPending,
+				Timestamp:   entry.Timestamp(),
+				MaxAttempts: MaxCompensationAttempts,
+			}
+
+		case CompensationAttemptedLogType:
+			if status != nil {
+				status.State = CompensationProcessing
+				status.Timestamp = entry.Timestamp()
+				status.Attempt = entry.AttemptNum() + 1 // Make 1-based for display
+			}
+
+		case CompensationPartialLogType:
+			if status != nil {
+				status.State = CompensationPartial
+				status.Timestamp = entry.Timestamp()
+				// Don't include attempt info for completed state
+			}
+
+		case CompensationCompleteLogType:
+			if status != nil {
+				status.State = CompensationCompleted
+				status.Timestamp = entry.Timestamp()
+				// Don't include attempt info for completed state
+			}
+
+		case CompensationExpiredLogType:
+			if status != nil {
+				status.State = CompensationExpired
+				status.Timestamp = entry.Timestamp()
+			}
+
+		case CompensationFailureLogType:
+			if status != nil {
+				status.Attempt = entry.AttemptNum() + 1
+				status.Timestamp = entry.Timestamp()
+				if status.Attempt >= status.MaxAttempts {
+					status.State = CompensationFailed
+				} else {
+					status.State = CompensationProcessing
+				}
+			}
+		}
+	}
+
+	p.Logger.Debug().
+		Interface("status", status).
+		Str("taskID", taskID).
+		Msg("processing task compensation for orchestration view")
+
+	return status
 }
 
 func extractTask0Values(taskZeroJSON json.RawMessage) (task0Values, error) {

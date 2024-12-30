@@ -129,15 +129,47 @@ type OrchestrationInspectResponse struct {
 
 // TaskInspectResponse represents the detailed view of a task within an orchestration
 type TaskInspectResponse struct {
-	ID            string            `json:"id"`
-	ServiceID     string            `json:"serviceId"`
-	ServiceName   string            `json:"serviceName"`
-	Status        Status            `json:"status"`
-	StatusHistory []TaskStatusEvent `json:"statusHistory"`
-	Input         json.RawMessage   `json:"input,omitempty"`
-	Output        json.RawMessage   `json:"output,omitempty"`
-	Error         string            `json:"error,omitempty"`
-	Duration      time.Duration     `json:"duration"`
+	ID            string                  `json:"id"`
+	ServiceID     string                  `json:"serviceId"`
+	ServiceName   string                  `json:"serviceName"`
+	Status        Status                  `json:"status"`
+	StatusHistory []TaskStatusEvent       `json:"statusHistory"`
+	Input         json.RawMessage         `json:"input,omitempty"`
+	Output        json.RawMessage         `json:"output,omitempty"`
+	Error         string                  `json:"error,omitempty"`
+	Duration      time.Duration           `json:"duration"`
+	Compensation  *TaskCompensationStatus `json:"compensation,omitempty"`
+	IsRevertible  bool                    `json:"isRevertible"`
+}
+
+type TaskCompensationStatus struct {
+	State       string    `json:"state"`        // pending, processing, completed, failed, partial, expired
+	Attempt     int       `json:"attempt"`      // Current attempt number (1-based)
+	MaxAttempts int       `json:"max_attempts"` // Maximum attempts allowed
+	Timestamp   time.Time `json:"timestamp"`    // When compensation started
+}
+
+func (tcs *TaskCompensationStatus) String() string {
+	if tcs == nil {
+		return ""
+	}
+
+	switch tcs.State {
+	case "pending":
+		return "Pending"
+	case "processing":
+		return fmt.Sprintf("Processing (%d/%d)", tcs.Attempt, tcs.MaxAttempts)
+	case "completed":
+		return "Completed"
+	case "partial":
+		return "Completed Partially"
+	case "expired":
+		return "Expired"
+	case "failed":
+		return fmt.Sprintf("Failed (%d/%d)", tcs.Attempt, tcs.MaxAttempts)
+	default:
+		return ""
+	}
 }
 
 // TaskStatusEvent represents a status change in a task's history

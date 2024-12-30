@@ -66,16 +66,17 @@ func newInspectCmd(opts *CliOpts) *cobra.Command {
 			if len(inspection.Tasks) > 0 {
 				fmt.Printf("\n┌─ Tasks\n")
 				// Header
-				fmt.Printf("│ %-8s %-30s %-14s %-10s %s\n",
-					"ID", "SERVICE", "STATUS", "DURATION", "LAST ERROR")
-				fmt.Printf("│ %s\n", strings.Repeat("─", 75))
+				fmt.Printf("│ %-8s %-30s %-14s %-20s %-10s %s\n",
+					"ID", "SERVICE", "STATUS", "COMPENSATION", "DURATION", "LAST ERROR")
+				fmt.Printf("│ %s\n", strings.Repeat("─", 100))
 
 				// Task rows
 				for _, task := range inspection.Tasks {
-					fmt.Printf("│ %-8s %-30s %-14s %-10s %s\n",
+					fmt.Printf("│ %-8s %-30s %-14s %-20s %-10s %s\n",
 						task.ID,
 						task.ServiceName,
-						fmt.Sprintf("%s", formatStatus(task.Status.String())),
+						formatStatus(task.Status.String()),
+						formatCompensation(task.Compensation.String()),
 						formatDuration(task.Duration),
 						formatInspectionError(task.Error),
 					)
