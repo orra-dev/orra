@@ -302,8 +302,8 @@ func (w *TaskWorker) checkServiceHealth(orchestrationID string) error {
 
 	// Check if we've exceeded MaxServiceDowntime
 	if time.Since(w.pauseStart) >= w.HealthCheckGracePeriod {
-		return backoff.Permanent(fmt.Errorf("service %s remained unhealthy after %d retries, each retry exceeded maximum duration of %v",
-			w.Service.ID, w.consecutiveErrs, w.HealthCheckGracePeriod))
+		return backoff.Permanent(fmt.Errorf("service %s remained unhealthy while exceeding maximum duration of %v",
+			w.Service.ID, w.HealthCheckGracePeriod))
 	}
 
 	return RetryableError{Err: fmt.Errorf("service %s is not healthy", w.Service.ID)}

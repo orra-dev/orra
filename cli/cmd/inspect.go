@@ -104,6 +104,23 @@ func newInspectCmd(opts *CliOpts) *cobra.Command {
 						fmt.Println(statusLine)
 					}
 
+					// Print compensation history if present
+					if len(task.CompensationHistory) > 0 {
+						fmt.Printf("│ Compensating %s\n", strings.Repeat("─", 39))
+
+						for _, comp := range task.CompensationHistory {
+							timestamp := comp.Timestamp.Format("15:04:05")
+							statusLine := fmt.Sprintf("│ %s  %s",
+								timestamp,
+								formatCompensation(comp.String()),
+							)
+							if comp.Error != "" {
+								statusLine += fmt.Sprintf(" - %s", comp.Error)
+							}
+							fmt.Println(statusLine)
+						}
+					}
+
 					// Input/Output with proper indentation
 					if task.Input != nil {
 						fmt.Printf("│\n│ Input:\n")

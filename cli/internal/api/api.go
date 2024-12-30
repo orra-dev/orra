@@ -129,24 +129,35 @@ type OrchestrationInspectResponse struct {
 
 // TaskInspectResponse represents the detailed view of a task within an orchestration
 type TaskInspectResponse struct {
-	ID            string                  `json:"id"`
-	ServiceID     string                  `json:"serviceId"`
-	ServiceName   string                  `json:"serviceName"`
-	Status        Status                  `json:"status"`
-	StatusHistory []TaskStatusEvent       `json:"statusHistory"`
-	Input         json.RawMessage         `json:"input,omitempty"`
-	Output        json.RawMessage         `json:"output,omitempty"`
-	Error         string                  `json:"error,omitempty"`
-	Duration      time.Duration           `json:"duration"`
-	Compensation  *TaskCompensationStatus `json:"compensation,omitempty"`
-	IsRevertible  bool                    `json:"isRevertible"`
+	ID                  string                    `json:"id"`
+	ServiceID           string                    `json:"serviceId"`
+	ServiceName         string                    `json:"serviceName"`
+	Status              Status                    `json:"status"`
+	StatusHistory       []TaskStatusEvent         `json:"statusHistory"`
+	Input               json.RawMessage           `json:"input,omitempty"`
+	Output              json.RawMessage           `json:"output,omitempty"`
+	Error               string                    `json:"error,omitempty"`
+	Duration            time.Duration             `json:"duration"`
+	Compensation        *TaskCompensationStatus   `json:"compensation,omitempty"`
+	CompensationHistory []CompensationStatusEvent `json:"compensationHistory,omitempty"`
+	IsRevertible        bool                      `json:"isRevertible"`
 }
 
 type TaskCompensationStatus struct {
-	State       string    `json:"state"`        // pending, processing, completed, failed, partial, expired
+	Status      string    `json:"status"`       // pending, processing, completed, failed, partial, expired
 	Attempt     int       `json:"attempt"`      // Current attempt number (1-based)
 	MaxAttempts int       `json:"max_attempts"` // Maximum attempts allowed
 	Timestamp   time.Time `json:"timestamp"`    // When compensation started
+}
+
+type CompensationStatusEvent struct {
+	ID          string    `json:"id"`
+	TaskID      string    `json:"taskId"`
+	Status      string    `json:"status"`      // "processing", "completed", "failed"
+	Attempt     int       `json:"attempt"`     // Current attempt number (1-based)
+	MaxAttempts int       `json:"maxAttempts"` // Maximum allowed attempts
+	Timestamp   time.Time `json:"timestamp"`
+	Error       string    `json:"error,omitempty"`
 }
 
 func (tcs *TaskCompensationStatus) String() string {
@@ -154,7 +165,7 @@ func (tcs *TaskCompensationStatus) String() string {
 		return ""
 	}
 
-	switch tcs.State {
+	switch tcs.Status {
 	case "pending":
 		return "Pending"
 	case "processing":
@@ -167,6 +178,25 @@ func (tcs *TaskCompensationStatus) String() string {
 		return "Expired"
 	case "failed":
 		return fmt.Sprintf("Failed (%d/%d)", tcs.Attempt, tcs.MaxAttempts)
+	default:
+		return ""
+	}
+}
+
+func (cse CompensationStatusEvent) String() string {
+	switch cse.Status {
+	case "pending":
+		return "Pending"
+	case "processing":
+		return fmt.Sprintf("Processing (%d/%d)", cse.Attempt, cse.MaxAttempts)
+	case "completed":
+		return "Completed"
+	case "partial":
+		return "Completed Partially"
+	case "expired":
+		return "Expired"
+	case "failed":
+		return fmt.Sprintf("Failed (%d/%d)", cse.Attempt, cse.MaxAttempts)
 	default:
 		return ""
 	}

@@ -52,24 +52,35 @@ type OrchestrationInspectResponse struct {
 }
 
 type TaskInspectResponse struct {
-	ID            string                  `json:"id"`
-	ServiceID     string                  `json:"serviceId"`
-	ServiceName   string                  `json:"serviceName"` // Added service name
-	Status        Status                  `json:"status"`
-	StatusHistory []TaskStatusEvent       `json:"statusHistory"`
-	Input         json.RawMessage         `json:"input,omitempty"`
-	Output        json.RawMessage         `json:"output,omitempty"`
-	Error         string                  `json:"error,omitempty"`
-	Duration      time.Duration           `json:"duration"` // Time between first Processing and last status
-	Compensation  *TaskCompensationStatus `json:"compensation,omitempty"`
-	IsRevertible  bool                    `json:"isRevertible"`
+	ID                  string                    `json:"id"`
+	ServiceID           string                    `json:"serviceId"`
+	ServiceName         string                    `json:"serviceName"` // Added service name
+	Status              Status                    `json:"status"`
+	StatusHistory       []TaskStatusEvent         `json:"statusHistory"`
+	Input               json.RawMessage           `json:"input,omitempty"`
+	Output              json.RawMessage           `json:"output,omitempty"`
+	Error               string                    `json:"error,omitempty"`
+	Duration            time.Duration             `json:"duration"` // Time between first Processing and last status
+	Compensation        *TaskCompensationStatus   `json:"compensation,omitempty"`
+	CompensationHistory []CompensationStatusEvent `json:"compensationHistory,omitempty"`
+	IsRevertible        bool                      `json:"isRevertible"`
 }
 
 type TaskCompensationStatus struct {
-	State       CompensationStatus `json:"state"`        // pending, processing, completed, failed
+	Status      CompensationStatus `json:"status"`       // pending, processing, completed, failed
 	Attempt     int                `json:"attempt"`      // Current attempt number (1-based)
 	MaxAttempts int                `json:"max_attempts"` // Maximum attempts allowed
 	Timestamp   time.Time          `json:"timestamp"`    // When compensation started
+}
+
+type CompensationStatusEvent struct {
+	ID          string             `json:"id"`
+	TaskID      string             `json:"taskId"`
+	Status      CompensationStatus `json:"status"`      // "processing", "completed", "failed"
+	Attempt     int                `json:"attempt"`     // Current attempt number (1-based)
+	MaxAttempts int                `json:"maxAttempts"` // Maximum allowed attempts
+	Timestamp   time.Time          `json:"timestamp"`
+	Error       string             `json:"error,omitempty"`
 }
 
 type taskLookupMaps struct {
@@ -469,15 +480,32 @@ func (p *ControlPlane) buildSingleTaskResponse(
 
 	taskResp.IsRevertible = service.Revertible
 	log := p.LogManager.GetLog(orchestration.ID)
-	if service.Revertible {
-		taskResp.Compensation = p.processTaskCompensation(log.ReadFrom(0), task.ID)
+	if !service.Revertible {
+		return taskResp, nil
+	}
+
+	taskResp.CompensationHistory = p.processCompensationHistory(
+		log.ReadFrom(0),
+		task.ID,
+	)
+
+	if len(taskResp.CompensationHistory) == 0 {
+		return taskResp, nil
+	}
+
+	finalCompensation := taskResp.CompensationHistory[len(taskResp.CompensationHistory)-1]
+	taskResp.Compensation = &TaskCompensationStatus{
+		Status:      finalCompensation.Status,
+		Attempt:     finalCompensation.Attempt,
+		MaxAttempts: finalCompensation.MaxAttempts,
+		Timestamp:   finalCompensation.Timestamp,
 	}
 
 	return taskResp, nil
 }
 
-func (p *ControlPlane) processTaskCompensation(entries []LogEntry, taskID string) *TaskCompensationStatus {
-	var status *TaskCompensationStatus
+func (p *ControlPlane) processCompensationHistory(entries []LogEntry, taskID string) []CompensationStatusEvent {
+	var history []CompensationStatusEvent
 
 	for _, entry := range entries {
 		// Only process entries for this task
@@ -485,61 +513,62 @@ func (p *ControlPlane) processTaskCompensation(entries []LogEntry, taskID string
 			continue
 		}
 
+		var event CompensationStatusEvent
+		event.TaskID = taskID
+		event.Timestamp = entry.Timestamp()
+		event.MaxAttempts = MaxCompensationAttempts
+
 		switch entry.Type() {
-		case CompensationDataStoredLogType:
-			// Initialize compensation tracking
-			status = &TaskCompensationStatus{
-				State:       CompensationPending,
-				Timestamp:   entry.Timestamp(),
-				MaxAttempts: MaxCompensationAttempts,
-			}
-
 		case CompensationAttemptedLogType:
-			if status != nil {
-				status.State = CompensationProcessing
-				status.Timestamp = entry.Timestamp()
-				status.Attempt = entry.AttemptNum() + 1 // Make 1-based for display
-			}
-
-		case CompensationPartialLogType:
-			if status != nil {
-				status.State = CompensationPartial
-				status.Timestamp = entry.Timestamp()
-				// Don't include attempt info for completed state
-			}
+			event.Status = CompensationProcessing
+			event.Attempt = entry.AttemptNum()
+			event.ID = fmt.Sprintf("comp_attempt_%s_%d", taskID, event.Attempt)
+			history = append(history, event)
 
 		case CompensationCompleteLogType:
-			if status != nil {
-				status.State = CompensationCompleted
-				status.Timestamp = entry.Timestamp()
-				// Don't include attempt info for completed state
-			}
+			event.Status = CompensationCompleted
+			event.Attempt = entry.AttemptNum()
+			event.ID = fmt.Sprintf("comp_completed_%s", taskID)
+			history = append(history, event)
+
+		case CompensationPartialLogType:
+			event.Status = CompensationPartial
+			event.Attempt = entry.AttemptNum()
+			event.ID = fmt.Sprintf("comp_completed_partially_%s", taskID)
+			history = append(history, event)
 
 		case CompensationExpiredLogType:
-			if status != nil {
-				status.State = CompensationExpired
-				status.Timestamp = entry.Timestamp()
-			}
+			event.Status = CompensationExpired
+			event.Attempt = entry.AttemptNum()
+			event.ID = fmt.Sprintf("comp_expired_%s", taskID)
+			history = append(history, event)
 
 		case CompensationFailureLogType:
-			if status != nil {
-				status.Attempt = entry.AttemptNum() + 1
-				status.Timestamp = entry.Timestamp()
-				if status.Attempt >= status.MaxAttempts {
-					status.State = CompensationFailed
-				} else {
-					status.State = CompensationProcessing
-				}
+			event.Status = CompensationFailed
+			event.Attempt = entry.AttemptNum()
+			event.ID = fmt.Sprintf("comp_fail_%s_%d", taskID, event.Attempt)
+
+			// Extract error message if present
+			var failure CompensationResult
+			if err := json.Unmarshal(entry.Value(), &failure); err == nil {
+				event.Error = failure.Error
 			}
+
+			history = append(history, event)
 		}
 	}
 
-	p.Logger.Debug().
-		Interface("status", status).
-		Str("taskID", taskID).
-		Msg("processing task compensation for orchestration view")
+	// Sort history by timestamp
+	sort.Slice(history, func(i, j int) bool {
+		return history[i].Timestamp.Before(history[j].Timestamp)
+	})
 
-	return status
+	p.Logger.Debug().
+		Interface("history", history).
+		Str("taskID", taskID).
+		Msg("process compensation history")
+
+	return history
 }
 
 func extractTask0Values(taskZeroJSON json.RawMessage) (task0Values, error) {

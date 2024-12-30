@@ -92,10 +92,9 @@ func (w *CompensationWorker) executeCompensation(ctx context.Context, candidate 
 	service := candidate.Service
 	compData := candidate.Compensation
 
-	w.attemptCounts[taskID]++
-	currentAttempt := w.attemptCounts[taskID]
-
 	operation := func() error {
+		w.attemptCounts[taskID]++
+
 		ttl := DefaultCompensationTTL
 		if compData.TTLMs > 0 {
 			ttl = time.Duration(compData.TTLMs) * time.Millisecond
@@ -111,7 +110,7 @@ func (w *CompensationWorker) executeCompensation(ctx context.Context, candidate 
 		if !serviceHealthy {
 			w.LogManager.Logger.Warn().
 				Str("serviceID", service.ID).
-				Int("attempt", currentAttempt).
+				Int("attempt", w.attemptCounts[taskID]).
 				Msg("Attempting compensation despite unhealthy service")
 		}
 
@@ -134,7 +133,7 @@ func (w *CompensationWorker) executeCompensation(ctx context.Context, candidate 
 				return nil
 			case ExecutionFailed:
 				// Continue retrying if within attempts limit
-				if currentAttempt >= MaxCompensationAttempts {
+				if w.attemptCounts[taskID] >= MaxCompensationAttempts {
 					return backoff.Permanent(fmt.Errorf("max compensation attempts reached: %w", execution.Error))
 				}
 				return execution.Error
@@ -163,7 +162,7 @@ func (w *CompensationWorker) executeCompensation(ctx context.Context, candidate 
 			taskID,
 			executionID,
 			task.Input,
-			currentAttempt,
+			w.attemptCounts[taskID],
 		); err != nil {
 			return err
 		}
@@ -173,7 +172,7 @@ func (w *CompensationWorker) executeCompensation(ctx context.Context, candidate 
 			w.LogManager.Logger.Error().
 				Err(err).
 				Str("taskID", taskID).
-				Int("attempt", currentAttempt).
+				Int("attempt", w.attemptCounts[taskID]).
 				Msg("Failed to send compensation task")
 			return err
 		}
@@ -199,7 +198,7 @@ func (w *CompensationWorker) executeCompensation(ctx context.Context, candidate 
 			taskID,
 			logType,
 			&compResult,
-			currentAttempt,
+			w.attemptCounts[taskID],
 		)
 	}
 
@@ -207,7 +206,7 @@ func (w *CompensationWorker) executeCompensation(ctx context.Context, candidate 
 		func(err error, duration time.Duration) {
 			w.LogManager.Logger.Info().
 				Str("taskID", taskID).
-				Int("attempt", currentAttempt).
+				Int("attempt", w.attemptCounts[taskID]).
 				Err(err).
 				Dur("retryAfter", duration).
 				Msg("Retrying compensation")
