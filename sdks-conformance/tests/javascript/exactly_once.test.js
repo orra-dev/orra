@@ -136,7 +136,7 @@ describe('Exactly-Once Execution Protocol', () => {
 		
 		for (const item of result.results) {
 			expect(item.type).toBe("task_result");
-			expect(item.result.count).toBe(1);
+			expect(item.result.task.count).toBe(1);
 		}
 		expect(executionCount).toBe(1);
 	}, 15000);

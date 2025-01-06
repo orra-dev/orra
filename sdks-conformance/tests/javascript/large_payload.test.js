@@ -136,6 +136,6 @@ describe('Large Payload Execution Protocol', () => {
 		
 		expect(result.status).toBe('completed');
 		const taskResult = result.results.find(r => r.type === 'task_result');
-		expect(taskResult.result.validatedSize).toBe(MAX_MESSAGE_SIZE);
+		expect(taskResult.result.task.validatedSize).toBe(MAX_MESSAGE_SIZE);
 	}, 20000);
 });
