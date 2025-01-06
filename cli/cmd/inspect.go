@@ -106,7 +106,7 @@ func newInspectCmd(opts *CliOpts) *cobra.Command {
 
 					// Print compensation history if present
 					if len(task.CompensationHistory) > 0 {
-						fmt.Printf("│ Compensating %s\n", strings.Repeat("─", 39))
+						fmt.Printf("│ Compensating %s\n", strings.Repeat("─", 37))
 
 						for _, comp := range task.CompensationHistory {
 							timestamp := comp.Timestamp.Format("15:04:05")
