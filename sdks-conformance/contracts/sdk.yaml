@@ -206,6 +206,82 @@ components:
             type: string
             description: Unique sdk message identifier
 
+    CompensationRequest:
+      name: CompensationRequest
+      title: Compensation execution request
+      payload:
+        type: object
+        required:
+          - type
+          - id
+          - input
+          - executionId
+          - idempotencyKey
+          - serviceId
+        properties:
+          type:
+            type: string
+            enum: [ compensation_request ]
+          id:
+            type: string
+            description: Original task identifier
+          input:
+            type: object
+            properties:
+              originalTask:
+                type: object
+                description: Original task that needs compensation
+              taskResult:
+                type: object
+                description: Result from the original task execution
+          executionId:
+            type: string
+          idempotencyKey:
+            type: string
+          serviceId:
+            type: string
+
+    CompensationResult:
+      name: CompensationResult
+      title: Compensation execution result
+      payload:
+        type: object
+        required:
+          - type
+          - taskId
+          - executionId
+          - serviceId
+          - idempotencyKey
+          - status
+        properties:
+          type:
+            type: string
+            enum: [ task_result ]
+          taskId:
+            type: string
+          executionId:
+            type: string
+          serviceId:
+            type: string
+          idempotencyKey:
+            type: string
+          status:
+            type: string
+            enum: [ completed, partial, failed, expired ]
+          partial:
+            type: object
+            properties:
+              completed:
+                type: array
+                items:
+                  type: string
+              remaining:
+                type: array
+                items:
+                  type: string
+          error:
+            type: string
+
 x-conformance-tests:
   service_lifecycle:
     description: Validates service registration and lifecycle
@@ -374,6 +450,71 @@ x-conformance-tests:
               - service_id_matches_stored: true
               - connection_restored: true
               - no_duplicate_registration: true
+
+  compensation_flow:
+    description: Validates compensation behavior for revertible services
+    steps:
+      - id: revertible_registration
+        description: Service registers with compensation enabled
+        action: register_service
+        input:
+          name: test-service
+          schema:
+            input:
+              type: object
+              properties:
+                data:
+                  type: string
+            output:
+              type: object
+              properties:
+                result:
+                  type: string
+          revertible: true
+          revertTTL: 3600000 # 1 hour
+        expect:
+          - type: service_registered
+            timeout: 5000
+            validate:
+              - revertible_enabled: true
+              - service_id_present: true
+
+      - id: compensation_execution
+        description: Handles compensation request correctly
+        action: process_task_then_compensate
+        input:
+          task_data: "test data"
+          force_compensation: true
+        expect:
+          - type: task_result
+            timeout: 5000
+            validate:
+              - result_present: true
+          - type: compensation_result
+            timeout: 5000
+            validate:
+              - compensation_attempted: true
+              - original_task_present: true
+              - task_result_present: true
+              - compensation_status: "completed"
+
+      - id: partial_compensation
+        description: Handles partial compensation reporting
+        action: process_task_then_compensate
+        input:
+          task_data: [ "item1", "item2", "item3" ]
+          partial_compensation: true
+        expect:
+          - type: task_result
+            timeout: 5000
+            validate:
+              - result_present: true
+          - type: compensation_result
+            timeout: 5000
+            validate:
+              - compensation_status: "partial"
+              - partial_completed_items_present: true
+              - partial_remaining_items_present: true
 
 x-sdk-requirements:
   connection:
