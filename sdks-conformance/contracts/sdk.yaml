@@ -13,6 +13,7 @@ info:
     - Message queueing during disconnection
     - Health monitoring via ping/pong
     - Proper error propagation
+    - Reliable compensation handling
     
     Task Execution Model:
     - SDKs are responsible for task execution and result reporting
@@ -20,6 +21,18 @@ info:
     - Long-running tasks may be retried multiple times by the control plane
     - SDKs should focus on maintaining exactly-once execution guarantees
     - The control plane is the source of truth for task lifecycle and completion status
+    
+    Compensation Model:
+    - Services can opt-in to compensation by registering as revertible
+    - Compensation is triggered automatically on orchestration failure
+    - Tasks are compensated in reverse chronological order
+    - Compensation supports automatic retries with exponential backoff
+    - Control plane manages compensation data and TTL
+    - Four compensation outcomes are supported:
+      * Complete: Full compensation succeeded
+      * Partial: Some items compensated (with progress tracking)
+      * Failed: Compensation failed after maximum retries
+      * Expired: Compensation TTL elapsed before execution
 
 servers:
   controlPlane:
