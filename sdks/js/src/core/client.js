@@ -393,7 +393,17 @@ class OrraSDK {
 		this.#inProgressTasks.set(idempotencyKey, { startTime });
 		
 		Promise.resolve(this.#taskHandler(task))
-			.then((result) => {
+			.then((taskResult) => {
+				const result = {
+					task: taskResult,
+					compensation: this.#revertible ? {
+						data: {
+							originalTask: task,
+							taskResult: taskResult
+						},
+						ttl: this.#revertTTL,
+					} : null
+				}
 				
 				const processingTime = Date.now() - startTime;
 				this.logger.trace('Task processing completed', {
@@ -405,22 +415,13 @@ class OrraSDK {
 				});
 				
 				this.#processedTasksCache.set(idempotencyKey, {
-					result,
+					result: result,
 					error: null,
 					timestamp: Date.now()
 				});
 				
 				this.#inProgressTasks.delete(idempotencyKey);
-				this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, {
-					task: result,
-					compensation: this.#revertible ? {
-						data: {
-							originalTask: task,
-							taskResult: result
-						},
-						ttl: this.#revertTTL,
-					} : null
-				});
+				this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, result);
 			})
 			.catch((error) => {
 				const processingTime = Date.now() - startTime;
