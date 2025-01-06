@@ -709,6 +709,15 @@ class OrraSDK {
 		}, 60 * 60 * 1000); // Run cleanup every hour
 	}
 	
+	isRevertible() {
+		return this.#revertible;
+	}
+	
+	getRevertTTL() {
+		if (!this.isRevertible()) return undefined;
+		return this.#revertTTL;
+	}
+	
 	revertHandler(handler) {
 		if (typeof handler !== 'function') {
 			throw new Error('Revert handler must be a function');
@@ -721,7 +730,7 @@ class OrraSDK {
 		if (typeof handler !== 'function') {
 			throw new Error('Start handler must be a function');
 		}
-		if(this.#revertible && !this.#revertHandler){
+		if (this.#revertible && !this.#revertHandler) {
 			throw new Error('onRevert handler is missing');
 		}
 		this.#taskHandler = handler;
@@ -887,6 +896,12 @@ const initOrraEntity = (type) => ({
 			},
 			get version() {
 				return sdk.version;
+			},
+			get revertible() {
+				return sdk.isRevertible();
+			},
+			get revertTTL() {
+				return sdk.getRevertTTL();
 			}
 		}
 	};
