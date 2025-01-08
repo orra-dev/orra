@@ -5,7 +5,7 @@
  */
 
 export class ConnectionManager {
-	constructor(serviceId, clientWs, controlPlaneWs, activeConnections, metrics, validator, webhookResults) {
+	constructor(serviceId, clientWs, controlPlaneWs, activeConnections, metrics, validator, webhookResults, compensationTestManager) {
 		this.serviceId = serviceId;
 		this.clientWs = clientWs;
 		this.controlPlaneWs = controlPlaneWs;
@@ -13,6 +13,7 @@ export class ConnectionManager {
 		this.metrics = metrics;
 		this.validator = validator;
 		this.webhookResults = webhookResults;
+		this.compensationTestManager = compensationTestManager;
 	}
 	
 	setupMessageHandlers() {
@@ -57,6 +58,8 @@ export class ConnectionManager {
 				this.updateTestResults('health_check', true);
 			} else if (this.isTestResult(payload)) {
 				this.handleTestResult(payload);
+			} else if (this.isCompensationFlowResult(payload)) {
+				this.handleCompensationTestResult(payload);
 			} else {
 				this.controlPlaneWs.send(JSON.stringify(msg));
 			}
@@ -91,6 +94,10 @@ export class ConnectionManager {
 			);
 	}
 	
+	isCompensationFlowResult(payload) {
+		return payload.type === 'task_result' && payload.executionId.includes('comp_test_');
+	}
+	
 	handleTestResult(payload) {
 		const testId = payload.executionId.split('__')[1];
 		const testResult = this.webhookResults.get(testId);
@@ -100,6 +107,20 @@ export class ConnectionManager {
 		testResult.results.push(payload);
 		testResult.status = 'completed';
 		this.webhookResults.set(testId, testResult);
+	}
+	
+	handleCompensationTestResult(payload) {
+		const testId = payload.executionId.split('__')[1];
+		const testResult = this.webhookResults.get(testId);
+		
+		if(!testResult) return;
+		const state = this.compensationTestManager.handleTaskResult(testId, payload);
+		if (state === 'completed') {
+			testResult.status = 'completed';
+			this.webhookResults.set(testId, testResult);
+		}
+		const afterTestResult = this.webhookResults.get(testId);
+		console.log(`handleCompensationTestResult afterTestResult`, JSON.stringify(afterTestResult));
 	}
 	
 	handleError(error) {

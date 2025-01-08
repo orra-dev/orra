@@ -9,11 +9,29 @@ import { ProtocolValidator } from './protocol-validator.js';
 import { MetricsCollector } from './metrics.js';
 import { ConnectionManager } from './conn-manager.js';
 import { TaskRequestSimulator } from './task-request-simulator.js';
+import { CompensationTestManager } from "./compensation-test-mgr.js";
+
+function  shouldSimulate(message) {
+	const execId = message?.executionId;
+	const mType = message?.type;
+	
+	const simulateRequest = mType === 'task_request' || mType === 'compensation_request';
+	const simulateTestCase = execId.startsWith('health_check__') ||
+		execId.startsWith('reconnect__') ||
+		execId.startsWith('queue__') ||
+		execId.startsWith('large_payload__') ||
+		execId.startsWith('mid_task__') ||
+		execId.startsWith('comp_test_');
+	
+	return simulateRequest && simulateTestCase;
+}
 
 export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookResults) {
 	const validator = new ProtocolValidator(sdkContractPath);
 	const activeConnections = new Map();
 	const metrics = new MetricsCollector();
+	const compensationTestManager = new CompensationTestManager(webhookResults);
+	
 	let shouldDisconnectNext = false;
 	
 	return {
@@ -45,7 +63,8 @@ export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookRe
 						activeConnections,
 						metrics,
 						validator,
-						webhookResults);
+						webhookResults,
+						compensationTestManager);
 					activeConnections.set(serviceId, manager);
 					manager.setupMessageHandlers();
 					console.log('Control plane WebSocket setupMessageHandlers completed!');
@@ -72,18 +91,18 @@ export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookRe
 				throw new Error(`No active connection for service ${serviceId}`);
 			}
 			
-			if (message.type === 'task_request') {
+			if (shouldSimulate(message)) {
 				const simulator = new TaskRequestSimulator(
 					serviceId,
 					message,
 					metrics,
 					activeConnections,
-					webhookResults
-				);
-				simulator.activate();
+					webhookResults,
+					compensationTestManager);
+				return simulator.activate();
 			}
 			
 			await manager.clientWs.send(JSON.stringify(message));
-		}
+		},
 	};
 }

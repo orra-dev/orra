@@ -480,23 +480,28 @@ x-conformance-tests:
               - service_id_present: true
 
       - id: compensation_execution
-        description: Handles compensation request correctly
-        action: process_task_then_compensate
+        description: Executes a sequence of tasks that trigger compensation
+        action: process_tasks_then_compensate
         input:
           task_data: "test data"
-          force_compensation: true
         expect:
           - type: task_result
             timeout: 5000
             validate:
               - result_present: true
+              - task_status: completed
+              - compensation_stored: true
+          - type: task_result
+            timeout: 5000
+            validate:
+              - error_present: true
+              - task_status: failed
           - type: compensation_result
             timeout: 5000
             validate:
-              - compensation_attempted: true
+              - status: completed
+              - execution_order: sequential
               - original_task_present: true
-              - task_result_present: true
-              - compensation_status: "completed"
 
       - id: partial_compensation
         description: Handles partial compensation reporting
