@@ -192,6 +192,7 @@ type Spec struct {
 	Format     string          `json:"format,omitempty"`
 	Minimum    int             `json:"minimum,omitempty"`
 	Maximum    int             `json:"maximum,omitempty"`
+	Items      *Spec           `json:"items,omitempty"`
 }
 
 type ServiceSchema struct {

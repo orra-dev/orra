@@ -16,12 +16,12 @@ func validateSpec(spec *Spec) v.Schema {
 	baseSchema := v.Schema{
 		v.F("type", spec.Type): v.All(
 			v.Nonzero[string]().Msg("type is required"),
-			v.In("object", "string", "number", "integer", "boolean").Msg("invalid type"),
+			v.In("object", "string", "number", "integer", "boolean", "array").Msg("invalid type"),
 		),
 	}
 
-	// Only validate properties if type is "object"
-	if spec.Type == "object" {
+	switch spec.Type {
+	case "object":
 		baseSchema[v.F("properties", spec.Properties)] = v.All(
 			v.Is(func(m map[string]Spec) bool {
 				return m != nil && len(m) > 0
@@ -35,6 +35,14 @@ func validateSpec(spec *Spec) v.Schema {
 				return schemas
 			}),
 		)
+	case "array":
+		if spec.Items == nil {
+			baseSchema[v.F("items", spec.Items)] = v.Is(func(i *Spec) bool {
+				return false
+			}).Msg("items is required for array type")
+		} else {
+			baseSchema[v.F("items", spec.Items)] = validateSpec(spec.Items)
+		}
 	}
 
 	return baseSchema
