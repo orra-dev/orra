@@ -118,6 +118,7 @@ export class ConnectionManager {
 		if (state === 'completed') {
 			testResult.status = 'completed';
 			this.webhookResults.set(testId, testResult);
+			this.compensationTestManager.reset()
 		}
 		const afterTestResult = this.webhookResults.get(testId);
 		console.log(`handleCompensationTestResult afterTestResult`, JSON.stringify(afterTestResult));

@@ -31,7 +31,13 @@ export class CompensationTestManager {
 			case 'compensation_started':
 				if (result?.result?.status === 'completed') {
 					this.state = 'completed';
-					this.recordTestEvent(testId, 'compensation_completed');
+					this.recordTestEvent(testId, 'compensation_completed', result.result);
+				} else if (result?.result?.status === 'partial') {
+					this.state = 'completed'; // Test is complete even with partial compensation
+					this.recordTestEvent(testId, 'compensation_partial', {
+						completed: result.result.partial.completed,
+						remaining: result.result.partial.remaining
+					});
 				}
 				break;
 		}
@@ -39,26 +45,41 @@ export class CompensationTestManager {
 		return this.state;
 	}
 	
-	recordTestEvent(testId, eventType) {
+	recordTestEvent(testId, eventType, data=null) {
 		const testResult = this.webhookResults.get(testId);
-		if (testResult) {
-			testResult.results.push({
-				type: eventType,
-				timestamp: new Date().toISOString()
-			});
-			if (eventType === 'compensation_completed') {
-				testResult.status = 'completed';
-			}
-			this.webhookResults.set(testId, testResult);
+		if (!testResult) return
+		
+		const event = {
+			type: eventType,
+			timestamp: new Date().toISOString()
+		};
+		
+		// Add extra data for partial compensation
+		if (data && eventType === 'compensation_partial') {
+			event.completed = data.completed;
+			event.remaining = data.remaining;
 		}
+		
+		testResult.results.push(event);
+		
+		// Mark test as completed for both full and partial compensation
+		if (eventType === 'compensation_completed' || eventType === 'compensation_partial') {
+			testResult.status = 'completed';
+		}
+		
+		this.webhookResults.set(testId, testResult);
 	}
 	
 	getSuccessfulTaskResult() {
 		return this.successfulTaskResult;
 	}
 	
-	activateCompensationStarted(){
+	activateCompensationStarted() {
 		this.state = 'compensation_started';
+	}
+	
+	reset() {
+		this.state = 'initial';
 	}
 }
 

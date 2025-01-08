@@ -173,4 +173,127 @@ describe('Compensation Execution', () => {
 		const compensation = result.results.find(r => r.type === 'compensation_completed');
 		expect(compensation).toBeTruthy();
 	}, 15000);
+	
+	test('partial compensation', async () => {
+		service = initService({
+			name: 'partial-comp-test-service',
+			orraUrl: TEST_HARNESS_URL,
+			orraKey: apiKey
+		});
+		
+		await service.register({
+			description: 'Service for testing partial compensation',
+			schema: {
+				input: {
+					type: 'object',
+					properties: {
+						operations: {
+							type: 'array',
+							items: { type: 'string' }
+						},
+						shouldSucceed: { type: 'boolean' },
+						shouldFail: { type: 'boolean' }
+					}
+				},
+				output: {
+					type: 'object',
+					properties: {
+						processed: { type: 'boolean' },
+						operations: {
+							type: 'array',
+							items: { type: 'string' }
+						}
+					}
+				}
+			},
+			revertible: true,
+			revertTTL: 3600000
+		});
+		
+		// Track processed operations for verification
+		const completedOperations =  ['op1', 'op2'];
+		const remainingOperations = ['op3', 'op4'];
+		
+		// Register compensation handler that reports partial completion
+		service.onRevert((originalTask, taskResult) => {
+			executionOrder.push('partial_compensation');
+			compensationReceived = { originalTask, taskResult };
+			
+			// Return partial completion status
+			return {
+				status: 'partial',
+				partial: {
+					completed: completedOperations,
+					remaining: remainingOperations
+				}
+			};
+		});
+		
+		// Register task handler
+		service.start(async (task) => {
+			if (task.input.shouldFail) {
+				executionOrder.push('task_failed');
+				throw new Error('Task configured to fail');
+			}
+			
+			executionOrder.push('task_succeeded');
+			return {
+				processed: true,
+				operations: task.input.operations
+			};
+		});
+		
+		// Trigger test
+		const testResponse = await fetch(`${TEST_HARNESS_URL}/conformance-tests`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				'Authorization': `Bearer ${apiKey}`
+			},
+			body: JSON.stringify({
+				serviceId: service.info.id,
+				testId: 'partial_compensation'
+			})
+		});
+		
+		expect(testResponse.ok).toBeTruthy();
+		const testResult = await testResponse.json();
+		
+		// Poll for completion
+		const result = await poll(async () => {
+			const webhookResult = await fetch(
+				`${TEST_HARNESS_URL}/webhook-test/results/${testResult.id}`,
+				{ headers: { 'Authorization': `Bearer ${apiKey}` } }
+			);
+			
+			if (webhookResult.ok) {
+				const data = await webhookResult.json();
+				return data.status === 'completed' ? data : null;
+			}
+			return null;
+		}, 15000, 1000);
+		
+		// Verify execution order
+		expect(executionOrder).toEqual([
+			'task_succeeded',
+			'task_failed',
+			'partial_compensation'
+		]);
+		
+		// Verify partial compensation result
+		expect(compensationReceived).toBeTruthy();
+		expect(compensationReceived.originalTask.input.operations).toEqual(['op1', 'op2', 'op3', 'op4']);
+		
+		// Verify test results
+		const successTask = result.results.find(r => r.type === 'first_task_completed');
+		expect(successTask).toBeTruthy();
+		
+		const failedTask = result.results.find(r => r.type === 'second_task_failed');
+		expect(failedTask).toBeTruthy();
+		
+		const compensation = result.results.find(r => r.type === 'compensation_partial');
+		expect(compensation).toBeTruthy();
+		expect(compensation.completed).toEqual(completedOperations);
+		expect(compensation.remaining).toEqual(remainingOperations);
+	}, 15000);
 });
