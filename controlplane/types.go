@@ -198,7 +198,6 @@ type Spec struct {
 type ServiceSchema struct {
 	Input  Spec `json:"input"`
 	Output Spec `json:"output"`
-	Revert Spec `json:"revert,omitempty"` // Optional revert specification
 }
 
 type ServiceInfo struct {
