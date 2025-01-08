@@ -559,16 +559,18 @@ class OrraSDK {
 					stackTrace: error.stack
 				});
 				
+				const errorResult = {
+					status: 'failed',
+					error: error.message
+				};
+				
 				this.#processedTasksCache.set(idempotencyKey, {
-					result: null,
-					error: error.message,
+					result: errorResult,
+					error: null,
 					timestamp: Date.now()
 				});
 				this.#inProgressTasks.delete(idempotencyKey);
-				this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, {
-					status: 'failed',
-					error: error.message
-				});
+				this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, errorResult);
 			});
 	}
 	

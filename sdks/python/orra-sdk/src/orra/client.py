@@ -12,7 +12,10 @@ from datetime import datetime, timezone
 
 import httpx
 
-from .types import PersistenceConfig, T_Input, T_Output
+from .types import (
+    PersistenceConfig, T_Input, T_Output, CompensationStatus,
+    CompensationResult, RevertTask
+)
 from .persistence import PersistenceManager
 from .exceptions import OrraError, ServiceRegistrationError, ConnectionError
 from .logger import OrraLogger
@@ -71,6 +74,7 @@ class OrraSDK:
         self.version: int = 0
         self._ws: Optional[websockets.WebSocketClientProtocol] = None
         self._task_handler: Optional[Callable] = None
+        self._revert_handler: Optional[Callable] = None
         self._message_queue: asyncio.Queue = asyncio.Queue()
         self._pending_messages: Dict[str, Any] = {}
         self._processed_tasks_cache: Dict[str, Any] = {}
@@ -98,13 +102,18 @@ class OrraSDK:
             description: str,
             input_model: type[T_Input],
             output_model: type[T_Output],
-            kind: str
+            kind: str,
+            *,
+            revertible: bool = False
     ) -> None:
         """Register service with control plane"""
         # Load existing service ID if any
         self.service_id = await self._persistence.load_service_id()
 
-        self.logger.debug("Registering service", name=name, existing_service_id=self.service_id)
+        self.logger.debug("Registering service",
+                          name=name,
+                          existing_service_id=self.service_id,
+                          revertible=revertible)
 
         try:
             # Convert Pydantic models to JSON schema
@@ -120,7 +129,8 @@ class OrraSDK:
                     "name": name,
                     "description": description,
                     "schema": schema,
-                    "version": self.version
+                    "version": self.version,
+                    "revertible": revertible,
                 }
             )
             response.raise_for_status()
@@ -194,6 +204,8 @@ class OrraSDK:
                         await self._handle_ack(data)
                     elif message_type == "task_request":
                         await self._handle_task(data)
+                    elif message_type == "compensation_request":
+                        await self._handle_compensation(data)
                     else:
                         self.logger.warn(f"Unknown message type: {message_type}")
 
@@ -334,6 +346,150 @@ class OrraSDK:
         finally:
             del self._in_progress_tasks[idempotency_key]
 
+    async def _handle_compensation(self, data: Dict[str, Any]) -> None:
+        """Handle incoming compensation request"""
+        task_id = data.get("id")
+        execution_id = data.get("executionId")
+        idempotency_key = data.get("idempotencyKey")
+        comp_input = data.get("input", {})
+
+        self.logger.debug(
+            "Compensation handling initiated",
+            taskId=task_id,
+            executionId=execution_id,
+            idempotencyKey=idempotency_key,
+            handlerPresent=bool(self._revert_handler)
+        )
+
+        if not self._revert_handler:
+            self.logger.warn(
+                "Received compensation but no revert handler is set",
+                idempotencyKey=idempotency_key,
+                taskId=task_id
+            )
+            return
+
+        # Check cache first
+        if cached_result := self._processed_tasks_cache.get(idempotency_key):
+            self.logger.debug(
+                "Cache hit found",
+                taskId=task_id,
+                idempotencyKey=idempotency_key,
+                resultAge=time.time() - cached_result["timestamp"]
+            )
+            await self._send_task_result(
+                task_id=task_id,
+                idempotency_key=idempotency_key,
+                execution_id=execution_id,
+                result=cached_result["result"],
+                error=cached_result.get("error")
+            )
+            return
+
+        # Check if already in progress
+        if self._in_progress_tasks.get(idempotency_key):
+            self.logger.debug(
+                "Compensation already in progress",
+                taskId=task_id,
+                idempotencyKey=idempotency_key
+            )
+            await self._send_task_status(
+                task_id=task_id,
+                idempotency_key=idempotency_key,
+                execution_id=execution_id,
+                status="in_progress"
+            )
+            return
+
+        # Process new compensation
+        start_time = time.time()
+        self._in_progress_tasks[idempotency_key] = {"start_time": start_time}
+
+        try:
+            # Create RevertTask from compensation input
+            revert_task = RevertTask(
+                original_task=comp_input["originalTask"],
+                task_result=comp_input["taskResult"]
+            )
+
+            # Execute revert handler
+            result = await self._revert_handler(revert_task)
+
+            processing_time = time.time() - start_time
+            self.logger.debug(
+                "Compensation processing completed",
+                taskId=task_id,
+                executionId=execution_id,
+                processingTimeMs=processing_time * 1000
+            )
+
+            # Validate and process compensation result
+            result = self._process_compensation_result(result)
+
+            # Cache successful result
+            self._processed_tasks_cache[idempotency_key] = {
+                "result": result,
+                "timestamp": time.time()
+            }
+
+            await self._send_task_result(
+                task_id=task_id,
+                idempotency_key=idempotency_key,
+                execution_id=execution_id,
+                result=result
+            )
+
+        except Exception as e:
+            processing_time = time.time() - start_time
+            self.logger.error(
+                "Compensation processing failed",
+                taskId=task_id,
+                executionId=execution_id,
+                processingTimeMs=processing_time * 1000,
+                error=str(e),
+                errorType=type(e).__name__
+            )
+
+            error_result = CompensationResult(
+                status=CompensationStatus.FAILED,
+                error=str(e)
+            )
+
+            # Cache error result
+            self._processed_tasks_cache[idempotency_key] = {
+                "result": error_result.model_dump(),
+                "timestamp": time.time()
+            }
+
+            await self._send_task_result(
+                task_id=task_id,
+                idempotency_key=idempotency_key,
+                execution_id=execution_id,
+                result=error_result.model_dump()
+            )
+
+        finally:
+            del self._in_progress_tasks[idempotency_key]
+
+    def _process_compensation_result(self, result: CompensationResult) -> Dict[str, Any]:
+        """Process and validate compensation result"""
+        if result.status == CompensationStatus.PARTIAL:
+            if not result.partial:
+                raise OrraError("Partial compensation status requires partial completion details")
+
+            return {
+                "status": "partial",
+                "partial": {
+                    "completed": result.partial.completed,
+                    "remaining": result.partial.remaining
+                }
+            }
+
+        return {
+            "status": result.status,
+            "error": result.error if result.error else None
+        }
+
     async def _send_task_result(
             self,
             task_id: str,
@@ -389,7 +545,7 @@ class OrraSDK:
     async def _send_pong(self) -> None:
         """Send pong response"""
         if self._ws and self._is_connected.is_set():
-            message = { "id": "pong", "payload": { "type": 'pong', "serviceId": self.service_id } }
+            message = {"id": "pong", "payload": {"type": 'pong', "serviceId": self.service_id}}
             await self._ws.send(json.dumps(message))
 
     async def _handle_ack(self, data: dict) -> None:
