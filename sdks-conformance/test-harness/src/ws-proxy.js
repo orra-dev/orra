@@ -11,7 +11,7 @@ import { ConnectionManager } from './conn-manager.js';
 import { TaskRequestSimulator } from './task-request-simulator.js';
 import { CompensationTestManager } from "./compensation-test-mgr.js";
 
-function  shouldSimulate(message) {
+function shouldSimulate(message) {
 	const execId = message?.executionId;
 	const mType = message?.type;
 	
