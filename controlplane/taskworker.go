@@ -12,7 +12,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -20,7 +19,7 @@ import (
 )
 
 var (
-	maxRetries = 5
+	maxRetries = 3
 )
 
 type RetryableError struct {
@@ -28,7 +27,7 @@ type RetryableError struct {
 }
 
 func (e RetryableError) Error() string {
-	return fmt.Sprintf("retryable error: %v", e.Err)
+	return fmt.Sprintf("%v", e.Err)
 }
 
 func NewTaskWorker(
@@ -63,7 +62,8 @@ func NewTaskWorker(
 			Processed:       make(map[string]bool),
 			DependencyState: make(map[string]json.RawMessage),
 		},
-		backOff: expBackoff,
+		pauseStart: time.Time{},
+		backOff:    expBackoff,
 	}
 }
 
@@ -169,6 +169,18 @@ func (w *TaskWorker) processEntry(ctx context.Context, entry LogEntry, orchestra
 		return w.LogManager.AppendTaskFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error(), w.consecutiveErrs, false)
 	}
 
+	if err := w.processTaskResult(orchestrationID, taskOutput); err != nil {
+		w.LogManager.Logger.Error().Err(err).Msgf("Cannot process task %s result for orchestration %s", w.TaskID, orchestrationID)
+		return w.LogManager.AppendTaskFailureToLog(
+			orchestrationID,
+			w.TaskID,
+			w.Service.ID,
+			err.Error(),
+			w.consecutiveErrs,
+			false,
+		)
+	}
+
 	// Mark this entry as processed
 	w.logState.Processed[entry.ID()] = true
 
@@ -180,52 +192,6 @@ func (w *TaskWorker) processEntry(ctx context.Context, entry LogEntry, orchestra
 	if err := w.LogManager.MarkTaskCompleted(orchestrationID, entry.ID(), completedTs); err != nil {
 		w.LogManager.Logger.Error().Err(err).Msgf("Cannot mark task %s completed for orchestration %s", w.TaskID, orchestrationID)
 		return w.LogManager.AppendTaskFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error(), w.consecutiveErrs, false)
-	}
-
-	return w.processTaskResult(orchestrationID, taskOutput)
-}
-
-func (w *TaskWorker) processTaskResult(orchestrationID string, output json.RawMessage) error {
-	var resultPayload TaskResultPayload
-	if err := json.Unmarshal(output, &resultPayload); err != nil {
-		return w.LogManager.AppendTaskFailureToLog(
-			orchestrationID,
-			w.TaskID,
-			w.Service.ID,
-			fmt.Sprintf("failed to unmarshal task result: %v", err),
-			w.consecutiveErrs,
-			false,
-		)
-	}
-
-	// Store the task result first
-	w.LogManager.AppendToLog(
-		orchestrationID,
-		"task_output",
-		w.TaskID,
-		resultPayload.Task,
-		w.Service.ID,
-		w.consecutiveErrs,
-	)
-
-	if !w.Service.Revertible {
-		return nil
-	}
-
-	if err := w.LogManager.AppendCompensationDataStored(
-		orchestrationID,
-		w.TaskID,
-		w.Service.ID,
-		resultPayload.Compensation,
-	); err != nil {
-		return w.LogManager.AppendTaskFailureToLog(
-			orchestrationID,
-			w.TaskID,
-			w.Service.ID,
-			fmt.Sprintf("failed to store compensation data: %v", err),
-			w.consecutiveErrs,
-			false,
-		)
 	}
 
 	return nil
@@ -245,13 +211,42 @@ func (w *TaskWorker) executeTaskWithRetry(ctx context.Context, orchestrationID s
 		result, err = w.tryExecute(ctx, orchestrationID)
 		if err != nil {
 			w.consecutiveErrs++
-			if w.consecutiveErrs > maxRetries {
+			if w.stopRetryingTask() {
 				return backoff.Permanent(fmt.Errorf("too many consecutive failures: %w", err))
 			}
-			if isRetryableError(err) {
-				return RetryableError{Err: err}
+			if err := w.LogManager.AppendTaskStatusEvent(
+				orchestrationID,
+				w.TaskID,
+				w.Service.ID,
+				Failed,
+				err,
+				time.Now().UTC(),
+				w.consecutiveErrs,
+			); err != nil {
+				w.LogManager.Logger.Error().Err(err).Msg("Failed to append failed status after retry")
 			}
-			return backoff.Permanent(err)
+
+			if _, ok := err.(RetryableError); !ok {
+				return backoff.Permanent(err)
+			}
+
+			if err := w.LogManager.AppendTaskStatusEvent(
+				orchestrationID,
+				w.TaskID,
+				w.Service.ID,
+				Processing,
+				nil,
+				time.Now().UTC(),
+				w.consecutiveErrs,
+			); err != nil {
+				w.LogManager.Logger.Error().Err(err).Msg("Failed to append processing status after retry")
+			}
+
+			return err
+			//if _, ok := err.(RetryableError); ok {
+			//	return err
+			//}
+			//return backoff.Permanent(err)
 		}
 
 		// Reset consecutive errors on success
@@ -277,15 +272,86 @@ func (w *TaskWorker) executeTaskWithRetry(ctx context.Context, orchestrationID s
 	return result, nil
 }
 
+func (w *TaskWorker) processTaskResult(orchestrationID string, output json.RawMessage) error {
+	var resultPayload TaskResultPayload
+	if err := json.Unmarshal(output, &resultPayload); err != nil {
+		return fmt.Errorf(
+			"failed to unmarshal task [%s] result for orchestration [%s]: %v",
+			w.TaskID,
+			orchestrationID,
+			err,
+		)
+	}
+
+	// Store the task result first
+	w.LogManager.AppendToLog(
+		orchestrationID,
+		"task_output",
+		w.TaskID,
+		resultPayload.Task,
+		w.Service.ID,
+		w.consecutiveErrs,
+	)
+
+	if !w.Service.Revertible {
+		return nil
+	}
+
+	if err := w.LogManager.AppendCompensationDataStored(
+		orchestrationID,
+		w.TaskID,
+		w.Service.ID,
+		resultPayload.Compensation,
+	); err != nil {
+		return fmt.Errorf(
+			"failed to store compensation data for task [%s] result for orchestration [%s]: %v",
+			w.TaskID,
+			orchestrationID,
+			err,
+		)
+	}
+
+	return nil
+}
+
+func (w *TaskWorker) stopRetryingTask() bool {
+	return w.consecutiveErrs > maxRetries
+}
+
 func (w *TaskWorker) checkServiceHealth(orchestrationID string) error {
-	if w.isServiceHealthy() {
+	isServiceHealthy := w.isServiceHealthy()
+	w.LogManager.Logger.
+		Trace().
+		Str("TaskID", w.TaskID).
+		Bool("isServiceHealthy", isServiceHealthy).
+		Msg("checkServiceHealth: isServiceHealthy")
+
+	if isServiceHealthy && !w.pauseStart.IsZero() {
 		// Reset pause tracking when service is healthy
+		if err := w.LogManager.AppendTaskStatusEvent(
+			orchestrationID,
+			w.TaskID,
+			w.Service.ID,
+			Processing,
+			nil,
+			time.Now().UTC(),
+			w.consecutiveErrs,
+		); err != nil {
+			w.LogManager.Logger.Error().Err(err).Msg("Failed to append processing status after paused status")
+		}
+
 		w.pauseStart = time.Time{}
 		return nil
 	}
 
 	// Start tracking pause time if not already tracking
 	if w.pauseStart.IsZero() {
+		w.LogManager.Logger.
+			Trace().
+			Str("TaskID", w.TaskID).
+			Bool("isServiceHealthy", isServiceHealthy).
+			Msg("checkServiceHealth: START PAUSE")
+
 		w.pauseStart = time.Now().UTC()
 		if err := w.LogManager.AppendTaskStatusEvent(
 			orchestrationID,
@@ -302,9 +368,21 @@ func (w *TaskWorker) checkServiceHealth(orchestrationID string) error {
 
 	// Check if we've exceeded MaxServiceDowntime
 	if time.Since(w.pauseStart) >= w.HealthCheckGracePeriod {
+		w.LogManager.Logger.
+			Trace().
+			Str("TaskID", w.TaskID).
+			Bool("isServiceHealthy", isServiceHealthy).
+			Msg("checkServiceHealth: EXCEEDED MaxServiceDowntime - TERMINATE TASK")
+
 		return backoff.Permanent(fmt.Errorf("service %s remained unhealthy while exceeding maximum duration of %v",
 			w.Service.ID, w.HealthCheckGracePeriod))
 	}
+
+	w.LogManager.Logger.
+		Trace().
+		Str("TaskID", w.TaskID).
+		Bool("isServiceHealthy", isServiceHealthy).
+		Msg("checkServiceHealth: WITHIN MaxServiceDowntime - TRY Again using RetryableError")
 
 	return RetryableError{Err: fmt.Errorf("service %s is not healthy", w.Service.ID)}
 }
@@ -321,17 +399,54 @@ func (w *TaskWorker) tryExecute(ctx context.Context, orchestrationID string) (js
 
 	// If there's an existing execution
 	if !isNewExecution {
-		switch result.State {
-		case ExecutionCompleted:
+		switch {
+		case result.State == ExecutionCompleted:
+			w.LogManager.Logger.
+				Trace().
+				Str("orchestrationID", orchestrationID).
+				Str("TaskID", w.TaskID).
+				Bool("isNewExecution", isNewExecution).
+				Str("State", "ExecutionCompleted").
+				Msg("Checked for existing task worker execution")
 			return result.Result, nil
-		case ExecutionFailed:
-			return nil, result.Error
-		case ExecutionPaused:
+		case result.State == ExecutionFailed:
+			w.LogManager.Logger.
+				Trace().
+				Str("orchestrationID", orchestrationID).
+				Str("TaskID", w.TaskID).
+				Bool("isNewExecution", isNewExecution).
+				Str("State", "ExecutionFailed").
+				Msg("Checked for existing task worker execution")
+			return nil, RetryableError{Err: result.Error}
+		case result.State == ExecutionPaused:
 			// Allow retrying if execution was paused
+			w.LogManager.Logger.
+				Trace().
+				Str("orchestrationID", orchestrationID).
+				Str("TaskID", w.TaskID).
+				Bool("isNewExecution", isNewExecution).
+				Str("State", "ExecutionPaused").
+				Msg("Checked for existing task worker execution")
+
 			if _, resumed := w.Service.IdempotencyStore.ResumeExecution(idempotencyKey); !resumed {
+				w.LogManager.Logger.
+					Trace().
+					Str("orchestrationID", orchestrationID).
+					Str("TaskID", w.TaskID).
+					Bool("isNewExecution", isNewExecution).
+					Str("State", "ExecutionPaused").
+					Msg("Force resume using RetryableError when checking for existing task worker execution")
+
 				return nil, RetryableError{Err: fmt.Errorf("execution is paused")}
 			}
-		case ExecutionInProgress:
+		case result.State == ExecutionInProgress:
+			w.LogManager.Logger.
+				Trace().
+				Str("orchestrationID", orchestrationID).
+				Str("TaskID", w.TaskID).
+				Bool("isNewExecution", isNewExecution).
+				Str("State", "ExecutionInProgress").
+				Msg("Checked for existing task worker execution - DO NOTHING")
 			// do nothing
 		}
 	}
@@ -363,16 +478,35 @@ func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string, ke
 		Status:          Processing,
 	}
 
+	w.LogManager.Logger.
+		Trace().
+		Str("orchestrationID", orchestrationID).
+		Str("TaskID", w.TaskID).
+		Str("ExecutionID", executionID).
+		Str("IdempotencyKey", string(key)).
+		Str("ServiceName", w.Service.Name).
+		Msg("Executing task request - about to send task")
+
 	if err := w.LogManager.controlPlane.WebSocketManager.SendTask(w.Service.ID, task); err != nil {
+		w.LogManager.Logger.
+			Trace().
+			Str("orchestrationID", orchestrationID).
+			Str("TaskID", w.TaskID).
+			Str("ExecutionID", executionID).
+			Str("IdempotencyKey", string(key)).
+			Str("ServiceName", w.Service.Name).
+			Err(err).
+			Msg("Failed to send task request to service - trying again using RetryableError")
+
 		// Pause execution before returning error
 		w.Service.IdempotencyStore.PauseExecution(key)
 		return nil, RetryableError{Err: fmt.Errorf("failed to send task: %w", err)}
 	}
 
-	return w.waitForResult(ctx, key)
+	return w.waitForResult(ctx, key, executionID)
 }
 
-func (w *TaskWorker) waitForResult(ctx context.Context, key IdempotencyKey) (json.RawMessage, error) {
+func (w *TaskWorker) waitForResult(ctx context.Context, key IdempotencyKey, executionID string) (json.RawMessage, error) {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -385,23 +519,74 @@ func (w *TaskWorker) waitForResult(ctx context.Context, key IdempotencyKey) (jso
 			return nil, ctx.Err()
 
 		case <-maxWait:
+			w.LogManager.Logger.
+				Trace().
+				Str("TaskID", w.TaskID).
+				Str("IdempotencyKey", string(key)).
+				Str("IdempotencyOperation", "PauseExecution(key)").
+				Msg("Wait for Result: Max Wait has been reached - Try again with RetryableError")
+
 			w.Service.IdempotencyStore.PauseExecution(key)
 			return nil, RetryableError{Err: fmt.Errorf("task execution timed out waiting for result")}
 
 		case <-ticker.C:
+			w.LogManager.Logger.
+				Trace().
+				Str("TaskID", w.TaskID).
+				Str("IdempotencyKey", string(key)).
+				Str("IdempotencyOperation", "GetExecutionWithResult(key)").
+				Msg("Wait for Result: What is the state of the current result")
+
 			result, exists := w.Service.IdempotencyStore.GetExecutionWithResult(key)
 			if !exists {
+				w.LogManager.Logger.
+					Trace().
+					Str("TaskID", w.TaskID).
+					Str("IdempotencyKey", string(key)).
+					Str("IdempotencyOperation", "GetExecutionWithResult(key)").
+					Msg("Wait for Result: NO RESULT FOUND - Try again with RetryableError")
+
 				return nil, RetryableError{Err: fmt.Errorf("execution not found")}
 			}
 
-			switch result.State {
-			case ExecutionCompleted:
+			switch {
+			case result.State == ExecutionCompleted:
+				w.LogManager.Logger.
+					Trace().
+					Str("TaskID", w.TaskID).
+					Str("IdempotencyKey", string(key)).
+					Str("State", "ExecutionCompleted").
+					Msg("Wait for Result: Done")
+
 				return result.Result, nil
-			case ExecutionFailed:
-				return nil, result.Error
-			case ExecutionPaused:
+			case result.State == ExecutionFailed && result.ExecutionID == executionID:
+				w.LogManager.Logger.
+					Trace().
+					Str("TaskID", w.TaskID).
+					Str("IdempotencyKey", string(key)).
+					Str("ExecutionID", executionID).
+					Str("State", "ExecutionFailed").
+					Msg("Wait for Result: Failed for executionID - Try again with RetryableError")
+				return nil, RetryableError{Err: result.Error}
+			case result.State == ExecutionPaused:
+				w.LogManager.Logger.
+					Trace().
+					Str("TaskID", w.TaskID).
+					Str("IdempotencyKey", string(key)).
+					Str("ExecutionID", executionID).
+					Str("State", "ExecutionPaused").
+					Msg("Wait for Result: Try again with RetryableError")
+
 				return nil, RetryableError{Err: fmt.Errorf("execution is paused")}
-			case ExecutionInProgress:
+			case result.State == ExecutionInProgress:
+				w.LogManager.Logger.
+					Trace().
+					Str("TaskID", w.TaskID).
+					Str("IdempotencyKey", string(key)).
+					Str("ExecutionID", executionID).
+					Str("State", "ExecutionInProgress").
+					Msg("Wait for Result: DO NOTHING")
+
 				// do nothing
 			}
 		}
@@ -421,9 +606,10 @@ func (w *TaskWorker) renewLeaseWithHealthCheck(ctx context.Context, key Idempote
 		case <-ticker.C:
 			// Check service health first
 			if !w.isServiceHealthy() {
-				w.LogManager.Logger.Debug().
+				w.LogManager.Logger.
+					Trace().
 					Str("TaskID", w.TaskID).
-					Msg("Stopping lease renewal due to unhealthy service")
+					Msg("Stopping lease renewal by pausing execution on IdempotencyStore due to unhealthy service")
 
 				w.Service.IdempotencyStore.PauseExecution(key)
 				return
@@ -433,7 +619,7 @@ func (w *TaskWorker) renewLeaseWithHealthCheck(ctx context.Context, key Idempote
 			renewed := w.Service.IdempotencyStore.RenewLease(key, executionID)
 			if !renewed {
 				// If we couldn't renew, the execution might be paused or taken over
-				w.LogManager.Logger.Debug().
+				w.LogManager.Logger.Trace().
 					Str("TaskID", w.TaskID).
 					Msg("Lease renewal failed, stopping renewal routine")
 				return
@@ -463,19 +649,6 @@ func containsAll(s map[string]json.RawMessage, e map[string]struct{}) bool {
 
 func (w *TaskWorker) isServiceHealthy() bool {
 	return w.LogManager.controlPlane.WebSocketManager.IsServiceHealthy(w.Service.ID)
-}
-
-func isRetryableError(err error) bool {
-	if _, ok := err.(RetryableError); ok {
-		return true
-	}
-
-	// Otherwise check error message patterns
-	errorMsg := strings.ToLower(err.Error())
-	return strings.Contains(errorMsg, "task execution timed out") ||
-		//strings.Contains(errorMsg, "failed to send task") ||
-		strings.Contains(errorMsg, "failed to read result") ||
-		strings.Contains(errorMsg, "rate limit exceeded")
 }
 
 func (w *TaskWorker) generateIdempotencyKey(orchestrationID string) IdempotencyKey {

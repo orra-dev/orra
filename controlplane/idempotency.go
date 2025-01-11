@@ -68,7 +68,7 @@ func (s *IdempotencyStore) InitializeExecution(key IdempotencyKey, executionID s
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	now := time.Now()
+	now := time.Now().UTC()
 
 	if execution, exists := s.executions[key]; exists {
 		switch execution.State {
@@ -114,7 +114,7 @@ func (s *IdempotencyStore) RenewLease(key IdempotencyKey, executionID string) bo
 	if execution, exists := s.executions[key]; exists &&
 		execution.State == ExecutionInProgress &&
 		execution.ExecutionID == executionID {
-		execution.LeaseExpiry = time.Now().Add(defaultLeaseDuration)
+		execution.LeaseExpiry = time.Now().UTC().Add(defaultLeaseDuration)
 		return true
 	}
 	return false
@@ -138,7 +138,7 @@ func (s *IdempotencyStore) ResumeExecution(key IdempotencyKey) (*Execution, bool
 	if execution, exists := s.executions[key]; exists &&
 		execution.State == ExecutionPaused {
 		execution.State = ExecutionInProgress
-		execution.LeaseExpiry = time.Now().Add(defaultLeaseDuration)
+		execution.LeaseExpiry = time.Now().UTC().Add(defaultLeaseDuration)
 		return execution, true
 	}
 	return nil, false
@@ -155,7 +155,7 @@ func (s *IdempotencyStore) UpdateExecutionResult(key IdempotencyKey, result json
 		if err != nil {
 			execution.State = ExecutionFailed
 		}
-		execution.Timestamp = time.Now()
+		execution.Timestamp = time.Now().UTC()
 	}
 }
 
@@ -187,7 +187,7 @@ func (s *IdempotencyStore) cleanup() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	threshold := time.Now().Add(-s.ttl)
+	threshold := time.Now().UTC().Add(-s.ttl)
 	for key, execution := range s.executions {
 		if execution.Timestamp.Before(threshold) {
 			delete(s.executions, key)
