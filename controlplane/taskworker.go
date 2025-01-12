@@ -45,7 +45,7 @@ func NewTaskWorker(
 	expBackoff.MaxInterval = 30 * time.Second    // Cap maximum delay at 30 seconds
 	expBackoff.Multiplier = 2.0                  // Double the delay each time
 	expBackoff.RandomizationFactor = 0.1         // Add some jitter
-	expBackoff.MaxElapsedTime = 5 * time.Minute  // Total time to keep retrying
+	expBackoff.MaxElapsedTime = 0                // Use consecutiveErrs, timeout, healthCheckGracePeriod for permanent backoff
 
 	// Reset timer to apply our changes
 	expBackoff.Reset()
@@ -215,7 +215,7 @@ func (w *TaskWorker) executeTaskWithRetry(ctx context.Context, orchestrationID s
 		var err error
 		result, err = w.tryExecute(ctx, orchestrationID)
 		if err != nil {
-			if w.triggerExecutionPause(err) {
+			if w.triggerPauseExecution(err) {
 				return err
 			}
 
@@ -268,7 +268,7 @@ func (w *TaskWorker) executeTaskWithRetry(ctx context.Context, orchestrationID s
 	return result, nil
 }
 
-func (w *TaskWorker) triggerExecutionPause(err error) bool {
+func (w *TaskWorker) triggerPauseExecution(err error) bool {
 	if _, ok := err.(RetryableError); !ok {
 		return false
 	}
@@ -399,6 +399,7 @@ func (w *TaskWorker) tryExecute(ctx context.Context, orchestrationID string) (js
 			logger.Trace().Str("State", "ExecutionCompleted").Msg("OLD EXECUTION")
 			return result.Result, nil
 		case result.State == ExecutionFailed:
+			w.Service.IdempotencyStore.ResetFailedExecution(idempotencyKey)
 			logger.Trace().Str("State", "ExecutionFailed").Msg("OLD EXECUTION")
 		case result.State == ExecutionPaused:
 			logger.Trace().Str("State", "ExecutionPaused").Msg("OLD EXECUTION")
@@ -502,7 +503,6 @@ func (w *TaskWorker) waitForResult(ctx context.Context, key IdempotencyKey, exec
 		case <-ctx.Done():
 			logger.Trace().Msg("Task request cancelled - ctx.Done()")
 			w.Service.IdempotencyStore.PauseExecution(key)
-			//w.Service.IdempotencyStore.ClearResult(key) - makes sense here, will test afterward
 			return nil, ctx.Err()
 
 		case <-maxWait:
@@ -524,8 +524,11 @@ func (w *TaskWorker) waitForResult(ctx context.Context, key IdempotencyKey, exec
 				logger.Trace().Str("State", "ExecutionCompleted").Msg("Completed with result")
 				return result.Result, nil
 			case result.State == ExecutionFailed:
-				logger.Trace().Str("State", "ExecutionFailed").Msg("Failed - RETRY")
-				return nil, RetryableError{Err: result.Error}
+				if err, b := result.GetFailure(w.consecutiveErrs); b {
+					logger.Trace().Str("State", "ExecutionFailed").Msg("Failed - RETRY")
+					return nil, RetryableError{Err: err}
+				}
+				logger.Trace().Str("State", "ExecutionFailed").Msg("Failed but no failure entry- DO NOTHING")
 			case result.State == ExecutionPaused:
 				logger.Trace().Str("State", "ExecutionPaused").Msg("PAUSED - Trigger Pause")
 				return nil, RetryableError{Err: fmt.Errorf(PauseExecutionCode)}

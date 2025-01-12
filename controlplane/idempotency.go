@@ -42,11 +42,22 @@ type IdempotencyStore struct {
 type Execution struct {
 	ExecutionID string          `json:"executionId"`
 	Result      json.RawMessage `json:"result,omitempty"`
-	Error       error           `json:"error,omitempty"`
+	Failures    []error         `json:"error,omitempty"`
 	State       ExecutionState  `json:"state"`
 	Timestamp   time.Time       `json:"timestamp"`
 	StartedAt   time.Time       `json:"startedAt"`
 	LeaseExpiry time.Time       `json:"leaseExpiry"`
+}
+
+func (e *Execution) pushFailure(err error) {
+	e.Failures = append(e.Failures, err)
+}
+
+func (e *Execution) GetFailure(index int) (error, bool) {
+	if index >= 0 && index < len(e.Failures) {
+		return e.Failures[index], true
+	}
+	return nil, false
 }
 
 func NewIdempotencyStore(ttl time.Duration) *IdempotencyStore {
@@ -144,13 +155,26 @@ func (s *IdempotencyStore) ResumeExecution(key IdempotencyKey) (*Execution, bool
 	return nil, false
 }
 
+func (s *IdempotencyStore) ResetFailedExecution(key IdempotencyKey) (*Execution, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if execution, exists := s.executions[key]; exists &&
+		execution.State == ExecutionFailed {
+		execution.State = ExecutionInProgress
+		execution.LeaseExpiry = time.Now().UTC().Add(defaultLeaseDuration)
+		return execution, true
+	}
+	return nil, false
+}
+
 func (s *IdempotencyStore) UpdateExecutionResult(key IdempotencyKey, result json.RawMessage, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if execution, exists := s.executions[key]; exists {
 		execution.Result = result
-		execution.Error = err
+		execution.pushFailure(err)
 		execution.State = ExecutionCompleted
 		if err != nil {
 			execution.State = ExecutionFailed
@@ -167,7 +191,7 @@ func (s *IdempotencyStore) GetExecutionWithResult(key IdempotencyKey) (*Executio
 		return &Execution{
 			ExecutionID: result.ExecutionID,
 			Result:      result.Result,
-			Error:       result.Error,
+			Failures:    result.Failures,
 			State:       result.State,
 			Timestamp:   result.Timestamp,
 			StartedAt:   result.StartedAt,
