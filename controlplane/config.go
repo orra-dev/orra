@@ -31,6 +31,7 @@ const (
 	CompensationFailureLogType    = "compensation_failure"
 	CompensationExpiredLogType    = "compensation_expired"
 	VersionHeader                 = "X-Orra-CP-Version"
+	PauseExecutionCode            = "PAUSE_EXECUTION"
 )
 
 var (
