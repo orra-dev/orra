@@ -13,6 +13,7 @@ dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3300;
+const shouldDemoRevertFail = process?.env?.DEMO_REVERT_FAIL;
 
 // Initialize the Orra client with environment-aware persistence
 const invSvc = initService({
@@ -38,6 +39,10 @@ async function startService() {
 		});
 		
 		invSvc.onRevert(async (task, result) => {
+			if(shouldDemoRevertFail === 'true') {
+				console.log('Configured to demonstrate revert failure.');
+				throw Error('Failed to revert inventory product hold from: ' + result?.hold + ' to: ' + false);
+			}
 			console.log('Reverting inventory product for task:', task.id);
 			console.log('Reverting inventory product hold from:', result?.hold, 'to:', false);
 		})
