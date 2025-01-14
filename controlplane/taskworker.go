@@ -143,7 +143,7 @@ func (w *TaskWorker) processEntry(ctx context.Context, entry LogEntry, orchestra
 	// Store the entry's output in our dependency state
 	w.logState.DependencyState[entry.ID()] = entry.Value()
 
-	if !containsAll(w.logState.DependencyState, w.Dependencies) {
+	if !taskDependenciesMet(w.logState.DependencyState, w.Dependencies) {
 		return nil
 	}
 
@@ -380,13 +380,13 @@ func (w *TaskWorker) tryExecute(ctx context.Context, orchestrationID string) (js
 	executionID := fmt.Sprintf("e_%s", shortuuid.New())
 
 	// Initialize or get existing execution
-	result, isNewExecution, err := w.Service.IdempotencyStore.InitializeExecution(idempotencyKey, executionID)
+	result, isNewExecution, err := w.Service.IdempotencyStore.InitializeOrGetExecution(idempotencyKey, executionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize execution: %w", err)
 	}
 
 	logger := w.LogManager.Logger.With().
-		Str("Operation", "Post IdempotencyStore.InitializeExecution").
+		Str("Operation", "Post IdempotencyStore.InitializeOrGetExecution").
 		Str("orchestrationID", orchestrationID).
 		Str("TaskID", w.TaskID).
 		Str("ServiceName", w.Service.Name).
