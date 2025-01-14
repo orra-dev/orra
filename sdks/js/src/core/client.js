@@ -344,16 +344,14 @@ class OrraSDK {
 			this.logger.debug('Cache hit found', {
 				taskId,
 				idempotencyKey,
-				resultAge: Date.now() - processedResult.timestamp,
-				hasError: !!processedResult.error
+				resultAge: Date.now() - processedResult.timestamp
 			});
 			this.#sendTaskResult(
 				taskId,
 				executionId,
 				this.serviceId,
 				idempotencyKey,
-				processedResult.result,
-				processedResult.error
+				processedResult.result
 			);
 			return;
 		}
@@ -416,7 +414,6 @@ class OrraSDK {
 				
 				this.#processedTasksCache.set(idempotencyKey, {
 					result: result,
-					error: null,
 					timestamp: Date.now()
 				});
 				
@@ -433,12 +430,6 @@ class OrraSDK {
 					errorType: error.constructor.name,
 					errorMessage: error.message,
 					stackTrace: error.stack
-				});
-				
-				this.#processedTasksCache.set(idempotencyKey, {
-					result: null,
-					error: error.message,
-					timestamp: Date.now()
 				});
 				this.#inProgressTasks.delete(idempotencyKey);
 				this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, null, error.message);
@@ -476,16 +467,14 @@ class OrraSDK {
 			this.logger.debug('Cache hit found', {
 				taskId,
 				idempotencyKey,
-				resultAge: Date.now() - processedResult.timestamp,
-				hasError: !!processedResult.error
+				resultAge: Date.now() - processedResult.timestamp
 			});
 			this.#sendTaskResult(
 				taskId,
 				executionId,
 				this.serviceId,
 				idempotencyKey,
-				processedResult.result,
-				processedResult.error
+				processedResult.result
 			);
 			return;
 		}
@@ -540,7 +529,6 @@ class OrraSDK {
 				
 				this.#processedTasksCache.set(idempotencyKey, {
 					result: result,
-					error: null,
 					timestamp: Date.now()
 				});
 				
@@ -558,19 +546,8 @@ class OrraSDK {
 					errorMessage: error.message,
 					stackTrace: error.stack
 				});
-				
-				const errorResult = {
-					status: 'failed',
-					error: error.message
-				};
-				
-				this.#processedTasksCache.set(idempotencyKey, {
-					result: errorResult,
-					error: null,
-					timestamp: Date.now()
-				});
 				this.#inProgressTasks.delete(idempotencyKey);
-				this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, errorResult);
+				this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, null, error.message);
 			});
 	}
 	
