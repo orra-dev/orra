@@ -269,8 +269,7 @@ class OrraSDK:
                 task_id=task_id,
                 idempotency_key=idempotency_key,
                 execution_id=execution_id,
-                result=cached_result["result"],
-                error=cached_result.get("error")
+                result=cached_result.get("result")
             )
             return
 
@@ -330,12 +329,6 @@ class OrraSDK:
                 errorType=type(e).__name__
             )
 
-            # Cache error result
-            self._processed_tasks_cache[idempotency_key] = {
-                "error": str(e),
-                "timestamp": time.time()
-            }
-
             await self._send_task_result(
                 task_id=task_id,
                 idempotency_key=idempotency_key,
@@ -381,8 +374,7 @@ class OrraSDK:
                 task_id=task_id,
                 idempotency_key=idempotency_key,
                 execution_id=execution_id,
-                result=cached_result["result"],
-                error=cached_result.get("error")
+                result=cached_result.get("result")
             )
             return
 
@@ -450,22 +442,11 @@ class OrraSDK:
                 errorType=type(e).__name__
             )
 
-            error_result = CompensationResult(
-                status=CompensationStatus.FAILED,
-                error=str(e)
-            )
-
-            # Cache error result
-            self._processed_tasks_cache[idempotency_key] = {
-                "result": error_result.model_dump(),
-                "timestamp": time.time()
-            }
-
             await self._send_task_result(
                 task_id=task_id,
                 idempotency_key=idempotency_key,
                 execution_id=execution_id,
-                result=error_result.model_dump()
+                error=str(e)
             )
 
         finally:
