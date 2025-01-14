@@ -20,6 +20,7 @@ const (
 	TaskZero                      = "task0"
 	ResultAggregatorID            = "result_aggregator"
 	FailureTrackerID              = "failure_tracker"
+	CompensationWorkerID          = "compensation_worker"
 	WSPing                        = "ping"
 	WSPong                        = "pong"
 	HealthCheckGracePeriod        = 30 * time.Minute
