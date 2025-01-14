@@ -157,15 +157,14 @@ func (w *CompensationWorker) executeCompensation(ctx context.Context, candidate 
 			Status:          Processing,
 		}
 
-		if err := w.LogManager.AppendCompensationAttempted(
-			w.OrchestrationID,
-			taskID,
-			executionID,
-			task.Input,
-			w.attemptCounts[taskID],
-		); err != nil {
-			return err
-		}
+	if err := w.LogManager.AppendCompensationAttempted(
+		w.OrchestrationID,
+		taskID,
+		executionID,
+		w.attemptCounts[taskID]+1,
+	); err != nil {
+		return nil, err
+	}
 
 		// Send task to service - attempt even if unhealthy
 		if err := w.LogManager.controlPlane.WebSocketManager.SendTask(service.ID, task); err != nil {

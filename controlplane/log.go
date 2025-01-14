@@ -228,7 +228,6 @@ func (lm *LogManager) AppendCompensationAttempted(
 	orchestrationID string,
 	taskID string,
 	uuid string,
-	attemptPayload json.RawMessage,
 	attemptNo int,
 ) error {
 	lm.mu.Lock()
@@ -236,14 +235,12 @@ func (lm *LogManager) AppendCompensationAttempted(
 
 	attemptId := fmt.Sprintf("comp_attempt_%s_%s", strings.ToLower(taskID), uuid)
 	compensationAttempt := struct {
-		ID        string          `json:"id"`
-		TaskID    string          `json:"taskId"`
-		Input     json.RawMessage `json:"input"`
-		Timestamp time.Time       `json:"timestamp"`
+		ID        string    `json:"id"`
+		TaskID    string    `json:"taskId"`
+		Timestamp time.Time `json:"timestamp"`
 	}{
 		ID:        attemptId,
 		TaskID:    taskID,
-		Input:     attemptPayload,
 		Timestamp: time.Now().UTC(),
 	}
 
@@ -251,6 +248,12 @@ func (lm *LogManager) AppendCompensationAttempted(
 	if err != nil {
 		return fmt.Errorf("failed to marshal compensation attempt metadata: %w", err)
 	}
+
+	lm.Logger.Debug().
+		Str("AttemptId", attemptId).
+		Int("AttemptNo", attemptNo).
+		Str("OrchestrationID", orchestrationID).
+		Msgf("Appending compensation attempt for task: [%s]", taskID)
 
 	lm.AppendToLog(
 		orchestrationID,
