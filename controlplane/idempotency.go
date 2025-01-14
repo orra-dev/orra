@@ -75,7 +75,7 @@ func NewIdempotencyStore(ttl time.Duration) *IdempotencyStore {
 	return store
 }
 
-func (s *IdempotencyStore) InitializeExecution(key IdempotencyKey, executionID string) (*Execution, bool, error) {
+func (s *IdempotencyStore) InitializeOrGetExecution(key IdempotencyKey, executionID string) (*Execution, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
