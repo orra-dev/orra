@@ -137,7 +137,7 @@ type LoggedFailure struct {
 type TaskWorker struct {
 	Service                *ServiceInfo
 	TaskID                 string
-	Dependencies           DependencyKeySet
+	Dependencies           TaskDependenciesWithKeys
 	Timeout                time.Duration
 	HealthCheckGracePeriod time.Duration
 	LogManager             *LogManager
@@ -276,6 +276,7 @@ type ServiceCallingPlan struct {
 type ParallelGroup []string
 
 type DependencyKeySet map[string]struct{}
+type TaskDependenciesWithKeys map[string][]string
 
 // SubTask represents a single task in the ServiceCallingPlan
 type SubTask struct {

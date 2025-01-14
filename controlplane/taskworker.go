@@ -33,7 +33,7 @@ func (e RetryableError) Error() string {
 func NewTaskWorker(
 	service *ServiceInfo,
 	taskID string,
-	dependencies DependencyKeySet,
+	dependencies TaskDependenciesWithKeys,
 	timeout time.Duration,
 	healthCheckGracePeriod time.Duration,
 	logManager *LogManager,
@@ -431,7 +431,7 @@ func (w *TaskWorker) tryExecute(ctx context.Context, orchestrationID string) (js
 }
 
 func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string, key IdempotencyKey, executionID string) (json.RawMessage, error) {
-	input, err := mergeValueMapsToJson(w.logState.DependencyState)
+	input, err := mergeValueMapsToJson(w.logState.DependencyState, w.Dependencies)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal input: %w", err)
 	}
@@ -445,6 +445,13 @@ func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string, ke
 		Str("ExecutionID", executionID).
 		Str("IdempotencyKey", string(key)).
 		Int("ConsecutiveErrors", w.consecutiveErrs).Logger()
+
+	var tempInput map[string]interface{}
+	_ = json.Unmarshal(input, &tempInput)
+	logger.Trace().
+		Interface("Input Dependencies", w.Dependencies).
+		Interface("Input", tempInput).
+		Msg("Task input")
 
 	task := &Task{
 		Type:            "task_request",
@@ -578,17 +585,25 @@ func (w *TaskWorker) renewLeaseWithHealthCheck(ctx context.Context, key Idempote
 	}
 }
 
-func mergeValueMapsToJson(src map[string]json.RawMessage) (json.RawMessage, error) {
+func mergeValueMapsToJson(src map[string]json.RawMessage, dependencies TaskDependenciesWithKeys) (json.RawMessage, error) {
 	out := make(map[string]any)
-	for _, input := range src {
-		if err := json.Unmarshal(input, &out); err != nil {
+	for depID, input := range src {
+		temp := make(map[string]any)
+		if err := json.Unmarshal(input, &temp); err != nil {
 			return nil, err
+		}
+
+		for _, k := range dependencies[depID] {
+			if _, ok := temp[k]; !ok {
+				continue
+			}
+			out[k] = temp[k]
 		}
 	}
 	return json.Marshal(out)
 }
 
-func containsAll(s map[string]json.RawMessage, e map[string]struct{}) bool {
+func taskDependenciesMet(s map[string]json.RawMessage, e TaskDependenciesWithKeys) bool {
 	for srcId := range e {
 		if _, hasOutput := s[srcId]; !hasOutput {
 			return false

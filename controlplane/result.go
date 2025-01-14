@@ -109,7 +109,7 @@ func (r *ResultAggregator) processEntry(entry LogEntry, orchestrationID string) 
 	// Store the entry's output in our dependency state
 	r.logState.DependencyState[entry.ID()] = entry.Value()
 
-	if !containsAll(r.logState.DependencyState, r.Dependencies) {
+	if !resultDependenciesMet(r.logState.DependencyState, r.Dependencies) {
 		return nil
 	}
 
@@ -143,4 +143,13 @@ func (r *ResultAggregator) processEntry(entry LogEntry, orchestrationID string) 
 	}
 
 	return nil
+}
+
+func resultDependenciesMet(s map[string]json.RawMessage, e DependencyKeySet) bool {
+	for srcId := range e {
+		if _, hasOutput := s[srcId]; !hasOutput {
+			return false
+		}
+	}
+	return true
 }
