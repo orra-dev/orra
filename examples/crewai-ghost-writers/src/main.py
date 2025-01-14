@@ -5,7 +5,7 @@
 """
 
 import asyncio
-from orra import OrraAgent, Task
+from orra import OrraAgent, Task, RevertSource, CompensationResult, CompensationStatus
 from pydantic import BaseModel
 
 from editor import kickoff_editing_crew
@@ -44,7 +44,14 @@ async def main():
         url="http://localhost:8005",
         api_key=ORRA_APIKEY,
         log_level="DEBUG",
+        revertible=True,
     )
+
+    @writer.revert_handler()
+    async def revert_draft(source: RevertSource[WriterInput, WriterOutput]) -> CompensationResult:
+        print(f"Reverting draft original_task.input: {source.input.topics_file_path}")
+        print(f"Reverting draft generated draft: {source.output.draft}")
+        return CompensationResult(status=CompensationStatus.COMPLETED)
 
     @writer.handler()
     async def write_draft(request: Task[WriterInput]) -> WriterOutput:
