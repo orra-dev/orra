@@ -14,7 +14,7 @@ import httpx
 
 from .types import (
     PersistenceConfig, T_Input, T_Output, CompensationStatus,
-    CompensationResult, RevertTask
+    CompensationResult
 )
 from .persistence import PersistenceManager
 from .exceptions import OrraError, ServiceRegistrationError, ConnectionError
@@ -265,6 +265,7 @@ class OrraSDK:
                 idempotencyKey=idempotency_key,
                 resultAge=time.time() - cached_result["timestamp"]
             )
+
             await self._send_task_result(
                 task_id=task_id,
                 idempotency_key=idempotency_key,
@@ -293,9 +294,20 @@ class OrraSDK:
         self._in_progress_tasks[idempotency_key] = {"start_time": start_time}
 
         try:
-            # Convert input to Pydantic model if needed
+            self.logger.debug(
+                "Processing task",
+                operation='client._handle_task',
+                task=task,
+                taskId=task_id
+            )
+
             input_data = task.get("input", {})
             result = await self._task_handler(input_data)
+            self.logger.debug(
+                "Processed task handler",
+                input=result,
+                taskId=task_id
+            )
 
             processing_time = time.time() - start_time
             self.logger.debug(
@@ -344,7 +356,7 @@ class OrraSDK:
         task_id = data.get("id")
         execution_id = data.get("executionId")
         idempotency_key = data.get("idempotencyKey")
-        comp_input = data.get("input", {})
+        comp_data = data.get("input", {})
 
         self.logger.debug(
             "Compensation handling initiated",
@@ -370,6 +382,7 @@ class OrraSDK:
                 idempotencyKey=idempotency_key,
                 resultAge=time.time() - cached_result["timestamp"]
             )
+
             await self._send_task_result(
                 task_id=task_id,
                 idempotency_key=idempotency_key,
@@ -398,29 +411,42 @@ class OrraSDK:
         self._in_progress_tasks[idempotency_key] = {"start_time": start_time}
 
         try:
-            # Create RevertTask from compensation input
-            revert_task = RevertTask(
-                original_task=comp_input["originalTask"],
-                task_result=comp_input["taskResult"]
+            # Create RevertTask from compensation
+            if not comp_data:
+                raise OrraError("Missing compensation data")
+
+            self.logger.debug(
+                "Processing compensation data",
+                input=comp_data,
+                taskId=task_id
             )
 
+            if "originalTask" not in comp_data or "taskResult" not in comp_data:
+                raise OrraError("Invalid compensation input format. Expected 'originalTask' and 'taskResult'")
+
             # Execute revert handler
-            result = await self._revert_handler(revert_task)
+            comp_result = await self._revert_handler(comp_data)
 
             processing_time = time.time() - start_time
             self.logger.debug(
-                "Compensation processing completed",
+                "Compensation handling completed",
                 taskId=task_id,
                 executionId=execution_id,
                 processingTimeMs=processing_time * 1000
             )
 
             # Validate and process compensation result
-            result = self._process_compensation_result(result)
+            comp_result = self._process_compensation_result(comp_result)
+
+            self.logger.debug(
+                "Compensation processing completed",
+                taskId=task_id,
+                executionId=execution_id,
+            )
 
             # Cache successful result
             self._processed_tasks_cache[idempotency_key] = {
-                "result": result,
+                "result": comp_result,
                 "timestamp": time.time()
             }
 
@@ -428,7 +454,7 @@ class OrraSDK:
                 task_id=task_id,
                 idempotency_key=idempotency_key,
                 execution_id=execution_id,
-                result=result
+                result=comp_result
             )
 
         except Exception as e:

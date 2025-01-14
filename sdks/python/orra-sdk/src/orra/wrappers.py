@@ -2,20 +2,13 @@
 #   License, v. 2.0. If a copy of the MPL was not distributed with this
 #   file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-from dataclasses import dataclass
 from pathlib import Path
-from typing import get_type_hints, Callable, Optional, Awaitable, Any, Dict, Generic
+from typing import get_type_hints, Callable, Optional, Awaitable, Any, Dict
 from pydantic import ValidationError, BaseModel
 from .client import OrraSDK
 from .constants import DEFAULT_SERVICE_KEY_DIR, DEFAULT_SERVICE_KEY_FILE
 from .exceptions import OrraError, MissingRevertHandlerError
-from .types import T_Input, T_Output, RevertTask, CompensationResult, CompensationData
-
-
-@dataclass
-class Task(Generic[T_Input]):
-    """Wrapper for task inputs"""
-    input: T_Input
+from .types import T_Input, T_Output, CompensationResult, CompensationData, RevertSource, Task
 
 
 class OrraBase:
@@ -76,16 +69,16 @@ class OrraBase:
     def revert_handler(self) -> Callable:
         """Register revert handler function for compensation operations.
 
-        The handler must accept a RevertTask[InputModel, OutputModel] and return a CompensationResult.
+        The handler must accept a RevertSource[InputModel, OutputModel] and return a CompensationResult.
 
         Example:
             @service.revert_handler()
-            async def handle_revert(task: RevertTask[InputModel, OutputModel]) -> CompensationResult:
+            async def handle_revert(source: RevertSource[InputModel, OutputModel]) -> CompensationResult:
                 # Compensation logic here
                 return CompensationResult(status=CompensationStatus.COMPLETED)
         """
 
-        def decorator(func: Callable[[RevertTask[T_Input, T_Output]], Awaitable[CompensationResult]]):
+        def decorator(func: Callable[[RevertSource[T_Input, T_Output]], Awaitable[CompensationResult]]):
             if not self._revertible:
                 raise OrraError("Cannot register revert handler: service/agent is not revertible")
 
@@ -102,6 +95,69 @@ class OrraBase:
                 raise TypeError("Revert handler must return CompensationResult")
 
             self._revert_handler = func
+
+            # Create internal revert handler with validation
+            async def internal_revert_handler(raw_input: Dict[str, Any]) -> Dict[str, Any]:
+                try:
+                    self._sdk.logger.debug("Validating revert input", service=self._name)
+
+                    # Create Task wrapper for original task
+                    original_task = self._input_model.model_validate(raw_input["originalTask"])
+
+                    # Parse task comp_result
+                    task_result = self._output_model.model_validate(raw_input["taskResult"])
+
+                    # Create RevertSource with validated data
+                    revert_source = RevertSource(
+                        input=original_task,
+                        output=task_result
+                    )
+
+                    # Execute handler
+                    self._sdk.logger.debug("Executing revert handler", service=self._name)
+                    comp_result = await self._revert_handler(revert_source)
+
+                    # Validate and return serialized comp_result
+                    if not isinstance(comp_result, CompensationResult):
+                        raise TypeError(f"Revert handler returned {type(comp_result)}, expected CompensationResult")
+
+                    return comp_result
+
+                except ValidationError as e:
+                    self._sdk.logger.debug(
+                        "Revert input validation failed",
+                        service=self._name,
+                        errors=e.errors()
+                    )
+                    raise OrraError(
+                        message="Revert input validation failed",
+                        details={
+                            "validation_errors": [
+                                {
+                                    "field": err["loc"][0],
+                                    "error": err["msg"],
+                                    "type": err["type"]
+                                }
+                                for err in e.errors()
+                            ]
+                        }
+                    )
+                except OrraError:
+                    raise
+                except Exception as e:
+                    self._sdk.logger.error(
+                        "Revert handler error",
+                        service=self._name,
+                        error=str(e),
+                        error_type=type(e).__name__
+                    )
+                    raise OrraError(
+                        message=f"Revert handler error: {str(e)}",
+                        details={"error": str(e)}
+                    )
+
+            # Set the validated revert handler on SDK
+            self._sdk._revert_handler = internal_revert_handler
             return func
 
         return decorator
@@ -140,6 +196,14 @@ class OrraBase:
             # Create internal handler with validation
             async def internal_handler(raw_input: Dict[str, Any]) -> Dict[str, Any]:
                 try:
+
+                    self._sdk.logger.trace(
+                        "PRE HANDLER PROCESSING",
+                        operation='wrappers.internal_handler',
+                        raw_input=raw_input,
+                        taskId=raw_input.get("id")
+                    )
+
                     self._sdk.logger.debug("Validating input", service=self._name)
                     validated_input = self._input_model.model_validate(raw_input)
 
@@ -152,17 +216,14 @@ class OrraBase:
 
                     task_result = {
                         "task": result.model_dump(),
-                        "compensation": None
-                    }
-
-                    if self._revertible:
-                        task_result["compensation"] = CompensationData(
-                            input={
-                                "original_task": raw_input,
-                                "task_result": result.model_dump()
+                        "compensation": (CompensationData(
+                            data={
+                                "originalTask": raw_input,
+                                "taskResult": result.model_dump()
                             },
                             ttl_ms=self._revert_ttl_ms
-                        ).model_dump(by_alias=True)
+                        ).model_dump(by_alias=True)) if self._revertible else None
+                    }
 
                     return task_result
 
@@ -195,7 +256,7 @@ class OrraBase:
                         error_type=type(e).__name__
                     )
                     raise OrraError(
-                        message="Service error",
+                        message=f"Service error: {str(e)}",
                         details={"error": str(e)}
                     )
 
@@ -231,7 +292,7 @@ class OrraService(OrraBase):
             input_model=self._input_model,
             output_model=self._output_model,
             kind="service",
-            revertible=self._revertible
+            revertible=self._revertible,
         )
 
 
@@ -250,7 +311,7 @@ class OrraAgent(OrraBase):
 def verify_as_revert_task(first_param_type):
     """Verify that a type is RevertTask[InputModel, OutputModel]"""
     if not (hasattr(first_param_type, "__origin__") and
-            first_param_type.__origin__ is RevertTask):
+            first_param_type.__origin__ is RevertSource):
         raise TypeError("Revert handler parameter must be RevertTask[InputModel, OutputModel]")
 
 

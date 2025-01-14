@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Optional, Protocol, Callable, Awaitable, TypeVar, Dict, Any, List, Generic
 from pydantic import BaseModel, Field
 
-from . import Task
 from .constants import DEFAULT_SERVICE_KEY_PATH
 
 T_Input = TypeVar('T_Input', bound=BaseModel)
@@ -64,7 +63,7 @@ class CompensationStatus(str, Enum):
 
 class CompensationData(BaseModel):
     """Data required for compensation operations."""
-    input: Dict[str, Any] = Field(
+    data: Dict[str, Any] = Field(
         description="Original task and result data needed for compensation"
     )
     ttl_ms: int = Field(
@@ -115,9 +114,13 @@ class TaskResultPayload(BaseModel):
         description="Compensation data if the service is revertible"
     )
 
+@dataclass
+class Task(Generic[T_Input]):
+    """Wrapper for task inputs"""
+    input: T_Input
 
 @dataclass
-class RevertTask(Generic[T_Input, T_Output]):
+class RevertSource(Generic[T_Input, T_Output]):
     """
     Wrapper for revert handler inputs that provides access to both
     the original task and its result.
@@ -126,5 +129,5 @@ class RevertTask(Generic[T_Input, T_Output]):
         T_Input: Type of the original task's input model
         T_Output: Type of the original task's output model
     """
-    original_task: Task[T_Input]
-    task_result: T_Output
+    input: T_Input
+    output: T_Output
