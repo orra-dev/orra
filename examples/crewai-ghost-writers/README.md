@@ -51,7 +51,7 @@ cp _env .env
 ```
 
 Edit the file and update the Environment variables accordingly. Use the generated `ghost-key` Orra API Key as the value
-for `ORRA_APIKEY`.
+for `ORRA_API_KEY`.
 
 ## Running the Example
 

@@ -15,7 +15,8 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-ORRA_APIKEY=os.getenv("ORRA_APIKEY")
+ORRA_APIKEY = os.getenv("ORRA_API_KEY")
+
 
 # Define your models
 class WriterInput(BaseModel):
