@@ -1,20 +1,31 @@
-# 🪡Orra
+# 🪡Orra (✨Alpha✨)
 
-Move beyond simple Crews and Agents. Build production-ready multi-agent applications that handle complex real-world interactions. Orra orchestrates your services and agents with built-in reliability and intelligent reasoning — across any language or agent framework.
+Move beyond simple Crews and Agents. Build production-ready multi-agent applications that handle complex real-world
+interactions. Orra orchestrates your services and agents with built-in reliability and intelligent reasoning — across
+any language or agent framework.
 
 Prototype rapidly today, scale to production tomorrow. No complex infrastructure required.
 
-## Current Release: Narwal 🐋🦄 (Alpha)
+## Releases
 
-Our current release is codenamed "Narwal". This release brings the ✨Alpha✨ version of Orra's orchestration capabilities.
+### Manta Ray 🐠🌊️ - January 2025 🎉
+
+Brings in a robust Compensation Guardrails system with JS and Python SDK updates to match.
+
+**Other Features**
+
+- Service/Agent stability improvements.
+- Major fixes across control plane and SDKs.
+
+[[View all releases](https://github.com/orra-dev/orra/releases) →]
 
 ## Why Orra
 
-- **Dynamic LLM Orchestration**: Stop hard-coding agent workflows. Orra automatically creates and adapts execution plans
-  based on your agents' plus services' capabilities and real-time context.
+- **Workflow intelligence**: Orra automatically coordinates your AI services by understanding their capabilities and
+  adapting execution in real-time - letting you focus on building features instead of managing complex interactions.
 
-- **Production-Ready Reliability**: Built-in fault tolerance and durability with automatic retries, health checks, and
-  stateful execution tracking. No more building your own reliability layer.
+- **Production-Ready Reliability**: Built-in fault tolerance and durability with automatic retries, health checks,
+  compensations and stateful execution tracking. No more building your own reliability layer.
 
 - **High-Throughput Performance**: Parallel execution, efficient task routing, and smart caching ensure your multi-agent
   apps stay responsive under load.
@@ -37,8 +48,8 @@ problem.
 latency, risks hallucination, and degrades reliability. What should be precise AI interactions become endless chains
 of "just one more try."
 
-Orra adds powerful orchestration to your agents and services. No rewrites, no infrastructure headaches - just
-predictable, intelligent routing that lets your LLMs think once and think right.
+Orra gives you the power to handle complex real-world interactions with your agents and services. No rewrites, no
+infrastructure headaches - just predictable, intelligent routing that gets work done.
 
 ## Install
 
@@ -87,17 +98,17 @@ docker compose up --build
 
 ## Quick Start
 
-Build your first Orra-orchestrated application! We'll use our [Echo service (JavaScript)](examples/echo-js) example to
-show you the
-magic of intelligent service orchestration. Requires [Node.js 18+](https://nodejs.org/en/download/package-manager).
+Build your first reliable AI application with Orra! We'll use our [Echo service (JavaScript)](examples/echo-js) example to
+show you the magic of intelligent service orchestration.
+Requires [Node.js 18+](https://nodejs.org/en/download/package-manager).
 
 While simple, it showcases Orra's capabilities:
 
-- **Dynamic orchestration**: AI analyzes your instructions and creates execution plans - no manual routing needed.
+- **Workflow intelligence**: AI analyzes your instructions and creates execution plans - no manual routing needed.
 - **Resilient execution**: Service interruptions, retries, and recovery handled automatically - zero special handling
   code.
 
-If Python is more your speed, follow along using the [Echo service (Python)](examples/echo-python) example.
+**If Python is more your speed**, follow along using the [Echo service (Python)](examples/echo-python) example.
 
 ### 1. Configure Your Workspace
 
@@ -239,8 +250,8 @@ async def main():
 
     @agent.handler()
     async def handle_request(task: Task[InputModel]) -> OutputModel:
-    # Handler implementation that wraps your existing Agent or crew
-    # built with your framework of choice.
+        # Handler implementation that wraps your existing Agent or crew
+        # built with your framework of choice.
         pass
 ```
 
@@ -260,6 +271,7 @@ orra verify run "Estimate delivery for customer order" \
 
 - 🛒 [E-commerce AI Assistant](examples/ecommerce-agent-app) - E-commerce customer service with a delivery specialised
   agent
+- 👻 [Ghost Writers](examples/crewai-ghost-writers) - Content generation example showcasing how to use Orra with [CrewAI](https://www.crewai.com)
 - 📣 [Echo Service (JavaScript)](examples/echo-js) - Simple example showing core concepts using JS
 - 📣 [Echo Service (Python)](examples/echo-python) - Simple example showing core concepts using Python
 
@@ -277,6 +289,7 @@ orra verify run "Estimate delivery for customer order" \
 * In-memory execution tracking with exactly-once guarantees
 * Smart service health handling with execution pausing and heartbeat monitoring
 * Short-term retries with exponential backoff (up to 5 attempts)
+* Robust Compensation handling for revertible services and agents
 * Intuitive JavaScript and Python SDKs
 * CLI for Orra-powered projects management
 * Automatic parallel execution optimization
@@ -286,7 +299,7 @@ orra verify run "Estimate delivery for customer order" \
 ### Current Limitations
 
 1. **Storage**: All state is in-memory and will be lost on control plane restart
-2. **Deployment**: Single-instance only, designed for local development
+2. **Deployment**: Single-instance only, designed for development and self-hosted deployments
 3. **Recovery**: Limited to individual service recovery
 4. **SDKs**: JavaScript and Python only
 
