@@ -13,6 +13,7 @@ dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3300;
+const shouldDemoRevertFail = process?.env?.DEMO_REVERT_FAIL;
 
 // Initialize the Orra client with environment-aware persistence
 const invSvc = initService({
@@ -33,16 +34,27 @@ async function startService() {
 		await invSvc.register({
 			description: 'An inventory service that manages and tracks the availability of ecommerce products. ' +
 				'Including, updating inventory in real-time as orders are placed',
+			revertible: true,
 			schema
 		});
 		
+		invSvc.onRevert(async (task, result) => {
+			if(shouldDemoRevertFail === 'true') {
+				console.log('Configured to demonstrate revert failure.');
+				throw Error('Failed to revert inventory product hold from: ' + result?.hold + ' to: ' + false);
+			}
+			console.log('Reverting inventory product for task:', task.id);
+			console.log('Reverting inventory product hold from:', result?.hold, 'to:', false);
+		})
+		
 		invSvc.start(async (task) => {
-			console.log('Processing inventory product:', task.id);
+			console.log('Processing inventory product for task:', task.id);
 			return {
 				productId: '697d1744-88dd-4139-beeb-b307dfb1a2f9',
 				productDescription: task?.input?.productDescription,
 				productAvailability: 'AVAILABLE',
-				warehouseAddress: 'Unit 1 Cairnrobin Way, Portlethen, Aberdeen AB12 4NJ'
+				warehouseAddress: 'Unit 1 Cairnrobin Way, Portlethen, Aberdeen AB12 4NJ',
+				hold: true
 			};
 		});
 		

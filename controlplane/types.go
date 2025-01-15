@@ -119,7 +119,7 @@ type LogWorker interface {
 }
 
 type ResultAggregator struct {
-	Dependencies DependencyKeys
+	Dependencies DependencyKeySet
 	LogManager   *LogManager
 	logState     *LogState
 }
@@ -137,7 +137,7 @@ type LoggedFailure struct {
 type TaskWorker struct {
 	Service                *ServiceInfo
 	TaskID                 string
-	Dependencies           DependencyKeys
+	Dependencies           TaskDependenciesWithKeys
 	Timeout                time.Duration
 	HealthCheckGracePeriod time.Duration
 	LogManager             *LogManager
@@ -180,6 +180,11 @@ type TaskResult struct {
 	Status         string          `json:"status,omitempty"`
 }
 
+type TaskResultPayload struct {
+	Task         json.RawMessage   `json:"task"`
+	Compensation *CompensationData `json:"compensation"`
+}
+
 type Spec struct {
 	Type       string          `json:"type"`
 	Properties map[string]Spec `json:"properties,omitempty"`
@@ -187,6 +192,7 @@ type Spec struct {
 	Format     string          `json:"format,omitempty"`
 	Minimum    int             `json:"minimum,omitempty"`
 	Maximum    int             `json:"maximum,omitempty"`
+	Items      *Spec           `json:"items,omitempty"`
 }
 
 type ServiceSchema struct {
@@ -200,6 +206,7 @@ type ServiceInfo struct {
 	Name             string            `json:"name"`
 	Description      string            `json:"description"`
 	Schema           ServiceSchema     `json:"schema"`
+	Revertible       bool              `json:"revertible"`
 	ProjectID        string            `json:"-"`
 	Version          int64             `json:"version"`
 	IdempotencyStore *IdempotencyStore `json:"-"`
@@ -268,7 +275,8 @@ type ServiceCallingPlan struct {
 
 type ParallelGroup []string
 
-type DependencyKeys map[string]struct{}
+type DependencyKeySet map[string]struct{}
+type TaskDependenciesWithKeys map[string][]string
 
 // SubTask represents a single task in the ServiceCallingPlan
 type SubTask struct {
@@ -320,4 +328,38 @@ type VectorCache struct {
 	maxSize       int // Per project
 	group         singleflight.Group
 	logger        zerolog.Logger
+}
+
+// CompensationResult stores the outcome of a compensation attempt
+type CompensationResult struct {
+	Status  CompensationStatus   `json:"status"`
+	Error   string               `json:"error,omitempty"`
+	Partial *PartialCompensation `json:"partial,omitempty"`
+}
+
+// PartialCompensation tracks progress of partial compensation completion
+type PartialCompensation struct {
+	Completed []string `json:"completed"`
+	Remaining []string `json:"remaining"`
+}
+
+// CompensationData wraps the data needed for compensation with metadata
+type CompensationData struct {
+	Input json.RawMessage `json:"data"`
+	TTLMs int64           `json:"ttl"`
+}
+
+type CompensationCandidate struct {
+	TaskID       string
+	Service      *ServiceInfo
+	Compensation *CompensationData
+}
+
+type CompensationWorker struct {
+	OrchestrationID string
+	LogManager      *LogManager
+	Candidates      []CompensationCandidate
+	backOff         *backoff.ExponentialBackOff
+	attemptCounts   map[string]int     // track attempts per task
+	cancel          context.CancelFunc // Store cancel function
 }

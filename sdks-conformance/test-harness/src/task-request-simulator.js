@@ -7,13 +7,14 @@
 import WebSocket from "ws";
 
 export class TaskRequestSimulator {
-	constructor(serviceId, message, metrics, activeConnections, webhookResults) {
+	constructor(serviceId, message, metrics, activeConnections, webhookResults, compensationTestManager) {
 		this.serviceId = serviceId;
 		this.message = message;
 		this.metrics = metrics;
 		this.activeConnections = activeConnections;
 		this.webhookResults = webhookResults;
 		this.testId = message.executionId.split('__')[1];
+		this.compensationTestManager = compensationTestManager
 	}
 	
 	activate() {
@@ -31,6 +32,7 @@ export class TaskRequestSimulator {
 		if (execId.startsWith('queue__')) return 'Queue';
 		if (execId.startsWith('large_payload__')) return 'LargePayload';
 		if (execId.startsWith('mid_task__')) return 'MidTaskDisconnect';
+		if (execId.startsWith('comp_test_')) return 'CompensationExecution';
 		return null;
 	}
 	
@@ -237,6 +239,8 @@ export class TaskRequestSimulator {
 		
 		// Record start of long task
 		this.recordTestEvent('long_task_started');
+		conn.clientWs.send(JSON.stringify(this.message))
+		
 		// Wait 1000ms then force disconnect
 		setTimeout(() => {
 			if (conn.clientWsSimulateDisconnect()) {
@@ -272,6 +276,41 @@ export class TaskRequestSimulator {
 		const testResult = this.webhookResults.get(this.testId);
 		if (testResult) {
 			testResult.cleanup = () => clearTimeout(timeoutId);
+		}
+	}
+	
+	activateCompensationExecution() {
+		const conn = this.activeConnections.get(this.serviceId);
+		if (!conn) return;
+		
+		// // Store the test manager for result handling
+		// this.metrics.recordMetric(this.serviceId, 'compensationTestManager', this.compensationTestManager);
+		//
+		// Process message based on execution ID pattern
+		const execId = this.message.executionId;
+		if (execId.includes('comp_test_success')) {
+			// First task processing
+			conn.clientWs.send(JSON.stringify(this.message));
+			
+		} else if (execId.includes('comp_test_fail')) {
+			// Second task (should fail)
+			conn.clientWs.send(JSON.stringify(this.message));
+			
+		} else if (execId.includes('comp_test_revert')) {
+			// Compensation request
+			const successResult = this.compensationTestManager.getSuccessfulTaskResult();
+			if (successResult) {
+				this.message.input.taskResult = successResult?.result?.task
+				const compensationMsg = {
+					...this.message,
+					input: {
+						originalTask: this.message?.input?.originalTask,
+						taskResult: successResult?.result?.task
+					}
+				};
+				this.compensationTestManager.activateCompensationStarted();
+				conn.clientWs.send(JSON.stringify(compensationMsg));
+			}
 		}
 	}
 	

@@ -231,11 +231,17 @@ func (o *Orchestration) Executable() bool {
 	return o.Status != NotActionable && o.Status != Failed
 }
 
-func (s *SubTask) extractDependencies() DependencyKeys {
-	out := make(DependencyKeys)
-	for _, source := range s.Input {
-		if dep := extractDependencyID(source); dep != "" {
-			out[dep] = struct{}{}
+func (s *SubTask) extractDependencies() TaskDependenciesWithKeys {
+	out := make(TaskDependenciesWithKeys)
+	for inputKey, source := range s.Input {
+		dep := extractDependencyID(source)
+		if dep == "" {
+			continue
+		}
+		if _, ok := out[dep]; !ok {
+			out[dep] = []string{inputKey}
+		} else {
+			out[dep] = append(out[dep], inputKey)
 		}
 	}
 	return out

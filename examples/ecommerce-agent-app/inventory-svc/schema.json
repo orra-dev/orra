@@ -12,7 +12,8 @@
 			"productId": { "type": "string" },
 			"productDescription": { "type": "string" },
 			"productAvailability": { "type": "string" },
-			"warehouseAddress": { "type": "string" }
+			"warehouseAddress": { "type": "string" },
+			"hold": { "type": "boolean" }
 		},
 		"required": ["productId", "productDescription", "productAvailability"]
 	}

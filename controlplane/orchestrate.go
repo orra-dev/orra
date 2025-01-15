@@ -140,7 +140,7 @@ func (p *ControlPlane) FinalizeOrchestration(
 
 	orchestration, exists := p.orchestrationStore[orchestrationID]
 	if !exists {
-		return fmt.Errorf("control panel cannot finalize missing orchestration %s", orchestrationID)
+		return fmt.Errorf("control plane cannot finalize missing orchestration %s", orchestrationID)
 	}
 
 	orchestration.Status = status
@@ -310,7 +310,7 @@ func (p *ControlPlane) createAndStartWorkers(
 
 	p.logWorkers[orchestrationID] = make(map[string]context.CancelFunc)
 
-	resultDependencies := make(DependencyKeys)
+	resultDependencies := make(DependencyKeySet)
 
 	for _, task := range plan.Tasks {
 		deps := task.extractDependencies()

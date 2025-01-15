@@ -44,6 +44,8 @@ func NewApp(cfg Config, args []string) (*App, error) {
 }
 
 func (app *App) configureRoutes() *App {
+	app.Router.Use(app.VersionHeaderMiddleware)
+
 	app.Router.HandleFunc("/health", app.healthHandler).Methods(http.MethodGet)
 	app.Router.HandleFunc("/register/project", app.RegisterProject).Methods(http.MethodPost)
 	app.Router.HandleFunc("/apikeys", app.APIKeyMiddleware(app.CreateAdditionalApiKey)).Methods(http.MethodPost)
@@ -173,10 +175,11 @@ func (app *App) RegisterServiceOrAgent(w http.ResponseWriter, r *http.Request, s
 	}
 
 	if err := json.NewEncoder(w).Encode(map[string]any{
-		"id":      service.ID,
-		"name":    service.Name,
-		"status":  Registered,
-		"version": service.Version,
+		"id":         service.ID,
+		"name":       service.Name,
+		"status":     Registered,
+		"revertible": service.Revertible,
+		"version":    service.Version,
 	}); err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
 		return

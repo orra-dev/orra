@@ -9,7 +9,7 @@ services:
       - ORRA_URL=http://host.docker.internal:8005
       - ORRA_API_KEY=${ORRA_API_KEY}
       - ORRA_SERVICE_KEY_PATH=/app/data/orra-service-key.json
-      - ORRA_LOG_LEVEL=debug
+      - ORRA_LOG_LEVEL=trace
       - ORRA_LOGGING=true
       - NODE_ENV=development
     volumes:

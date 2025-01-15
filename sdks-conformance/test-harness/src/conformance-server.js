@@ -218,6 +218,84 @@ export class ConformanceServer {
 				};
 				break;
 			
+			case 'compensation_execution':
+				// First task - should succeed
+				yield {
+					...baseMessage,
+					executionId: `comp_test_success__${testRunId}`,
+					idempotencyKey: `comp_test_success__${testRunId}`,
+					input: {
+						task_data: testCase?.input?.task_data,
+						shouldSucceed: true
+					}
+				};
+				
+				// Second task - should fail
+				yield {
+					...baseMessage,
+					executionId: `comp_test_fail__${testRunId}`,
+					idempotencyKey: `comp_test_fail__${testRunId}`,
+					input: {
+						task_data: 'failing task',
+						shouldFail: true
+					}
+				};
+				
+				// Compensation request will be triggered by failure
+				yield {
+					...baseMessage,
+					type: 'compensation_request',
+					executionId: `comp_test_revert__${testRunId}`,
+					idempotencyKey: `comp_test_revert__${testRunId}`,
+					input: {
+						originalTask: {
+							type: 'task_request',
+							input: { task_data: testCase?.input?.task_data }
+						},
+						taskResult: null // Will be populated with actual result
+					}
+				};
+				break;
+			
+			case 'partial_compensation':
+				// First task - should succeed
+				yield {
+					...baseMessage,
+					executionId: `comp_test_success__${testRunId}`,
+					idempotencyKey: `comp_test_success__${testRunId}`,
+					input: {
+						operations: [ 'op1', 'op2', 'op3', 'op4' ],
+						shouldSucceed: true
+					}
+				};
+				
+				// Second task - should fail
+				yield {
+					...baseMessage,
+					executionId: `comp_test_fail__${testRunId}`,
+					idempotencyKey: `comp_test_fail__${testRunId}`,
+					input: {
+						task_data: 'failing task',
+						shouldFail: true
+					}
+				};
+				
+				// Compensation request that should get partial response
+				yield {
+					...baseMessage,
+					type: 'compensation_request',
+					executionId: `comp_test_revert__${testRunId}`,
+					idempotencyKey: `comp_test_revert__${testRunId}`,
+					input: {
+						originalTask: {
+							type: 'task_request',
+							input: { operations: [ 'op1', 'op2', 'op3', 'op4' ] }
+						},
+						taskResult: null // Will be populated with actual result
+					}
+				};
+				break;
+				
 			default:
 				// For other tests like exactly_once
 				if (testCase?.input?.duplicate) {

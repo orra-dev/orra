@@ -20,3 +20,7 @@ class ConnectionError(OrraError):
 class ServiceRegistrationError(OrraError):
     """Raised when service registration fails"""
     pass
+
+class MissingRevertHandlerError(OrraError):
+    """Raised when revert handler has not been provided for a revertible service or agent"""
+    pass

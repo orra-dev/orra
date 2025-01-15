@@ -37,3 +37,10 @@ func (app *App) APIKeyMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		next.ServeHTTP(w, r)
 	}
 }
+
+func (app *App) VersionHeaderMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(VersionHeader, Version)
+		next.ServeHTTP(w, r)
+	})
+}

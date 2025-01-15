@@ -9,12 +9,13 @@ It uses a chat UI to simulate a WhatsApp sales experience.
 ## ✨ Features
 
 - 🤖 AI-powered delivery estimates using Mistral's function calling
-- 🏪 Real-time product availability checks
+- 🏪 Real-time product availability checks and holds
 - 👤 Customer profile integration
 - 📱 Real-time chat UI (simulating WhatsApp)
-- ⚡ Parallel service orchestration
+- ⚡  Parallel service orchestration
 - 🔄 Real-time status updates
 - 🛡️ Error handling and recovery
+- ↩️ Canceling product holds when an unrecoverable error occurs
 
 ## Prerequisites
 
@@ -164,6 +165,7 @@ That's it! Orra handles the rest:
 - Reliable task execution
 - Error recovery
 - Parallel orchestration
+- Compensating revert-able services or agents after unrecoverable errors 
 
 ## Architecture
 

@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-func NewResultAggregator(dependencies DependencyKeys, logManager *LogManager) LogWorker {
+func NewResultAggregator(dependencies DependencyKeySet, logManager *LogManager) LogWorker {
 	return &ResultAggregator{
 		Dependencies: dependencies,
 		LogManager:   logManager,
@@ -109,7 +109,7 @@ func (r *ResultAggregator) processEntry(entry LogEntry, orchestrationID string) 
 	// Store the entry's output in our dependency state
 	r.logState.DependencyState[entry.ID()] = entry.Value()
 
-	if !containsAll(r.logState.DependencyState, r.Dependencies) {
+	if !resultDependenciesMet(r.logState.DependencyState, r.Dependencies) {
 		return nil
 	}
 
@@ -117,7 +117,7 @@ func (r *ResultAggregator) processEntry(entry LogEntry, orchestrationID string) 
 		Msgf("All result aggregator dependencies have been processed for orchestration: %s", orchestrationID)
 
 	if err := r.LogManager.MarkTaskCompleted(orchestrationID, entry.ID(), time.Now().UTC()); err != nil {
-		return r.LogManager.AppendFailureToLog(
+		return r.LogManager.AppendTaskFailureToLog(
 			orchestrationID,
 			ResultAggregatorID,
 			ResultAggregatorID,
@@ -132,7 +132,7 @@ func (r *ResultAggregator) processEntry(entry LogEntry, orchestrationID string) 
 
 	if err := r.LogManager.FinalizeOrchestration(orchestrationID, completed, nil, results[len(results)-1], false); err != nil {
 		skipWebhook := strings.Contains(err.Error(), "failed to trigger webhook")
-		return r.LogManager.AppendFailureToLog(
+		return r.LogManager.AppendTaskFailureToLog(
 			orchestrationID,
 			ResultAggregatorID,
 			ResultAggregatorID,
@@ -143,4 +143,13 @@ func (r *ResultAggregator) processEntry(entry LogEntry, orchestrationID string) 
 	}
 
 	return nil
+}
+
+func resultDependenciesMet(s map[string]json.RawMessage, e DependencyKeySet) bool {
+	for srcId := range e {
+		if _, hasOutput := s[srcId]; !hasOutput {
+			return false
+		}
+	}
+	return true
 }
