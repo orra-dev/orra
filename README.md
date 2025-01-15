@@ -271,7 +271,7 @@ orra verify run "Estimate delivery for customer order" \
 
 - 🛒 [E-commerce AI Assistant](examples/ecommerce-agent-app) - E-commerce customer service with a delivery specialised
   agent
-- 👻 [Ghost Writers](examples/crewai-ghost-writers) - Content generation example showcasing how to use Orra with [CrewAI](https://www.crewai.com)
+- 👻 [Ghostwriters](examples/crewai-ghostwriters) - Content generation example showcasing how to use Orra with [CrewAI](https://www.crewai.com)
 - 📣 [Echo Service (JavaScript)](examples/echo-js) - Simple example showing core concepts using JS
 - 📣 [Echo Service (Python)](examples/echo-python) - Simple example showing core concepts using Python
 
