@@ -2,7 +2,7 @@
 
 Move beyond simple Crews and Agents. Build production-ready multi-agent applications that handle complex real-world
 interactions. Orra orchestrates your services and agents with built-in reliability and intelligent reasoning — across
-any language or agent framework.
+any language, agent framework or deployment platform.
 
 Prototype rapidly today, scale to production tomorrow. No complex infrastructure required.
 
@@ -21,8 +21,9 @@ Brings in a robust Compensation Guardrails system with JS and Python SDK updates
 
 ## Why Orra
 
-- **Workflow intelligence**: Orra automatically coordinates your AI services by understanding their capabilities and
-  adapting execution in real-time - letting you focus on building features instead of managing complex interactions.
+- **Workflow intelligence**: Orra automatically coordinates both your AI and general services by understanding their
+  capabilities and adapting execution in real-time - you can focus on building features instead of managing complex
+  interactions.
 
 - **Production-Ready Reliability**: Built-in fault tolerance and durability with automatic retries, health checks,
   compensations and stateful execution tracking. No more building your own reliability layer.
@@ -34,7 +35,7 @@ Brings in a robust Compensation Guardrails system with JS and Python SDK updates
 
 If you're building multi-agent applications, this probably sounds familiar:
 
-**Production Reliability**: Your agents work perfectly in demos, but in production they're brittle. One hiccup in a
+**Production Reliability**: Your agent app works perfectly in demos, but in production it's brittle. One hiccup in a
 chain of agent calls and everything falls apart.
 
 **Workflow Hell**: Your code is a maze of hard-wired sequences between agents and services. Adding a new integration or
@@ -98,14 +99,14 @@ docker compose up --build
 
 ## Quick Start
 
-Build your first reliable AI application with Orra! We'll use our [Echo service (JavaScript)](examples/echo-js) example to
-show you the magic of intelligent service orchestration.
+Build your first reliable AI application with Orra! We'll use our [Echo service (JavaScript)](examples/echo-js) example
+to show you the magic of intelligent service orchestration.
 Requires [Node.js 18+](https://nodejs.org/en/download/package-manager).
 
 While simple, it showcases Orra's capabilities:
 
 - **Workflow intelligence**: AI analyzes your instructions and creates execution plans - no manual routing needed.
-- **Resilient execution**: Service interruptions, retries, and recovery handled automatically - zero special handling
+- **Durable execution**: Service interruptions, retries, and recovery handled automatically - zero special handling
   code.
 
 **If Python is more your speed**, follow along using the [Echo service (Python)](examples/echo-python) example.
@@ -193,7 +194,7 @@ You've just experienced:
 
 - 🤖 Dynamic orchestration using AI
 - ⛑️ Automatic service health monitoring ️
-- 🦾 Built-in resilient execution
+- 🦾 Built-in durable execution
 - 🔮 Real-time status tracking
 - 🪝 Webhook result delivery
 
@@ -271,7 +272,8 @@ orra verify run "Estimate delivery for customer order" \
 
 - 🛒 [E-commerce AI Assistant](examples/ecommerce-agent-app) - E-commerce customer service with a delivery specialised
   agent
-- 👻 [Ghostwriters](examples/crewai-ghostwriters) - Content generation example showcasing how to use Orra with [CrewAI](https://www.crewai.com)
+- 👻 [Ghostwriters](examples/crewai-ghostwriters) - Content generation example showcasing how to use Orra
+  with [CrewAI](https://www.crewai.com)
 - 📣 [Echo Service (JavaScript)](examples/echo-js) - Simple example showing core concepts using JS
 - 📣 [Echo Service (Python)](examples/echo-python) - Simple example showing core concepts using Python
 
@@ -285,32 +287,28 @@ orra verify run "Estimate delivery for customer order" \
 
 ### Available Now
 
+* Robust Compensation guardrails for revertible services and agents 🆕🎉
+* Prototype your multi-agent app in a single file then split and deploy as containers 🆕🎉
 * LLM-powered task decomposition and routing
 * In-memory execution tracking with exactly-once guarantees
 * Smart service health handling with execution pausing and heartbeat monitoring
 * Short-term retries with exponential backoff (up to 5 attempts)
-* Robust Compensation handling for revertible services and agents
 * Intuitive JavaScript and Python SDKs
 * CLI for Orra-powered projects management
 * Automatic parallel execution optimization
 * Built-in service discovery
-* Prototype your multi-agent app in a single file then split and deploy as containers
 
 ### Current Limitations
 
 1. **Storage**: All state is in-memory and will be lost on control plane restart
 2. **Deployment**: Single-instance only, designed for development and self-hosted deployments
-3. **Recovery**: Limited to individual service recovery
-4. **SDKs**: JavaScript and Python only
 
 ### Coming Soon
 
-* Persistent storage
+* Ahead of time execution plan domain grounding with pre-execution checks
+* Agent replay and multi-LLM consensus planning
 * Continuous adjustment of Agent workflows during runtime
 * Additional language SDKs - Ruby, DotNet and Go very soon!
-* Streaming for superfast task processing
-* Resource Reallocation based on performance and changing needs
-* Distributed deployment
   ... and many more planned
 
 ## Join Our Alpha Testing Community
