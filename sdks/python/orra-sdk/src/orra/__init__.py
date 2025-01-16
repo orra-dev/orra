@@ -2,4 +2,5 @@
 #   License, v. 2.0. If a copy of the MPL was not distributed with this
 #   file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-from .wrappers import OrraService, OrraAgent, Task
+from .wrappers import OrraService, OrraAgent
+from .types import Task, RevertSource, CompensationResult, CompensationStatus, PartialCompensation

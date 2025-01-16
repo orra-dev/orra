@@ -13,6 +13,7 @@ info:
     - Message queueing during disconnection
     - Health monitoring via ping/pong
     - Proper error propagation
+    - Reliable compensation handling
     
     Task Execution Model:
     - SDKs are responsible for task execution and result reporting
@@ -20,6 +21,18 @@ info:
     - Long-running tasks may be retried multiple times by the control plane
     - SDKs should focus on maintaining exactly-once execution guarantees
     - The control plane is the source of truth for task lifecycle and completion status
+    
+    Compensation Model:
+    - Services can opt-in to compensation by registering as revertible
+    - Compensation is triggered automatically on orchestration failure
+    - Tasks are compensated in reverse chronological order
+    - Compensation supports automatic retries with exponential backoff
+    - Control plane manages compensation data and TTL
+    - Four compensation outcomes are supported:
+      * Complete: Full compensation succeeded
+      * Partial: Some items compensated (with progress tracking)
+      * Failed: Compensation failed after maximum retries
+      * Expired: Compensation TTL elapsed before execution
 
 servers:
   controlPlane:
@@ -193,6 +206,82 @@ components:
             type: string
             description: Unique sdk message identifier
 
+    CompensationRequest:
+      name: CompensationRequest
+      title: Compensation execution request
+      payload:
+        type: object
+        required:
+          - type
+          - id
+          - input
+          - executionId
+          - idempotencyKey
+          - serviceId
+        properties:
+          type:
+            type: string
+            enum: [ compensation_request ]
+          id:
+            type: string
+            description: Original task identifier
+          input:
+            type: object
+            properties:
+              originalTask:
+                type: object
+                description: Original task that needs compensation
+              taskResult:
+                type: object
+                description: Result from the original task execution
+          executionId:
+            type: string
+          idempotencyKey:
+            type: string
+          serviceId:
+            type: string
+
+    CompensationResult:
+      name: CompensationResult
+      title: Compensation execution result
+      payload:
+        type: object
+        required:
+          - type
+          - taskId
+          - executionId
+          - serviceId
+          - idempotencyKey
+          - status
+        properties:
+          type:
+            type: string
+            enum: [ task_result ]
+          taskId:
+            type: string
+          executionId:
+            type: string
+          serviceId:
+            type: string
+          idempotencyKey:
+            type: string
+          status:
+            type: string
+            enum: [ completed, partial, failed, expired ]
+          partial:
+            type: object
+            properties:
+              completed:
+                type: array
+                items:
+                  type: string
+              remaining:
+                type: array
+                items:
+                  type: string
+          error:
+            type: string
+
 x-conformance-tests:
   service_lifecycle:
     description: Validates service registration and lifecycle
@@ -361,6 +450,76 @@ x-conformance-tests:
               - service_id_matches_stored: true
               - connection_restored: true
               - no_duplicate_registration: true
+
+  compensation_flow:
+    description: Validates compensation behavior for revertible services
+    steps:
+      - id: revertible_registration
+        description: Service registers with compensation enabled
+        action: register_service
+        input:
+          name: test-service
+          schema:
+            input:
+              type: object
+              properties:
+                data:
+                  type: string
+            output:
+              type: object
+              properties:
+                result:
+                  type: string
+          revertible: true
+          revertTTL: 3600000 # 1 hour
+        expect:
+          - type: service_registered
+            timeout: 5000
+            validate:
+              - revertible_enabled: true
+              - service_id_present: true
+
+      - id: compensation_execution
+        description: Executes a sequence of tasks that trigger compensation
+        action: process_tasks_then_compensate
+        input:
+          task_data: "test data"
+        expect:
+          - type: task_result
+            timeout: 5000
+            validate:
+              - result_present: true
+              - task_status: completed
+              - compensation_stored: true
+          - type: task_result
+            timeout: 5000
+            validate:
+              - error_present: true
+              - task_status: failed
+          - type: compensation_result
+            timeout: 5000
+            validate:
+              - status: completed
+              - execution_order: sequential
+              - original_task_present: true
+
+      - id: partial_compensation
+        description: Handles partial compensation reporting
+        action: process_task_then_compensate
+        input:
+          task_data: [ "item1", "item2", "item3" ]
+          partial_compensation: true
+        expect:
+          - type: task_result
+            timeout: 5000
+            validate:
+              - result_present: true
+          - type: compensation_result
+            timeout: 5000
+            validate:
+              - compensation_status: "partial"
+              - partial_completed_items_present: true
+              - partial_remaining_items_present: true
 
 x-sdk-requirements:
   connection:

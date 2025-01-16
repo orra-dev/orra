@@ -1,3 +1,10 @@
+## CLI v0.2.0
+
+### Features
+- New `--health-check-grace-period` / `-g` flag to set timeout durations for orchestration tasks.
+- Compensations support for the `orra ps` command.
+- Compensations support for the `orra inspect` command.
+
 ## CLI v0.1.3
 
 ### Features

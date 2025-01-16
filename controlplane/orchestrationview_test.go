@@ -105,7 +105,6 @@ func (ts *TestState) addTaskState(status Status, errMsg string, afterMinutes int
 	}
 
 	_ = ts.plane.LogManager.AppendTaskStatusEvent(ts.orchestrationID, "task1", "s_echo", status, err, timestamp, ts.attempts)
-	ts.plane.LogManager.orchestrations[ts.orchestrationID].TasksStatuses["task1"] = status
 
 	if status == Failed {
 		ts.plane.LogManager.orchestrations[ts.orchestrationID].Status = Failed

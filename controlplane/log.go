@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -144,7 +145,7 @@ func (lm *LogManager) AppendToLog(orchestrationID, entryType, id string, value j
 	log.Append(newEntry)
 }
 
-func (lm *LogManager) AppendFailureToLog(orchestrationID, id, producerID, failure string, attemptNo int, skipWebhook bool) error {
+func (lm *LogManager) AppendTaskFailureToLog(orchestrationID, id, producerID, failure string, attemptNo int, skipWebhook bool) error {
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 
@@ -158,7 +159,7 @@ func (lm *LogManager) AppendFailureToLog(orchestrationID, id, producerID, failur
 		return fmt.Errorf("failed to marshal failure for log entry: %w", err)
 	}
 
-	failureID := fmt.Sprintf("fail_%s_%s", strings.ToLower(id), shortuuid.New())
+	failureID := fmt.Sprintf("task_fail_%s_%s", strings.ToLower(id), shortuuid.New())
 	lm.AppendToLog(orchestrationID, "task_failure", failureID, value, producerID, attemptNo)
 	return nil
 }
@@ -201,16 +202,200 @@ func (lm *LogManager) AppendTaskStatusEvent(
 	return nil
 }
 
+// AppendCompensationDataStored creates a log entry for stored compensation data
+func (lm *LogManager) AppendCompensationDataStored(orchestrationID string, taskID string, serviceID string, data *CompensationData) error {
+	lm.mu.Lock()
+	defer lm.mu.Unlock()
+
+	value, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal compensation data: %w", err)
+	}
+
+	lm.AppendToLog(
+		orchestrationID,
+		CompensationDataStoredLogType,
+		fmt.Sprintf("comp_data_%s", strings.ToLower(taskID)),
+		value,
+		serviceID,
+		0,
+	)
+	return nil
+}
+
+// AppendCompensationAttempted creates a log entry for a compensation attempt
+func (lm *LogManager) AppendCompensationAttempted(
+	orchestrationID string,
+	taskID string,
+	uuid string,
+	attemptNo int,
+) error {
+	lm.mu.Lock()
+	defer lm.mu.Unlock()
+
+	attemptId := fmt.Sprintf("comp_attempt_%s_%s", strings.ToLower(taskID), uuid)
+	compensationAttempt := struct {
+		ID        string    `json:"id"`
+		TaskID    string    `json:"taskId"`
+		Timestamp time.Time `json:"timestamp"`
+	}{
+		ID:        attemptId,
+		TaskID:    taskID,
+		Timestamp: time.Now().UTC(),
+	}
+
+	attemptData, err := json.Marshal(compensationAttempt)
+	if err != nil {
+		return fmt.Errorf("failed to marshal compensation attempt metadata: %w", err)
+	}
+
+	lm.Logger.Debug().
+		Str("AttemptId", attemptId).
+		Int("AttemptNo", attemptNo).
+		Str("OrchestrationID", orchestrationID).
+		Msgf("Appending compensation attempt for task: [%s]", taskID)
+
+	lm.AppendToLog(
+		orchestrationID,
+		CompensationAttemptedLogType,
+		attemptId,
+		attemptData,
+		taskID,
+		attemptNo,
+	)
+	return nil
+}
+
+// AppendCompensationComplete creates a log entry for a completed compensation
+func (lm *LogManager) AppendCompensationComplete(
+	orchestrationID string,
+	taskID string,
+	logType string,
+	result *CompensationResult,
+	attemptNo int,
+) error {
+	lm.mu.Lock()
+	defer lm.mu.Unlock()
+
+	compensationCompleted := struct {
+		*CompensationResult
+		Timestamp time.Time `json:"timestamp"`
+	}{
+		CompensationResult: result,
+		Timestamp:          time.Now().UTC(),
+	}
+
+	compCompleted, err := json.Marshal(compensationCompleted)
+	if err != nil {
+		return fmt.Errorf("failed to marshal compensation result: %w", err)
+	}
+
+	lm.AppendToLog(
+		orchestrationID,
+		logType,
+		fmt.Sprintf("comp_complete_%s", strings.ToLower(taskID)),
+		compCompleted,
+		taskID,
+		attemptNo,
+	)
+	return nil
+}
+
+func (lm *LogManager) AppendCompensationFailure(
+	orchestrationID,
+	taskID string,
+	logType string,
+	failure CompensationResult,
+	attemptNo int,
+) error {
+	lm.mu.Lock()
+	defer lm.mu.Unlock()
+
+	value, err := json.Marshal(failure)
+	if err != nil {
+		return fmt.Errorf("failed to marshal compensation failure for log entry: %w", err)
+	}
+
+	failureID := fmt.Sprintf("comp_fail_%s", strings.ToLower(taskID))
+	lm.AppendToLog(
+		orchestrationID,
+		logType,
+		failureID,
+		value,
+		taskID,
+		attemptNo,
+	)
+	return nil
+}
+
 func (lm *LogManager) FinalizeOrchestration(
 	orchestrationID string,
 	status Status,
 	reason, result json.RawMessage,
 	skipWebhook bool,
 ) error {
-	lm.mu.Lock()
-	defer lm.mu.Unlock()
+	if err := lm.controlPlane.FinalizeOrchestration(orchestrationID, status, reason, []json.RawMessage{result}, skipWebhook); err != nil {
+		return fmt.Errorf("failed to finalize orchestration: %w", err)
+	}
 
-	return lm.controlPlane.FinalizeOrchestration(orchestrationID, status, reason, []json.RawMessage{result}, skipWebhook)
+	if status != Failed {
+		return nil
+	}
+
+	log := lm.GetLog(orchestrationID)
+	entries := log.ReadFrom(0)
+
+	var candidates []CompensationCandidate
+	for _, entry := range entries {
+		if entry.entryType != CompensationDataStoredLogType {
+			continue
+		}
+
+		svc, err := lm.controlPlane.GetServiceByID(entry.producerID)
+		if err != nil {
+			return err
+		}
+		if !svc.Revertible {
+			continue
+		}
+
+		taskID, _ := strings.CutPrefix(entry.id, "comp_data_")
+		var compensation CompensationData
+		if err := json.Unmarshal(entry.Value(), &compensation); err != nil {
+			return err
+		}
+		candidates = append(candidates, CompensationCandidate{
+			TaskID:       taskID,
+			Service:      svc,
+			Compensation: &compensation,
+		})
+	}
+
+	if len(candidates) == 0 {
+		lm.Logger.Info().
+			Str("OrchestrationID", orchestrationID).
+			Msg("Orchestration has no completed tasks to compensate")
+		return nil
+	}
+
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].TaskID > candidates[j].TaskID
+	})
+
+	lm.Logger.Trace().
+		Interface("CompensationCandidates", candidates).
+		Str("OrchestrationID", orchestrationID).
+		Msg("Preparing sorted compensation candidates")
+
+	lm.triggerCompensation(orchestrationID, candidates)
+
+	return nil
+}
+
+func (lm *LogManager) triggerCompensation(orchestrationID string, candidates []CompensationCandidate) {
+	ctx, cancel := context.WithCancel(context.Background())
+	worker := NewCompensationWorker(orchestrationID, lm, candidates, cancel)
+	go worker.Start(ctx, orchestrationID)
 }
 
 func NewLog() *Log {

@@ -1,6 +1,6 @@
 # Advanced Topics & Internals
 
-## How Orra Makes Multi-Agent Apps Production-Ready
+## How Orra Makes Agent Apps Production-Ready
 
 ### Execution Plans
 
@@ -64,7 +64,7 @@ This means:
 - No accidental duplicate charges
 - No double-sending of notifications
 - No redundant API calls
-- Clear task history for debugging
+- Clear task audit history for debugging
 
 ### Service Health & Recovery
 
@@ -78,6 +78,15 @@ When things go wrong:
 1. Services can recover and reconnect within 30 minutes
 2. In-progress tasks resume automatically
 3. No manual intervention needed
+
+### Compensations & Recovery
+
+Orra's compensation system provides sophisticated failure recovery for services and agents:
+- Tracks completed tasks from revertible services
+- Executes compensations in reverse chronological order
+- Handles partial and complete compensation results
+- Retries failed compensations with exponential backoff (up to 10 attempts)
+- Maintains strict TTL on compensation data (default 24h)
 
 ### Log-Based Task Coordination
 

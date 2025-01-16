@@ -18,6 +18,9 @@ class OrraSDK {
 	#apiKey;
 	#ws;
 	#taskHandler;
+	#revertHandler;
+	#revertible = false;
+	#revertTTL = 24 * 60 * 60 * 1000; // 24 hours
 	serviceId;
 	version;
 	persistenceOpts;
@@ -110,17 +113,34 @@ class OrraSDK {
 	
 	async #registerServiceOrAgent(name, kind, opts = {
 		description: undefined,
+		revertible: undefined,
+		revertTTL: undefined,
 		schema: undefined,
 	}) {
 		if (this.#userInitiatedClose) {
 			throw new Error(`Cannot register ${kind} after closing down SDK connections`)
 		}
+		
+		this.#validateSchema(opts, kind);
+		
+		if (opts.revertible !== undefined) {
+			if (typeof opts.revertible !== 'boolean') throw new Error(`${kind} revertible must be boolean (true or false)`);
+			this.#revertible = opts.revertible
+		}
+		
+		if (opts.revertTTL !== undefined) {
+			if (typeof opts.revertTTL !== 'number') throw new Error(`${kind} revert TTL must be a number of milliseconds`);
+			if (opts.revertTTL <= 100) throw new Error(`${kind} If specified, revert TTL must be greater than 100 milliseconds`);
+			this.#revertTTL = opts.revertTTL
+		}
+		
 		await this.loadServiceKey(); // Try to load an existing service id
 		
 		this.logger.debug('Registering service/agent', {
 			kind,
 			name,
-			existingServiceId: this.serviceId
+			existingServiceId: this.serviceId,
+			revertible: this.#revertible
 		});
 		
 		const response = await fetch(`${this.#apiUrl}/register/${kind}`, {
@@ -134,6 +154,7 @@ class OrraSDK {
 				name: name,
 				description: opts?.description,
 				schema: opts?.schema,
+				revertible: this.#revertible,
 				version: this.version,
 			}),
 		});
@@ -171,6 +192,14 @@ class OrraSDK {
 		await this.saveServiceKey(); // Save the new or updated key
 		this.#connect();
 		return this;
+	}
+	
+	#validateSchema(opts, kind) {
+		if (opts?.schema) {
+			if (!opts.schema?.input || !opts.schema?.output) {
+				throw new Error(`${kind} schema must contain input and output specifications`);
+			}
+		}
 	}
 	
 	#connect() {
@@ -217,6 +246,9 @@ class OrraSDK {
 					break;
 				case 'task_request':
 					this.#handleTask(parsedData);
+					break;
+				case 'compensation_request':
+					this.#handleRevert(parsedData);
 					break;
 				default:
 					this.logger.warn('Received unknown message type', {
@@ -312,16 +344,14 @@ class OrraSDK {
 			this.logger.debug('Cache hit found', {
 				taskId,
 				idempotencyKey,
-				resultAge: Date.now() - processedResult.timestamp,
-				hasError: !!processedResult.error
+				resultAge: Date.now() - processedResult.timestamp
 			});
 			this.#sendTaskResult(
 				taskId,
 				executionId,
 				this.serviceId,
 				idempotencyKey,
-				processedResult.result,
-				processedResult.error
+				processedResult.result
 			);
 			return;
 		}
@@ -361,7 +391,17 @@ class OrraSDK {
 		this.#inProgressTasks.set(idempotencyKey, { startTime });
 		
 		Promise.resolve(this.#taskHandler(task))
-			.then((result) => {
+			.then((taskResult) => {
+				const result = {
+					task: taskResult,
+					compensation: this.#revertible ? {
+						data: {
+							originalTask: task,
+							taskResult: taskResult
+						},
+						ttl: this.#revertTTL,
+					} : null
+				}
 				
 				const processingTime = Date.now() - startTime;
 				this.logger.trace('Task processing completed', {
@@ -373,8 +413,7 @@ class OrraSDK {
 				});
 				
 				this.#processedTasksCache.set(idempotencyKey, {
-					result,
-					error: null,
+					result: result,
 					timestamp: Date.now()
 				});
 				
@@ -392,17 +431,125 @@ class OrraSDK {
 					errorMessage: error.message,
 					stackTrace: error.stack
 				});
-				
-				this.#processedTasksCache.set(idempotencyKey, {
-					result: null,
-					error: error.message,
-					timestamp: Date.now()
-				});
 				this.#inProgressTasks.delete(idempotencyKey);
 				this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, null, error.message);
 			});
 	}
 	
+	#handleRevert(task) {
+		const { id: taskId, executionId, idempotencyKey, input } = task;
+		
+		this.logger.trace('Revert task handling initiated', {
+			taskId,
+			executionId,
+			idempotencyKey,
+			handlerPresent: !!this.#taskHandler,
+			timestamp: new Date().toISOString()
+		});
+		
+		if (!this.#revertHandler) {
+			this.logger.warn('Received revert task but no revert handler is set', {
+				taskId,
+				executionId
+			});
+			return;
+		}
+		
+		this.logger.trace('Checking task cache for revert task', {
+			taskId,
+			idempotencyKey,
+			cacheSize: this.#processedTasksCache.size,
+			checkTimestamp: new Date().toISOString()
+		});
+		
+		const processedResult = this.#processedTasksCache.get(idempotencyKey);
+		if (processedResult) {
+			this.logger.debug('Cache hit found', {
+				taskId,
+				idempotencyKey,
+				resultAge: Date.now() - processedResult.timestamp
+			});
+			this.#sendTaskResult(
+				taskId,
+				executionId,
+				this.serviceId,
+				idempotencyKey,
+				processedResult.result
+			);
+			return;
+		}
+		
+		this.logger.trace('Checking in-progress reverts', {
+			taskId,
+			idempotencyKey,
+			inProgressCount: this.#inProgressTasks.size,
+			checkTimestamp: new Date().toISOString()
+		});
+		
+		if (this.#inProgressTasks.has(idempotencyKey)) {
+			this.logger.debug('Revert already in progress', {
+				taskId,
+				idempotencyKey,
+				startTime: this.#inProgressTasks.get(idempotencyKey).startTime
+			});
+			
+			this.#sendTaskStatus(
+				taskId,
+				executionId,
+				this.serviceId,
+				idempotencyKey,
+				'in_progress'
+			);
+			return;
+		}
+		
+		const startTime = Date.now();
+		this.logger.trace('Starting new revert processing', {
+			taskId,
+			executionId,
+			idempotencyKey,
+			startTime: new Date(startTime).toISOString()
+		});
+		
+		this.#inProgressTasks.set(idempotencyKey, { startTime });
+		
+		Promise.resolve()
+			.then(() => this.#revertHandler(input.originalTask, input.taskResult))
+			.then((rawResult) => {
+				const result = processRevertResult(rawResult, this.logger, taskId, executionId);
+				
+				const processingTime = Date.now() - startTime;
+				this.logger.trace('Revert processing completed', {
+					taskId,
+					executionId,
+					idempotencyKey,
+					processingTimeMs: processingTime,
+					resultSize: JSON.stringify(result).length
+				});
+				
+				this.#processedTasksCache.set(idempotencyKey, {
+					result: result,
+					timestamp: Date.now()
+				});
+				
+				this.#inProgressTasks.delete(idempotencyKey);
+				this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, result);
+			})
+			.catch((error) => {
+				const processingTime = Date.now() - startTime;
+				this.logger.trace('Revert processing failed', {
+					taskId,
+					executionId,
+					idempotencyKey,
+					processingTimeMs: processingTime,
+					errorType: error.constructor.name,
+					errorMessage: error.message,
+					stackTrace: error.stack
+				});
+				this.#inProgressTasks.delete(idempotencyKey);
+				this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, null, error.message);
+			});
+	}
 	
 	#reconnect() {
 		if (this.#reconnectAttempts >= this.#maxReconnectAttempts) {
@@ -542,7 +689,30 @@ class OrraSDK {
 		}, 60 * 60 * 1000); // Run cleanup every hour
 	}
 	
+	isRevertible() {
+		return this.#revertible;
+	}
+	
+	getRevertTTL() {
+		if (!this.isRevertible()) return undefined;
+		return this.#revertTTL;
+	}
+	
+	revertHandler(handler) {
+		if (typeof handler !== 'function') {
+			throw new Error('Revert handler must be a function');
+		}
+		this.#revertHandler = handler;
+		this.logger.debug('Revert handler registered');
+	}
+	
 	startHandler(handler) {
+		if (typeof handler !== 'function') {
+			throw new Error('Start handler must be a function');
+		}
+		if (this.#revertible && !this.#revertHandler) {
+			throw new Error('onRevert handler is missing');
+		}
 		this.#taskHandler = handler;
 	}
 	
@@ -563,7 +733,6 @@ class OrraSDK {
 		}
 	}
 }
-
 
 function extractDirectoryFromFilePath(filePath) {
 	return path.dirname(filePath);
@@ -605,6 +774,50 @@ async function createDirectoryIfNotExists(directoryPath, logger) {
 	}
 }
 
+function validatePartialResult(raw) {
+	if (!raw?.partial) {
+		return { valid: false, error: 'Missing partial field' };
+	}
+	
+	const { completed, remaining } = raw.partial;
+	
+	if (!Array.isArray(completed)) {
+		return { valid: false, error: 'completed must be an array' };
+	}
+	
+	if (!Array.isArray(remaining)) {
+		return { valid: false, error: 'remaining must be an array' };
+	}
+	
+	return { valid: true, value: raw };
+}
+
+function processRevertResult(v, logger, taskId, executionId) {
+	if (v === undefined || typeof v !== 'object') {
+		return {
+			status: 'completed',
+		};
+	}
+	
+	const validation = validatePartialResult(v);
+	if (validation.valid) {
+		return {
+			status: 'partial',
+			...validation.value
+		};
+	}
+	
+	logger.warn('Revert result reporting failed', {
+		taskId,
+		executionId,
+		error: validation.error
+	});
+	
+	return {
+		status: 'completed',
+	};
+}
+
 const validateName = (name, type) => {
 	if (!name || typeof name !== 'string') {
 		throw new Error(`${type} name must be a non-empty string`);
@@ -621,11 +834,11 @@ const validateName = (name, type) => {
 };
 
 const initOrraEntity = (type) => ({
-	                                    name,
-	                                    orraUrl,
-	                                    orraKey,
-	                                    persistenceOpts = {},
-                                    }) => {
+	                                  name,
+	                                  orraUrl,
+	                                  orraKey,
+	                                  persistenceOpts = {},
+                                  }) => {
 	validateName(name, type);
 	
 	if (!name) {
@@ -654,11 +867,22 @@ const initOrraEntity = (type) => ({
 		register: async (opts) => {
 			return await registerMethod.call(sdk, sdk.name, opts);
 		},
+		onRevert: sdk.revertHandler.bind(sdk),
 		start: sdk.startHandler.bind(sdk),
 		shutdown: sdk.shutdown.bind(sdk),
 		info: {
-			get id() { return sdk.serviceId; },
-			get version() { return sdk.version; }
+			get id() {
+				return sdk.serviceId;
+			},
+			get version() {
+				return sdk.version;
+			},
+			get revertible() {
+				return sdk.isRevertible();
+			},
+			get revertTTL() {
+				return sdk.getRevertTTL();
+			}
 		}
 	};
 };

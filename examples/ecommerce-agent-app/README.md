@@ -9,12 +9,13 @@ It uses a chat UI to simulate a WhatsApp sales experience.
 ## ✨ Features
 
 - 🤖 AI-powered delivery estimates using Mistral's function calling
-- 🏪 Real-time product availability checks
+- 🏪 Real-time product availability checks and holds
 - 👤 Customer profile integration
 - 📱 Real-time chat UI (simulating WhatsApp)
-- ⚡ Parallel service orchestration
+- ⚡  Parallel service orchestration
 - 🔄 Real-time status updates
 - 🛡️ Error handling and recovery
+- ↩️ Canceling product holds when an unrecoverable error occurs
 
 ## Prerequisites
 
@@ -40,7 +41,7 @@ docker compose up
 2. Setup your Orra project:
 ```bash
 # Install Orra CLI 
-curl -L https://github.com/ezodude/orra/releases/download/v0.1.3-narwhal/orra-darwin-arm64 -o /usr/local/bin/orra
+curl -L https://github.com/ezodude/orra/releases/download/v0.2.0-manta-ray/orra-darwin-arm64 -o /usr/local/bin/orra
 chmod +x /usr/local/bin/orra
 
 # Create project and configure a webhook
@@ -164,6 +165,7 @@ That's it! Orra handles the rest:
 - Reliable task execution
 - Error recovery
 - Parallel orchestration
+- Compensating revert-able services or agents after unrecoverable errors 
 
 ## Architecture
 

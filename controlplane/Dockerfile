@@ -76,4 +76,4 @@ COPY --from=build /bin/control-plane /bin/
 EXPOSE 8005
 
 # What the container should run when it is started.
-ENTRYPOINT [ "/bin/control-plane", " -log-level", "trace" ]
+ENTRYPOINT [ "/bin/control-plane", "-log-level", "trace" ]

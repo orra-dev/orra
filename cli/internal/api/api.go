@@ -52,9 +52,10 @@ type OrchestrationRequest struct {
 	Action struct {
 		Content string
 	} `json:"action"`
-	Data    []map[string]string `json:"data"`
-	Timeout string              `json:"timeout"`
-	Webhook string              `json:"webhook"`
+	Data                   []map[string]string `json:"data"`
+	Webhook                string              `json:"webhook"`
+	Timeout                string              `json:"timeout,omitempty"`
+	HealthCheckGracePeriod string              `json:"healthCheckGracePeriod,omitempty"`
 }
 
 type Status string
@@ -69,11 +70,41 @@ func (s Status) String() string {
 }
 
 type OrchestrationView struct {
-	ID        string          `json:"id"`
-	Action    string          `json:"action"`
-	Status    Status          `json:"status"`
-	Error     json.RawMessage `json:"error,omitempty"`
-	Timestamp time.Time       `json:"timestamp"`
+	ID           string               `json:"id"`
+	Action       string               `json:"action"`
+	Status       Status               `json:"status"`
+	Error        json.RawMessage      `json:"error,omitempty"`
+	Timestamp    time.Time            `json:"timestamp"`
+	Compensation *CompensationSummary `json:"compensation,omitempty"`
+}
+
+type CompensationSummary struct {
+	Active    bool `json:"active"`    // Are any compensations still running?
+	Total     int  `json:"total"`     // Total number of compensatable tasks
+	Completed int  `json:"completed"` // Number of completed compensations
+	Failed    int  `json:"failed"`    // Number of failed compensations
+}
+
+func (cs *CompensationSummary) String() string {
+	if cs == nil {
+		return ""
+	}
+
+	remaining := cs.Total - cs.Completed - cs.Failed
+
+	if cs.Active && remaining > 0 {
+		return fmt.Sprintf("Active (%d/%d)", cs.Completed+cs.Failed, cs.Total)
+	}
+
+	if cs.Failed > 0 {
+		return fmt.Sprintf("Failed (%d/%d)", cs.Failed, cs.Total)
+	}
+
+	if cs.Completed == cs.Total {
+		return fmt.Sprintf("Completed (%d/%d)", cs.Total, cs.Total)
+	}
+
+	return ""
 }
 
 type OrchestrationListView struct {
@@ -98,15 +129,77 @@ type OrchestrationInspectResponse struct {
 
 // TaskInspectResponse represents the detailed view of a task within an orchestration
 type TaskInspectResponse struct {
-	ID            string            `json:"id"`
-	ServiceID     string            `json:"serviceId"`
-	ServiceName   string            `json:"serviceName"`
-	Status        Status            `json:"status"`
-	StatusHistory []TaskStatusEvent `json:"statusHistory"`
-	Input         json.RawMessage   `json:"input,omitempty"`
-	Output        json.RawMessage   `json:"output,omitempty"`
-	Error         string            `json:"error,omitempty"`
-	Duration      time.Duration     `json:"duration"`
+	ID                  string                    `json:"id"`
+	ServiceID           string                    `json:"serviceId"`
+	ServiceName         string                    `json:"serviceName"`
+	Status              Status                    `json:"status"`
+	StatusHistory       []TaskStatusEvent         `json:"statusHistory"`
+	Input               json.RawMessage           `json:"input,omitempty"`
+	Output              json.RawMessage           `json:"output,omitempty"`
+	Error               string                    `json:"error,omitempty"`
+	Duration            time.Duration             `json:"duration"`
+	Compensation        *TaskCompensationStatus   `json:"compensation,omitempty"`
+	CompensationHistory []CompensationStatusEvent `json:"compensationHistory,omitempty"`
+	IsRevertible        bool                      `json:"isRevertible"`
+}
+
+type TaskCompensationStatus struct {
+	Status      string    `json:"status"`       // pending, processing, completed, failed, partial, expired
+	Attempt     int       `json:"attempt"`      // Current attempt number (1-based)
+	MaxAttempts int       `json:"max_attempts"` // Maximum attempts allowed
+	Timestamp   time.Time `json:"timestamp"`    // When compensation started
+}
+
+type CompensationStatusEvent struct {
+	ID          string    `json:"id"`
+	TaskID      string    `json:"taskId"`
+	Status      string    `json:"status"`      // "processing", "completed", "failed"
+	Attempt     int       `json:"attempt"`     // Current attempt number (1-based)
+	MaxAttempts int       `json:"maxAttempts"` // Maximum allowed attempts
+	Timestamp   time.Time `json:"timestamp"`
+	Error       string    `json:"error,omitempty"`
+}
+
+func (tcs *TaskCompensationStatus) String() string {
+	if tcs == nil {
+		return ""
+	}
+
+	switch tcs.Status {
+	case "pending":
+		return "Pending"
+	case "processing":
+		return fmt.Sprintf("Processing (%d/%d)", tcs.Attempt, tcs.MaxAttempts)
+	case "completed":
+		return "Completed"
+	case "partial":
+		return "Completed Partially"
+	case "expired":
+		return "Expired"
+	case "failed":
+		return fmt.Sprintf("Failed (%d/%d)", tcs.Attempt, tcs.MaxAttempts)
+	default:
+		return ""
+	}
+}
+
+func (cse CompensationStatusEvent) String() string {
+	switch cse.Status {
+	case "pending":
+		return "Pending"
+	case "processing":
+		return fmt.Sprintf("Processing (%d/%d)", cse.Attempt, cse.MaxAttempts)
+	case "completed":
+		return "Completed"
+	case "partial":
+		return "Completed Partially"
+	case "expired":
+		return "Expired"
+	case "failed":
+		return fmt.Sprintf("Failed (%d/%d)", cse.Attempt, cse.MaxAttempts)
+	default:
+		return ""
+	}
 }
 
 // TaskStatusEvent represents a status change in a task's history

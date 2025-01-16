@@ -1,3 +1,4 @@
 ORRA_URL=xxx
 ORRA_API_KEY=xxx
 NODE_ENV=development
+DEMO_REVERT_FAIL=false

@@ -79,7 +79,7 @@ describe('Connection Resilience Protocol', () => {
 				output: { type: 'object', properties: { completed: { type: 'boolean' }, executionCount: { type: 'number' } } }
 			}
 		});
-		
+
 		service.start(async (task) => {
 			executionCount++;
 			// Simulate long-running task
@@ -91,7 +91,7 @@ describe('Connection Resilience Protocol', () => {
 		});
 
 		console.log('service.info.id', service.info.id);
-		
+
 		const testResponse = await fetch(`${TEST_HARNESS_URL}/conformance-tests`, {
 			method: 'POST',
 			headers: {
@@ -127,8 +127,8 @@ describe('Connection Resilience Protocol', () => {
 		expect(result.status).toBe('completed');
 
 		const taskResult = result.results.find(r => r.type === 'task_result');
-		expect(taskResult.result.completed).toBe(true);
-		expect(taskResult.result.executionCount).toBe(1);
+		expect(taskResult.result.task.completed).toBe(true);
+		expect(taskResult.result.task.executionCount).toBe(1);
 		expect(executionCount).toBe(1);
 	}, 20000);
 	

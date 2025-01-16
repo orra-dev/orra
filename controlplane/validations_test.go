@@ -277,3 +277,163 @@ func TestServiceInfoValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestServiceSchema_Validation_Arrays(t *testing.T) {
+	tests := []struct {
+		name    string
+		schema  ServiceSchema
+		wantErr bool
+	}{
+		{
+			name: "valid array property",
+			schema: ServiceSchema{
+				Input: Spec{
+					Type: "object",
+					Properties: map[string]Spec{
+						"tags": {
+							Type: "array",
+							Items: &Spec{
+								Type: "string",
+							},
+						},
+					},
+				},
+				Output: Spec{
+					Type: "object",
+					Properties: map[string]Spec{
+						"result": {Type: "string"},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "array without items spec",
+			schema: ServiceSchema{
+				Input: Spec{
+					Type: "object",
+					Properties: map[string]Spec{
+						"data": {
+							Type: "array",
+							// Missing Items spec
+						},
+					},
+				},
+				Output: Spec{
+					Type: "object",
+					Properties: map[string]Spec{
+						"result": {Type: "string"},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "nested array property",
+			schema: ServiceSchema{
+				Input: Spec{
+					Type: "object",
+					Properties: map[string]Spec{
+						"matrix": {
+							Type: "array",
+							Items: &Spec{
+								Type: "array",
+								Items: &Spec{
+									Type: "integer",
+								},
+							},
+						},
+					},
+				},
+				Output: Spec{
+					Type: "object",
+					Properties: map[string]Spec{
+						"result": {Type: "string"},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "array of objects",
+			schema: ServiceSchema{
+				Input: Spec{
+					Type: "object",
+					Properties: map[string]Spec{
+						"users": {
+							Type: "array",
+							Items: &Spec{
+								Type: "object",
+								Properties: map[string]Spec{
+									"id":  {Type: "string"},
+									"age": {Type: "integer"},
+								},
+							},
+						},
+					},
+				},
+				Output: Spec{
+					Type: "object",
+					Properties: map[string]Spec{
+						"result": {Type: "string"},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid array items type",
+			schema: ServiceSchema{
+				Input: Spec{
+					Type: "object",
+					Properties: map[string]Spec{
+						"data": {
+							Type: "array",
+							Items: &Spec{
+								Type: "invalid_type",
+							},
+						},
+					},
+				},
+				Output: Spec{
+					Type: "object",
+					Properties: map[string]Spec{
+						"result": {Type: "string"},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "incorrect array as top level type",
+			schema: ServiceSchema{
+				Input: Spec{
+					Type: "array",
+					Items: &Spec{
+						Type: "string",
+					},
+				},
+				Output: Spec{
+					Type: "object",
+					Properties: map[string]Spec{
+						"result": {Type: "string"},
+					},
+				},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			schema := tt.schema.Validation()
+			errs := v.Validate(schema)
+			if (len(errs) > 0) != tt.wantErr {
+				t.Errorf("ServiceSchema.Validation() error = %v, wantErr %v", errs, tt.wantErr)
+				for _, err := range errs {
+					t.Logf("Validation error: %v", err)
+				}
+			}
+		})
+	}
+}

@@ -32,7 +32,20 @@ async function startService() {
 		// Register the echo service with Orra
 		await echoSvc.register({
 			description: 'A simple service that echoes back the first input value it receives.',
+			revertible: true,
+			revertTTL: 24 * 60 * 60 * 1000,
 			schema
+		});
+		
+		echoSvc.onRevert(async (originalTask, taskResult) => {
+			console.log('Reverting echo:', originalTask.id);
+			console.log('From echo', taskResult?.echo?.message);
+			return {
+				partial: {
+					completed: [],
+					remaining: [],
+				}
+			};
 		});
 		
 		echoSvc.start(async (task) => {
@@ -62,7 +75,7 @@ process.on('SIGTERM', async () => {
 });
 
 // Configure service key persistence based on environment
-function getPersistenceConfig () {
+function getPersistenceConfig() {
 	if (process.env.NODE_ENV === 'development') {
 		// For local development with Docker, use file persistence with custom path
 		return {

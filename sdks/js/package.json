@@ -1,8 +1,8 @@
 {
   "name": "@orra.dev/sdk",
-  "version": "0.1.2-narwhal",
+  "version": "0.2.0-manta-ray",
   "type": "module",
-  "description": "JS SDK for Orra - Build reliable multi-agent applications",
+  "description": "JS SDK for Orra - Build reliable AI applications that handle complex service interactions. Automatic error recovery and state management. Requires Orra control plane",
   "main": "./dist/index.js",
   "publishConfig": {
     "access": "public"

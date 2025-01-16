@@ -42,11 +42,22 @@ type IdempotencyStore struct {
 type Execution struct {
 	ExecutionID string          `json:"executionId"`
 	Result      json.RawMessage `json:"result,omitempty"`
-	Error       error           `json:"error,omitempty"`
+	Failures    []error         `json:"error,omitempty"`
 	State       ExecutionState  `json:"state"`
 	Timestamp   time.Time       `json:"timestamp"`
 	StartedAt   time.Time       `json:"startedAt"`
 	LeaseExpiry time.Time       `json:"leaseExpiry"`
+}
+
+func (e *Execution) pushFailure(err error) {
+	e.Failures = append(e.Failures, err)
+}
+
+func (e *Execution) GetFailure(index int) (error, bool) {
+	if index >= 0 && index < len(e.Failures) {
+		return e.Failures[index], true
+	}
+	return nil, false
 }
 
 func NewIdempotencyStore(ttl time.Duration) *IdempotencyStore {
@@ -64,11 +75,11 @@ func NewIdempotencyStore(ttl time.Duration) *IdempotencyStore {
 	return store
 }
 
-func (s *IdempotencyStore) InitializeExecution(key IdempotencyKey, executionID string) (*Execution, bool, error) {
+func (s *IdempotencyStore) InitializeOrGetExecution(key IdempotencyKey, executionID string) (*Execution, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	now := time.Now()
+	now := time.Now().UTC()
 
 	if execution, exists := s.executions[key]; exists {
 		switch execution.State {
@@ -114,7 +125,7 @@ func (s *IdempotencyStore) RenewLease(key IdempotencyKey, executionID string) bo
 	if execution, exists := s.executions[key]; exists &&
 		execution.State == ExecutionInProgress &&
 		execution.ExecutionID == executionID {
-		execution.LeaseExpiry = time.Now().Add(defaultLeaseDuration)
+		execution.LeaseExpiry = time.Now().UTC().Add(defaultLeaseDuration)
 		return true
 	}
 	return false
@@ -138,7 +149,20 @@ func (s *IdempotencyStore) ResumeExecution(key IdempotencyKey) (*Execution, bool
 	if execution, exists := s.executions[key]; exists &&
 		execution.State == ExecutionPaused {
 		execution.State = ExecutionInProgress
-		execution.LeaseExpiry = time.Now().Add(defaultLeaseDuration)
+		execution.LeaseExpiry = time.Now().UTC().Add(defaultLeaseDuration)
+		return execution, true
+	}
+	return nil, false
+}
+
+func (s *IdempotencyStore) ResetFailedExecution(key IdempotencyKey) (*Execution, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if execution, exists := s.executions[key]; exists &&
+		execution.State == ExecutionFailed {
+		execution.State = ExecutionInProgress
+		execution.LeaseExpiry = time.Now().UTC().Add(defaultLeaseDuration)
 		return execution, true
 	}
 	return nil, false
@@ -150,12 +174,12 @@ func (s *IdempotencyStore) UpdateExecutionResult(key IdempotencyKey, result json
 
 	if execution, exists := s.executions[key]; exists {
 		execution.Result = result
-		execution.Error = err
+		execution.pushFailure(err)
 		execution.State = ExecutionCompleted
 		if err != nil {
 			execution.State = ExecutionFailed
 		}
-		execution.Timestamp = time.Now()
+		execution.Timestamp = time.Now().UTC()
 	}
 }
 
@@ -167,7 +191,7 @@ func (s *IdempotencyStore) GetExecutionWithResult(key IdempotencyKey) (*Executio
 		return &Execution{
 			ExecutionID: result.ExecutionID,
 			Result:      result.Result,
-			Error:       result.Error,
+			Failures:    result.Failures,
 			State:       result.State,
 			Timestamp:   result.Timestamp,
 			StartedAt:   result.StartedAt,
@@ -187,7 +211,7 @@ func (s *IdempotencyStore) cleanup() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	threshold := time.Now().Add(-s.ttl)
+	threshold := time.Now().UTC().Add(-s.ttl)
 	for key, execution := range s.executions {
 		if execution.Timestamp.Before(threshold) {
 			delete(s.executions, key)
