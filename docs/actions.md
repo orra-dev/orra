@@ -2,7 +2,7 @@
 
 ## Understanding Actions
 
-Actions are high-level instructions that Orra's control plane decomposes into orchestrated tasks across your services and agents. Think of actions as user intents that need to be fulfilled by your system.
+Actions are high-level instructions that Orra's control plane decomposes into tasks that execute against selected services and agents to complete a job. Think of actions as user/machine jobs that need to be fulfilled by your system.
 
 ## Submitting Actions
 

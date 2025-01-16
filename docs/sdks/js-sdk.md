@@ -1,6 +1,6 @@
 # Orra JS SDK Documentation
 
-Orra makes it easy to add resilient, production-ready orchestration to your existing AI services and agents. This guide will help you integrate the Orra SDK with your Node.js applications.
+The JS SDK for Orra lets you transform your AI agents and services into reliable, production-ready Node.js components.
 
 ## Installation
 
@@ -80,8 +80,8 @@ The Orra SDK follows patterns similar to serverless functions or job processors,
 ### Key Concepts
 
 - **Services vs Agents**: Both use the same SDK but are registered differently
-    - Services: Stateless, function-like handlers (e.g., chat services, data processors)
-    - Agents: Stateless or stateful, sometimes long-running processes (e.g., single function-calling Agents or an Agent swarm/crew)
+    - Services: Stateless, function-like handlers (e.g., data processors, notification services, etc...)
+    - Agents: Stateless or stateful, sometimes long-running processes, see [What is an AI Agent](../../README.md#what-is-an-ai-agent)
 
 - **Schema Definition**: Similar to OpenAPI/GraphQL schemas, defines inputs/outputs
 - **Handler Functions**: Like serverless functions, process single tasks
@@ -151,7 +151,7 @@ service.start(async (task) => {
     // 1. Access task information
     const { input, executionId } = task;
     
-    // 2. Your existing business logic with its own retry/recovery
+    // 2. Your existing business logic, may include its own retry/recovery if available (otherwise Orra deals with this) 
     const result = await yourExistingFunction(input);
     
     // 3. Return results
@@ -163,40 +163,28 @@ service.start(async (task) => {
 });
 ```
 
-### 3. Error Handling
+### 3. Reverts powered by compensations
 
-Handle errors in your business logic:
+Marking a service or agent as **revertible** enables the previous task result to be compensated by that component in case of upstream failures.
+
+A revert may succeed **completely**, **partially** or simply **fail**. They are run after an action's failure.
+
+Checkout the [Compensations](../compensations.md) doc for full explanation.
 
 ```javascript
-service.start(async (task) => {
-  try {
-    // Your retry logic here
-    const result = await withRetries(() => riskyOperation());
-    return result;
-  } catch (error) {
-    // After your retries are exhausted, throw the error
-    // Orra will handle the failure in the orchestration
-    throw new Error(`Operation failed: ${error.message}`);
-  }
+// 1. Register the service as revertible
+await client.register({
+   description: 'What this service does',
+   // ...
+   revertible: true
 });
 
-// Example retry implementation
-async function withRetries(operation, maxAttempts = 3) {
-  let lastError;
-  
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      return await operation();
-    } catch (error) {
-      lastError = error;
-      if (attempt < maxAttempts) {
-        await sleep(Math.pow(2, attempt) * 1000); // Exponential backoff
-      }
-    }
-  }
-  
-  throw lastError;
-}
+// 2. Add the revert handler, which accepts the original task the actual task result for an orchestration
+service.onRevert(async (task, result) => {
+  console.log('Reverting for task:', task.id);
+  console.log('Reverting inventory product hold from:', result?.hold, 'to:', false);
+  // If this errors, Orra will try to re-compensate upto 10 times.
+})
 ```
 
 ## Advanced Features
@@ -235,7 +223,6 @@ const service = initService({
 1. **Error Handling**
     - Implement comprehensive error handling in your business logic
     - Use retries for transient failures
-    - Only propagate errors to Orra after recovery attempts are exhausted
 
 2. **Schema Design**
     - Be specific about input/output types

@@ -3505,22 +3505,20 @@ files = [
 
 [[package]]
 name = "orra-sdk"
-version = "0.1.3"
-description = "Python SDK for Orra - Build reliable multi-agent applications"
+version = "0.2.0"
+description = "Python SDK for Orra - Build reliable AI applications that handle complex service interactions. Automatic error recovery and state management. Requires Orra control plane."
 optional = false
-python-versions = "^3.11"
-files = []
-develop = true
+python-versions = "<4.0,>=3.11"
+files = [
+    {file = "orra_sdk-0.2.0-py3-none-any.whl", hash = "sha256:ac5449b3464034f308a8df948453273db029a8183268e66cb904ab44052b31eb"},
+    {file = "orra_sdk-0.2.0.tar.gz", hash = "sha256:e6c26a5f9a3216256a6b73e64dbc1e16e41101f11bd8b2974ff50db35fa657f6"},
+]
 
 [package.dependencies]
-httpx = "^0.26.0"
-pydantic = "^2.0"
+httpx = ">=0.26.0,<0.27.0"
+pydantic = ">=2.0,<3.0"
 structlog = ">=24.1.0"
-websockets = "^12.0"
-
-[package.source]
-type = "directory"
-url = "../../sdks/python/orra-sdk"
+websockets = ">=12.0,<13.0"
 
 [[package]]
 name = "outcome"
@@ -6022,4 +6020,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11,<=3.13"
-content-hash = "a6e6d4ce2b1a0afd7db66488b364687f1c796a9e786023d1385d61bd4623e3ee"
+content-hash = "a3f6bdaa115811e575470e35b06276050c22896ac4cf5aeb109b667ec94408f4"
