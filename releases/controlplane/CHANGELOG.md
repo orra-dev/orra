@@ -1,11 +1,11 @@
 ## Control Plane v0.2.0
 
 ### Features
-- Implemented comprehensive and robust Compensation handling system 🎉
-- Improved and tidied up service health monitoring and pause mechanisms in task workers 😅
-- Added control plane version headers for all responses
-- Enhanced service and agent schemas to accept arrays as properties
-- Enhanced error reporting for unhealthy services
+- Implemented comprehensive and robust Compensation handling system. 🎉
+- Improved and tidied up service health monitoring and pause mechanisms in task workers. 😅
+- Added control plane version headers for all responses.
+- Enhanced service and agent schemas to accept arrays as properties.
+- Enhanced error reporting for unhealthy services.
 
 ### Bug fixes
 - Fixed various compensation worker hidden bugs.
@@ -14,7 +14,7 @@
 ### Documentation
 - General README updates across the project.
 - Better explanation for what is considered an Agent in Orra.
-- Added documentation for Compensations
+- Added documentation for Compensations.
 
 ### Dev support
 - The `update_examples.sh` now supports crewai-ghost-writers example.

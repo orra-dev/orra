@@ -1,21 +1,21 @@
 ## SDKs v0.2.0
 
 ### Features
-- Compensations support
+- Compensations support.
 
 ### Python SDK v0.2.0
 
 #### Features
 - Idiomatic developer friendly UX for using compensations.
 - Added documentation for using compensations.
-- Failed task results are no longer cached
+- Failed task results are no longer cached.
 
 ### Javascript SDK v0.2.0
 
 #### Features
 - Idiomatic developer friendly UX for using compensations.
 - Added documentation for using compensations.
-- Failed task results are no longer cached
+- Failed task results are no longer cached.
 
 ## SDKs v0.1.2
 
