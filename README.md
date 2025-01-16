@@ -19,9 +19,25 @@ Brings in a robust Compensation Guardrails system with JS and Python SDK updates
 
 [[View all releases](https://github.com/orra-dev/orra/releases) →]
 
+## What is an AI Agent?
+
+An AI agent is any application component where LLM outputs influence workflow decisions or actions. In practice, this spans from:
+
+### Simple Integration
+- Basic LLM function calling and tool use
+- Predefined sequences of LLM-driven actions
+- Single-purpose AI services
+
+### Advanced Implementation
+- Autonomous decision-making components
+- Multistep task planning and execution
+- Complex service coordination
+
+Think of agents as building blocks in your AI application - whether they're making decisions about customer support queries, generating content, or coordinating with other services. What matters isn't the label "agent," but rather how these LLM-powered components work together reliably in production.
+
 ## Why Orra
 
-- **Workflow intelligence**: Orra automatically coordinates both your AI and general services by understanding their
+- **Workflow intelligence**: Orra automatically coordinates both your Agents and general services by understanding their
   capabilities and adapting execution in real-time - you can focus on building features instead of managing complex
   interactions.
 
@@ -38,7 +54,7 @@ If you're building multi-agent applications, this probably sounds familiar:
 **Production Reliability**: Your agent app works perfectly in demos, but in production it's brittle. One hiccup in a
 chain of agent calls and everything falls apart.
 
-**Workflow Hell**: Your code is a maze of hard-wired sequences between agents and services. Adding a new integration or
+**Workflow Hell**: Your code is a maze of hard-wired sequences between agents, services. Adding a new integration or
 changing a workflow means rewriting orchestration logic, updating schemas, and praying you didn't break existing flows.
 
 **Scaling Pains**: Scaling beyond a few concurrent users means juggling queues, caches, and distributed state across
@@ -192,7 +208,7 @@ code needed.
 
 You've just experienced:
 
-- 🤖 Dynamic orchestration using AI
+- 🤖 Intelligent planning using AI
 - ⛑️ Automatic service health monitoring ️
 - 🦾 Built-in durable execution
 - 🔮 Real-time status tracking
