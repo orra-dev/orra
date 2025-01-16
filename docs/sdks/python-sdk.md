@@ -1,6 +1,6 @@
 # Orra Python SDK Documentation
 
-Orra makes it easy to add resilient, production-ready orchestration to your existing AI services and agents. This guide will help you integrate the Orra SDK with your Python applications.
+The Python SDK for Orra lets you transform your AI agents and services into reliable, production-ready components.
 
 ## Installation
 
@@ -68,8 +68,8 @@ The Orra SDK follows patterns similar to serverless functions or job processors,
 ### Key Concepts
 
 - **Services vs Agents**: Both use the same SDK but are registered differently
-    - Services: Stateless, function-like handlers (e.g., chat services, data processors)
-    - Agents: Stateless or stateful, sometimes long-running processes (e.g., single function-calling Agents or an Agent swarm/crew)
+    - Services: Stateless, function-like handlers (e.g., data processors, notification services, etc...)
+    - Agents: Stateless or stateful, sometimes long-running processes, see [What is an AI Agent](../../README.md#what-is-an-ai-agent)
 
 - **Schema Definition**: Leverages Pydantic models for type-safe schemas
 - **Handler Functions**: Like serverless functions, process single tasks
@@ -145,7 +145,7 @@ async def handle_request(task: Task[InputModel]) -> OutputModel:
         # 1. Access task information
         input_data = task.input
         
-        # 2. Your existing business logic with its own retry/recovery
+        # 2. Your existing business logic, may include its own retry/recovery if available (otherwise Orra deals with this)
         result = await your_existing_function(input_data)
         
         # 3. Return results
@@ -155,30 +155,28 @@ async def handle_request(task: Task[InputModel]) -> OutputModel:
         raise
 ```
 
-### 3. Error Handling
+### 3. Reverts powered by compensations
 
-Handle errors in your business logic:
+Marking a service or agent as **revertible** enables the previous task result to be compensated by that component in case of upstream failures.
+
+A revert may succeed **completely**, **partially** or simply **fail**. They are run after an action's failure.
+
+Checkout the [Compensations](../compensations.md) doc for full explanation.
 
 ```python
-from tenacity import retry, stop_after_attempt, wait_exponential
-
-@service.handler()
-async def handle_request(task: Task[InputModel]) -> OutputModel:
-    try:
-        # Your retry logic here
-        result = await with_retries(risky_operation)
-        return OutputModel(**result)
-    except Exception as e:
-        # After your retries are exhausted, throw the error
-        # Orra will handle the failure in the orchestration
-        raise RuntimeError(f"Operation failed: {str(e)}")
-
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=4, max=10)
+service = OrraService(
+   name="service-name",
+   description="What this service does",
+   url="https://api.orra.dev",
+   api_key="sk-orra-...",
+   revertible=True,
 )
-async def with_retries(operation):
-    return await operation()
+
+@service.revert_handler()
+async def revert_stuff(source: RevertSource[InputModel, OutputModel]) -> CompensationResult:
+   print(f"Reverting for customer: {source.input.customer_id}")
+   print(f"Reverting response: {source.output.response}")
+   return CompensationResult(status=CompensationStatus.COMPLETED)
 ```
 
 ## Advanced Features
@@ -222,7 +220,6 @@ service = OrraService(
 1. **Error Handling**
     - Implement comprehensive error handling in your business logic
     - Use retries for transient failures
-    - Only propagate errors to Orra after recovery attempts are exhausted
 
 2. **Schema Design**
     - Use Pydantic models for type safety
