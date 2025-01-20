@@ -78,7 +78,7 @@ example_dirs=(
   "ecommerce-agent-app/customer-svc"
   "ecommerce-agent-app/delivery-agent"
   "ecommerce-agent-app/inventory-svc"
-  "crewai-ghost-writers"
+  "crewai-ghostwriters"
 )
 
 # Update environment variables
