@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	maxRetries = 3
+	maxRetries = 5
 )
 
 type RetryableError struct {
