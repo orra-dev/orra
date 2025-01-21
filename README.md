@@ -12,10 +12,15 @@ Prototype rapidly today, scale to production tomorrow. No complex infrastructure
 
 Brings in a robust Compensation Guardrails system with JS and Python SDK updates to match.
 
-**Other Features**
+#### Other Features
 
 - Service/Agent stability improvements.
 - Major fixes across control plane and SDKs.
+
+#### Manta Ray Live Demo One 📹🍿
+
+- Watch the [live demo video recording](https://youtube.com/live/q38vqU2x4gI) to learn more and see [Compensations](docs/compensations.md) in action.
+- Follow along the demo with [accompanying slides](https://tinyurl.com/orra-manta-ray-demo-1).
 
 [[View all releases](https://github.com/orra-dev/orra/releases) →]
 
