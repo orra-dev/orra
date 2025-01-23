@@ -5,7 +5,7 @@
 """
 
 import asyncio
-from orra import OrraAgent, Task, RevertSource, CompensationResult, CompensationStatus
+from orra import OrraAgent, Task, RevertSource, CompensationResult, CompensationStatus, PartialCompensation
 from pydantic import BaseModel
 
 from editor import kickoff_editing_crew
@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 ORRA_APIKEY = os.getenv("ORRA_API_KEY")
+DEMO_REVERT_FAIL = os.getenv("DEMO_REVERT_FAIL")
 
 
 # Define your models
@@ -51,6 +52,10 @@ async def main():
     async def revert_draft(source: RevertSource[WriterInput, WriterOutput]) -> CompensationResult:
         print(f"Reverting draft original_task.input: {source.input.topics_file_path}")
         print(f"Reverting draft generated draft: {source.output.draft}")
+
+        if DEMO_REVERT_FAIL == "true":
+            raise RuntimeError('Demo: failed to revert draft.')
+
         return CompensationResult(status=CompensationStatus.COMPLETED)
 
     @writer.handler()
