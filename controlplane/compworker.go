@@ -292,7 +292,14 @@ func (w *CompensationWorker) waitForCompensationResult(
 			return nil, ctx.Err()
 
 		case <-maxWait:
-			return nil, fmt.Errorf("timed out waiting for compensation result")
+			logger.Trace().Str("State", "Compensation timed out").Msg("Time out - RETRY")
+			err := fmt.Errorf("timed out waiting for compensation result")
+			service.IdempotencyStore.UpdateExecutionResult(
+				key,
+				nil,
+				err,
+			)
+			return nil, err
 
 		case <-ticker.C:
 			execution, exists := service.IdempotencyStore.GetExecutionWithResult(key)
