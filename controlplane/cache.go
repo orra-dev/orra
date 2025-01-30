@@ -17,17 +17,28 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	"github.com/sashabaranov/go-openai"
+	"github.com/teilomillet/gollm"
 	"gonum.org/v1/gonum/mat"
 )
 
-func NewVectorCache(openAIKey string, maxSize int, ttl time.Duration, logger zerolog.Logger) *VectorCache {
+func NewVectorCache(openAIKey string, maxSize int, ttl time.Duration, logger zerolog.Logger) (*VectorCache, error) {
+	llm, err := gollm.NewLLM(
+		gollm.SetProvider("openai"),
+		gollm.SetModel("chatgpt-4o-latest"),
+		gollm.SetAPIKey(openAIKey),
+		gollm.SetMaxTokens(MaxPlannerTokens),
+	)
+	if err != nil {
+		return nil, err
+	}
 	return &VectorCache{
 		projectCaches: make(map[string]*ProjectCache),
 		embedder:      openai.NewClient(openAIKey),
+		llm:           llm,
 		ttl:           ttl,
 		maxSize:       maxSize,
 		logger:        logger,
-	}
+	}, nil
 }
 
 func newProjectCache(logger zerolog.Logger) *ProjectCache {
@@ -124,30 +135,30 @@ func (c *VectorCache) Get(
 	action string,
 	actionParams json.RawMessage,
 	serviceDescriptions string,
-) (*openai.ChatCompletionResponse, string, json.RawMessage, error) {
+) (string, string, json.RawMessage, error) {
 	result, err, _ := c.group.Do(fmt.Sprintf("%s:%s", projectID, action), func() (interface{}, error) {
 		return c.getWithRetry(ctx, projectID, action, actionParams, serviceDescriptions)
 	})
 
 	if err != nil {
-		return nil, "", nil, err
+		return "", "", nil, err
 	}
 
 	cacheResult := result.(*CacheResult)
 
 	if cacheResult.Hit && cacheResult.Task0Input != nil {
-		modifiedResponse := *cacheResult.Response
+		modifiedResponse := cacheResult.Response
 		newContent, err := substituteTask0Params(
-			sanitizeJSONOutput(modifiedResponse.Choices[0].Message.Content),
+			sanitizeJSONOutput(modifiedResponse),
 			cacheResult.Task0Input,
 			actionParams,
 			cacheResult.ParamMappings,
 		)
 		if err != nil {
-			return nil, "", nil, err
+			return "", "", nil, err
 		}
-		modifiedResponse.Choices[0].Message.Content = newContent
-		return &modifiedResponse, cacheResult.ID, actionParams, nil
+		modifiedResponse = newContent
+		return modifiedResponse, cacheResult.ID, actionParams, nil
 	}
 
 	return cacheResult.Response, cacheResult.ID, actionParams, nil
@@ -207,20 +218,13 @@ func (c *VectorCache) getWithRetry(ctx context.Context,
 		Str("action", action).
 		Msg("CACHE MISS")
 
-	llmResp, err := c.embedder.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-		Model: openai.GPT4o,
-		Messages: []openai.ChatCompletionMessage{
-			{
-				Role:    openai.ChatMessageRoleUser,
-				Content: generateLLMPrompt(action, actionParams, serviceDescriptions),
-			},
-		},
-	})
+	prompt := gollm.NewPrompt(generatePlannerPrompt(action, actionParams, serviceDescriptions))
+	llmResp, err := c.llm.Generate(ctx, prompt)
 	if err != nil {
 		return nil, err
 	}
 
-	sanitizedAsJson := sanitizeJSONOutput(llmResp.Choices[0].Message.Content)
+	sanitizedAsJson := sanitizeJSONOutput(llmResp)
 	c.logger.Trace().RawJSON("Cache Miss Plan", []byte(sanitizedAsJson)).Msg("")
 	task0Input, err := extractTask0Input(sanitizedAsJson)
 	if err != nil {
@@ -247,7 +251,7 @@ func (c *VectorCache) getWithRetry(ctx context.Context,
 	// Create new cache entry
 	entry := &CacheEntry{
 		ID:            uuid.New().String(),
-		Response:      &llmResp,
+		Response:      llmResp,
 		ActionVector:  actionEmbedding,
 		ServicesHash:  servicesHash,
 		Task0Input:    task0Input,
@@ -267,7 +271,7 @@ func (c *VectorCache) getWithRetry(ctx context.Context,
 
 	return &CacheResult{
 		ID:         entry.ID,
-		Response:   &llmResp,
+		Response:   llmResp,
 		Task0Input: task0Input,
 		Hit:        false,
 	}, nil

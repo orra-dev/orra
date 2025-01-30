@@ -17,6 +17,7 @@ import (
 )
 
 const (
+	MaxPlannerTokens              = 5000
 	TaskZero                      = "task0"
 	ResultAggregatorID            = "result_aggregator"
 	FailureTrackerID              = "failure_tracker"
