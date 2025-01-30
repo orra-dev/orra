@@ -197,22 +197,8 @@ func (p *ControlPlane) discoverProjectServices(projectID string) ([]*ServiceInfo
 }
 
 func (p *ControlPlane) decomposeAction(orchestration *Orchestration, action string, actionParams json.RawMessage, serviceDescriptions string) (*ServiceCallingPlan, error) {
-	//client := openai.NewClient(p.openAIKey)
-	//resp, err := client.CreateChatCompletion(context.Background(), openai.ChatCompletionRequest{
-	//	Model: openai.GPT4oLatest,
-	//	Messages: []openai.ChatCompletionMessage{
-	//		{
-	//			Role:    openai.ChatMessageRoleUser,
-	//			Content: prompt,
-	//		},
-	//	},
-	//})
-	//
-	//if err != nil {
-	//	return nil, fmt.Errorf("error calling OpenAI API: %v", err)
-	//}
 	p.Logger.Trace().
-		Str("Prompt", generateLLMPrompt(action, actionParams, serviceDescriptions)).
+		Str("Prompt", generatePlannerPrompt(action, actionParams, serviceDescriptions)).
 		Msg("Decompose action prompt using cache powered completion")
 
 	resp, cachedEntryID, _, err := p.VectorCache.Get(
@@ -227,7 +213,7 @@ func (p *ControlPlane) decomposeAction(orchestration *Orchestration, action stri
 	}
 
 	var result *ServiceCallingPlan
-	sanitisedJSON := sanitizeJSONOutput(resp.Choices[0].Message.Content)
+	sanitisedJSON := sanitizeJSONOutput(resp)
 	p.Logger.Debug().
 		Str("Sanitized JSON", sanitisedJSON).
 		Msg("Service calling plan")

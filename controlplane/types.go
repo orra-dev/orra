@@ -18,6 +18,7 @@ import (
 	"github.com/olahol/melody"
 	"github.com/rs/zerolog"
 	"github.com/sashabaranov/go-openai"
+	"github.com/teilomillet/gollm"
 	"golang.org/x/sync/singleflight"
 	"gonum.org/v1/gonum/mat"
 )
@@ -296,7 +297,7 @@ type ParamMapping struct {
 
 type CacheEntry struct {
 	ID            string
-	Response      *openai.ChatCompletionResponse
+	Response      string
 	ActionVector  *mat.VecDense
 	ServicesHash  string
 	Task0Input    json.RawMessage
@@ -306,7 +307,7 @@ type CacheEntry struct {
 }
 
 type CacheResult struct {
-	Response      *openai.ChatCompletionResponse
+	Response      string
 	ID            string
 	Task0Input    json.RawMessage
 	ParamMappings []ParamMapping
@@ -324,6 +325,7 @@ type VectorCache struct {
 	mu            sync.RWMutex
 	projectCaches map[string]*ProjectCache
 	embedder      *openai.Client
+	llm           gollm.LLM
 	ttl           time.Duration
 	maxSize       int // Per project
 	group         singleflight.Group

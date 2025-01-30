@@ -11,7 +11,7 @@ import (
 	"fmt"
 )
 
-func generateLLMPrompt(action string, actionParams json.RawMessage, serviceDescriptions string) string {
+func generatePlannerPrompt(action string, actionParams json.RawMessage, serviceDescriptions string) string {
 	prompt := fmt.Sprintf(`You are an AI orchestrator tasked with planning the execution of services based on a user's action. A user's action contains PARAMS for the action to be executed, USE THEM. Your goal is to create an efficient, parallel execution plan that fulfills the user's request.
 
 Available Services:
