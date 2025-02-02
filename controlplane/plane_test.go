@@ -14,23 +14,29 @@ import (
 // Test cases to verify the implementation
 func TestExtractDependencyID(t *testing.T) {
 	testCases := []struct {
-		name     string
-		input    any
-		expected string
+		name           string
+		input          any
+		expectedDepID  string
+		expectedDepKey string
 	}{
-		{"has dependency id", "$task0.param1", "task0"},
-		{"has complex dependency id", "$complex-task-id.field", "complex-task-id"},
-		{"has no dependency", "notadependency", ""},
-		{"has invalid dependency", "$.invalid", ""},
-		{"has dependency but no param", "$task0", ""},
-		{"empty input", "", ""},
+		{"has dependency id", "$task0.param1", "task0", "param1"},
+		{"has complex dependency id", "$complex-task-id.field", "complex-task-id", "field"},
+		{"has no dependency", "notadependency", "", ""},
+		{"has invalid dependency", "$.invalid", "", ""},
+		{"has dependency but no param", "$task0", "", ""},
+		{"empty input", "", "", ""},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			actual := extractDependencyID(tc.input)
-			if actual != tc.expected {
-				panic(fmt.Sprintf("Failed: input=%q, got=%q, want=%q", tc.input, actual, tc.expected))
+			actualDepID, actualDepKey := extractDependencyIDAndKey(tc.input)
+			if actualDepID != tc.expectedDepID {
+				panic(fmt.Sprintf("Failed: input=%q, got=(%q, %q), want=(%q, %q)",
+					tc.input,
+					actualDepID,
+					actualDepKey,
+					tc.expectedDepID,
+					tc.expectedDepKey))
 			}
 		})
 	}
