@@ -233,29 +233,31 @@ func (o *Orchestration) Executable() bool {
 
 func (s *SubTask) extractDependencies() TaskDependenciesWithKeys {
 	out := make(TaskDependenciesWithKeys)
-	for inputKey, source := range s.Input {
-		dep := extractDependencyID(source)
+	for taskKey, source := range s.Input {
+		dep, key := extractDependencyIDAndKey(source)
 		if dep == "" {
 			continue
 		}
 		if _, ok := out[dep]; !ok {
-			out[dep] = []string{inputKey}
+			out[dep] = []TaskDependencyMapping{{taskKey, key}}
 		} else {
-			out[dep] = append(out[dep], inputKey)
+			out[dep] = append(out[dep], TaskDependencyMapping{taskKey, key})
 		}
 	}
 	return out
 }
 
-// extractDependencyID extracts the task ID from a dependency reference
-// Example: "$task0.param1" returns "task0"
-func extractDependencyID(input any) string {
+// extractDependencyIDAndKey extracts the task ID and task dependency key from a dependency reference
+// Example: "$task0.param1" returns "task0", "param1"
+func extractDependencyIDAndKey(input any) (depID string, depKey string) {
 	switch val := input.(type) {
 	case string:
 		matches := DependencyPattern.FindStringSubmatch(val)
-		if len(matches) > 1 {
-			return matches[1]
+		if len(matches) <= 1 {
+			return "", ""
 		}
+		depID := matches[1]
+		return depID, strings.TrimPrefix(val, fmt.Sprintf("$%s.", depID))
 	}
-	return ""
+	return "", ""
 }

@@ -594,10 +594,10 @@ func mergeValueMapsToJson(src map[string]json.RawMessage, dependencies TaskDepen
 		}
 
 		for _, k := range dependencies[depID] {
-			if _, ok := temp[k]; !ok {
+			if _, ok := temp[k.DependencyKey]; !ok {
 				continue
 			}
-			out[k] = temp[k]
+			out[k.TaskKey] = temp[k.DependencyKey]
 		}
 	}
 	return json.Marshal(out)

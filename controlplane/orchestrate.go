@@ -296,16 +296,16 @@ func (p *ControlPlane) createAndStartWorkers(
 
 	p.logWorkers[orchestrationID] = make(map[string]context.CancelFunc)
 
-	resultDependencies := make(DependencyKeySet)
+	resultAggregatorDeps := make(DependencyKeySet)
 
 	for _, task := range plan.Tasks {
-		deps := task.extractDependencies()
-		resultDependencies[task.ID] = struct{}{}
+		taskDeps := task.extractDependencies()
+		resultAggregatorDeps[task.ID] = struct{}{}
 
 		p.Logger.Debug().
 			Fields(map[string]any{
 				"TaskID":          task.ID,
-				"Dependencies":    deps,
+				"Dependencies":    taskDeps,
 				"OrchestrationID": orchestrationID,
 			}).
 			Msg("Task extracted dependencies")
@@ -322,7 +322,7 @@ func (p *ControlPlane) createAndStartWorkers(
 		worker := NewTaskWorker(
 			service,
 			task.ID,
-			deps,
+			taskDeps,
 			taskTimeout,
 			healthCheckGracePeriod,
 			p.LogManager,
@@ -342,10 +342,10 @@ func (p *ControlPlane) createAndStartWorkers(
 		go worker.Start(ctx, orchestrationID)
 	}
 
-	if len(resultDependencies) == 0 {
+	if len(resultAggregatorDeps) == 0 {
 		p.Logger.Error().
 			Fields(map[string]any{
-				"Dependencies":    resultDependencies,
+				"Dependencies":    resultAggregatorDeps,
 				"OrchestrationID": orchestrationID,
 			}).
 			Msg("Result Aggregator has no dependencies")
@@ -355,12 +355,12 @@ func (p *ControlPlane) createAndStartWorkers(
 
 	p.Logger.Debug().
 		Fields(map[string]any{
-			"Dependencies":    resultDependencies,
+			"Dependencies":    resultAggregatorDeps,
 			"OrchestrationID": orchestrationID,
 		}).
 		Msg("Result Aggregator extracted dependencies")
 
-	aggregator := NewResultAggregator(resultDependencies, p.LogManager)
+	aggregator := NewResultAggregator(resultAggregatorDeps, p.LogManager)
 	ctx, cancel := context.WithCancel(context.Background())
 	p.logWorkers[orchestrationID][ResultAggregatorID] = cancel
 

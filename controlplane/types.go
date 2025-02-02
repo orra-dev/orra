@@ -277,7 +277,7 @@ type ServiceCallingPlan struct {
 type ParallelGroup []string
 
 type DependencyKeySet map[string]struct{}
-type TaskDependenciesWithKeys map[string][]string
+type TaskDependenciesWithKeys map[string][]TaskDependencyMapping
 
 // SubTask represents a single task in the ServiceCallingPlan
 type SubTask struct {
@@ -287,6 +287,11 @@ type SubTask struct {
 	Input          map[string]any `json:"input"`
 	Status         Status         `json:"status,omitempty"`
 	Error          string         `json:"error,omitempty"`
+}
+
+type TaskDependencyMapping struct {
+	TaskKey       string `json:"taskKey"`
+	DependencyKey string `json:"dependencyKey"`
 }
 
 type ParamMapping struct {
