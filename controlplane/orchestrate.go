@@ -508,8 +508,8 @@ func (s Spec) String() (string, error) {
 	return string(data), nil
 }
 
-func (a ActionParams) Json() (json.RawMessage, error) {
-	data, err := json.Marshal(a)
+func (p ActionParams) Json() (json.RawMessage, error) {
+	data, err := json.Marshal(p)
 	if err != nil {
 		return nil, err
 	}

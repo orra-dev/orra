@@ -56,7 +56,7 @@ func computeHash(content string) string {
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
-func (pc *ProjectCache) findBestMatch(actionVector *mat.VecDense, servicesHash string, action string) (*CacheEntry, float64) {
+func (pc *ProjectCache) findBestMatch(actionVector *mat.VecDense, servicesHash string, actionWithFields string) (*CacheEntry, float64) {
 	pc.mu.RLock()
 	defer pc.mu.RUnlock()
 
@@ -72,8 +72,8 @@ func (pc *ProjectCache) findBestMatch(actionVector *mat.VecDense, servicesHash s
 		score := cosineSimilarity(actionVector, entry.ActionVector)
 
 		pc.logger.Debug().
-			Str("Action Cached", action).
-			Str("Action To Match", entry.Action).
+			Str("ActionWithFields", actionWithFields).
+			Str("CachedActionWithFields To Match", entry.CachedActionWithFields).
 			Float64("score", score).
 			Msg("cosineSimilarity")
 
@@ -168,9 +168,14 @@ func (c *VectorCache) Get(
 func (c *VectorCache) getWithRetry(ctx context.Context,
 	projectID,
 	action string,
-	actionParams json.RawMessage,
+	rawActionParams json.RawMessage,
 	serviceDescriptions string,
 ) (*CacheResult, error) {
+	var actionParams ActionParams
+	if err := json.Unmarshal(rawActionParams, &actionParams); err != nil {
+		return nil, fmt.Errorf("failed to parse action params: %w", err)
+	}
+
 	pc := c.getProjectCache(projectID)
 	servicesHash := computeHash(serviceDescriptions)
 
@@ -179,47 +184,53 @@ func (c *VectorCache) getWithRetry(ctx context.Context,
 		Str("servicesHash", servicesHash).
 		Msg("Hashed serviceDescriptions for cache evaluation")
 
-	// Generate embedding for the action
-	actionEmbedding, err := c.generateEmbedding(ctx, action)
+	// Generate embedding for the action and its fields
+	actionWithFields := fmt.Sprintf("%s:::%s", action, actionParams.String())
+	actionEmbedding, err := c.generateEmbedding(ctx, actionWithFields)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate embedding: %w", err)
 	}
 	normalizeVector(actionEmbedding)
 
 	// Find best matching entry
-	bestEntry, bestScore := pc.findBestMatch(actionEmbedding, servicesHash, action)
+	bestEntry, bestScore := pc.findBestMatch(actionEmbedding, servicesHash, actionWithFields)
 
 	c.logger.Trace().
 		Str("projectID", projectID).
-		Str("action", action).
+		Str("actionWithFields", actionWithFields).
 		Float64("bestScore", bestScore).
 		Float64("threshold", pc.threshold).
 		Msg("Cache lookup attempt")
 
-	// Cache hit
-	if bestEntry != nil && bestScore > pc.threshold && time.Since(bestEntry.Timestamp) < c.ttl {
-		c.logger.Debug().
-			Str("projectID", projectID).
-			Str("action", action).
-			Float64("similarity", bestScore).
-			Msg("CACHE HIT")
+	if bestEntry != nil && bestEntry.MatchesActionParams(actionParams) && bestScore > pc.threshold {
+		if time.Since(bestEntry.Timestamp) < c.ttl {
+			// Cache hit
+			c.logger.Debug().
+				Str("projectID", projectID).
+				Str("actionWithFields", actionWithFields).
+				Str("CachedActionWithFields", bestEntry.CachedActionWithFields).
+				Float64("similarity", bestScore).
+				Msg("CACHE HIT")
 
-		return &CacheResult{
-			ID:            bestEntry.ID,
-			Response:      bestEntry.Response,
-			Task0Input:    bestEntry.Task0Input,
-			CacheMappings: bestEntry.CacheMappings,
-			Hit:           true,
-		}, nil
+			return &CacheResult{
+				ID:            bestEntry.ID,
+				Response:      bestEntry.Response,
+				Task0Input:    bestEntry.Task0Input,
+				CacheMappings: bestEntry.CacheMappings,
+				Hit:           true,
+			}, nil
+		} else {
+			c.Remove(projectID, bestEntry.ID)
+		}
 	}
 
 	// Cache miss
 	c.logger.Debug().
 		Str("projectID", projectID).
-		Str("action", action).
+		Str("actionWithFields", actionWithFields).
 		Msg("CACHE MISS")
 
-	prompt := gollm.NewPrompt(generatePlannerPrompt(action, actionParams, serviceDescriptions))
+	prompt := gollm.NewPrompt(generatePlannerPrompt(action, rawActionParams, serviceDescriptions))
 	llmResp, err := c.llm.Generate(ctx, prompt)
 	if err != nil {
 		return nil, err
@@ -238,12 +249,6 @@ func (c *VectorCache) getWithRetry(ctx context.Context,
 		return nil, fmt.Errorf("failed to extract task0 input: %w", err)
 	}
 
-	// Parse action params and task0 input for mapping
-	var params ActionParams
-	if err := json.Unmarshal(actionParams, &params); err != nil {
-		return nil, fmt.Errorf("failed to parse action params: %w", err)
-	}
-
 	var task0InputMap map[string]interface{}
 	if err := json.Unmarshal(task0Input, &task0InputMap); err != nil {
 		return nil, fmt.Errorf("failed to parse task0 input: %w", err)
@@ -251,7 +256,7 @@ func (c *VectorCache) getWithRetry(ctx context.Context,
 	c.logger.Trace().Interface("task0InputMap", task0InputMap).Msg("")
 
 	// Extract parameter mappings
-	mappings, err := extractParamMappings(params, task0InputMap)
+	mappings, err := extractParamMappings(actionParams, task0InputMap)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract parameter mappings: %w", err)
 	}
@@ -259,14 +264,14 @@ func (c *VectorCache) getWithRetry(ctx context.Context,
 
 	// Create new cache entry
 	entry := &CacheEntry{
-		ID:            uuid.New().String(),
-		Response:      rawPlanJson,
-		ActionVector:  actionEmbedding,
-		ServicesHash:  servicesHash,
-		Task0Input:    task0Input,
-		CacheMappings: mappings,
-		Timestamp:     time.Now(),
-		Action:        action,
+		ID:                     uuid.New().String(),
+		Response:               rawPlanJson,
+		ActionVector:           actionEmbedding,
+		ServicesHash:           servicesHash,
+		Task0Input:             task0Input,
+		CacheMappings:          mappings,
+		Timestamp:              time.Now(),
+		CachedActionWithFields: actionWithFields,
 	}
 
 	// Add to project cache
@@ -304,7 +309,7 @@ func (c *VectorCache) Remove(projectID, id string) bool {
 			c.logger.Debug().
 				Str("projectID", projectID).
 				Str("id", id).
-				Str("action", entry.Action).
+				Str("actionWithFields", entry.CachedActionWithFields).
 				Msg("Removed cache entry")
 			return true
 		}
@@ -370,6 +375,39 @@ func (c *VectorCache) generateEmbedding(ctx context.Context, text string) (*mat.
 	}
 
 	return embedding, nil
+}
+
+func (p ActionParams) String() string {
+	var builder strings.Builder
+	for i, param := range p {
+		builder.WriteString(param.Field)
+		if i != len(p)-1 {
+			builder.WriteString("::")
+		}
+	}
+	return builder.String()
+}
+
+func (m TaskZeroCacheMappings) ContainsAll(params ActionParams) bool {
+	for _, param := range params {
+		if !m.IncludesActionField(param.Field) {
+			return false
+		}
+	}
+	return true
+}
+
+func (m TaskZeroCacheMappings) IncludesActionField(f string) bool {
+	for _, mapping := range m {
+		if mapping.ActionField == f {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *CacheEntry) MatchesActionParams(actionParams ActionParams) bool {
+	return c.CacheMappings.ContainsAll(actionParams)
 }
 
 // extractTask0Input extracts the input parameters from task0 in the calling plan
