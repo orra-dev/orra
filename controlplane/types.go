@@ -300,22 +300,24 @@ type TaskZeroCacheMapping struct {
 	Value       string `json:"originalValue,omitempty"` // Original value used to discover the mapping
 }
 
+type TaskZeroCacheMappings []TaskZeroCacheMapping
+
 type CacheEntry struct {
-	ID            string
-	Response      string
-	ActionVector  *mat.VecDense
-	ServicesHash  string
-	Task0Input    json.RawMessage
-	CacheMappings []TaskZeroCacheMapping
-	Timestamp     time.Time
-	Action        string
+	ID                     string
+	Response               string
+	ActionVector           *mat.VecDense
+	ServicesHash           string
+	Task0Input             json.RawMessage
+	CacheMappings          TaskZeroCacheMappings
+	Timestamp              time.Time
+	CachedActionWithFields string
 }
 
 type CacheResult struct {
 	Response      string
 	ID            string
 	Task0Input    json.RawMessage
-	CacheMappings []TaskZeroCacheMapping
+	CacheMappings TaskZeroCacheMappings
 	Hit           bool
 }
 
