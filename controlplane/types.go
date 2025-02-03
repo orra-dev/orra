@@ -294,8 +294,8 @@ type TaskDependencyMapping struct {
 	DependencyKey string `json:"dependencyKey"`
 }
 
-type ParamMapping struct {
-	Task0Field  string `json:"task0Field"`              // Field name in Task0's input
+type TaskZeroCacheMapping struct {
+	Field       string `json:"field"`                   // Field name in Task0's input
 	ActionField string `json:"actionField"`             // Field name from original action params
 	Value       string `json:"originalValue,omitempty"` // Original value used to discover the mapping
 }
@@ -306,7 +306,7 @@ type CacheEntry struct {
 	ActionVector  *mat.VecDense
 	ServicesHash  string
 	Task0Input    json.RawMessage
-	ParamMappings []ParamMapping
+	CacheMappings []TaskZeroCacheMapping
 	Timestamp     time.Time
 	Action        string
 }
@@ -315,7 +315,7 @@ type CacheResult struct {
 	Response      string
 	ID            string
 	Task0Input    json.RawMessage
-	ParamMappings []ParamMapping
+	CacheMappings []TaskZeroCacheMapping
 	Hit           bool
 }
 

@@ -153,7 +153,7 @@ func (c *VectorCache) Get(
 			sanitizeJSONOutput(modifiedResponse),
 			cacheResult.Task0Input,
 			actionParams,
-			cacheResult.ParamMappings,
+			cacheResult.CacheMappings,
 		)
 		if err != nil {
 			return "", "", nil, err
@@ -208,7 +208,7 @@ func (c *VectorCache) getWithRetry(ctx context.Context,
 			ID:            bestEntry.ID,
 			Response:      bestEntry.Response,
 			Task0Input:    bestEntry.Task0Input,
-			ParamMappings: bestEntry.ParamMappings,
+			CacheMappings: bestEntry.CacheMappings,
 			Hit:           true,
 		}, nil
 	}
@@ -264,7 +264,7 @@ func (c *VectorCache) getWithRetry(ctx context.Context,
 		ActionVector:  actionEmbedding,
 		ServicesHash:  servicesHash,
 		Task0Input:    task0Input,
-		ParamMappings: mappings,
+		CacheMappings: mappings,
 		Timestamp:     time.Now(),
 		Action:        action,
 	}
