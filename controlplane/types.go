@@ -34,7 +34,6 @@ type ControlPlane struct {
 	workerMu             sync.RWMutex
 	WebSocketManager     *WebSocketManager
 	VectorCache          *VectorCache
-	openAIKey            string
 	mu                   sync.RWMutex
 	Logger               zerolog.Logger
 }

@@ -31,7 +31,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	plane := NewControlPlane(cfg.OpenaiApiKey)
+	plane := NewControlPlane()
 	wsManager := NewWebSocketManager(app.Logger)
 	vCache, err := NewVectorCache(cfg.OpenaiApiKey, cfg.GroqApiKey, 1000, 24*time.Hour, app.Logger)
 	if err != nil {

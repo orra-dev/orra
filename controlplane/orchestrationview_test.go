@@ -35,7 +35,7 @@ func newTestSetup() *TestState {
 // Helper to create test project and service
 func (ts *TestState) setupBase() {
 	// Create control plane
-	ts.plane = NewControlPlane("test-openai-key")
+	ts.plane = NewControlPlane()
 
 	// Register project
 	ts.plane.projects["p_test"] = &Project{

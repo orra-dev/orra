@@ -18,13 +18,12 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func NewControlPlane(openAIKey string) *ControlPlane {
+func NewControlPlane() *ControlPlane {
 	plane := &ControlPlane{
 		projects:           make(map[string]*Project),
 		services:           make(map[string]map[string]*ServiceInfo),
 		orchestrationStore: make(map[string]*Orchestration),
 		logWorkers:         make(map[string]map[string]context.CancelFunc),
-		openAIKey:          openAIKey,
 	}
 	return plane
 }
