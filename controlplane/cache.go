@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,11 +22,11 @@ import (
 	"gonum.org/v1/gonum/mat"
 )
 
-func NewVectorCache(openAIKey string, maxSize int, ttl time.Duration, logger zerolog.Logger) (*VectorCache, error) {
+func NewVectorCache(openAIKey string, groqAPIKey string, maxSize int, ttl time.Duration, logger zerolog.Logger) (*VectorCache, error) {
 	llm, err := gollm.NewLLM(
-		gollm.SetProvider("openai"),
-		gollm.SetModel("chatgpt-4o-latest"),
-		gollm.SetAPIKey(openAIKey),
+		gollm.SetProvider("groq"),
+		gollm.SetModel("deepseek-r1-distill-llama-70b"),
+		gollm.SetAPIKey(groqAPIKey),
 		gollm.SetMaxTokens(MaxPlannerTokens),
 	)
 	if err != nil {
@@ -224,8 +225,14 @@ func (c *VectorCache) getWithRetry(ctx context.Context,
 		return nil, err
 	}
 
-	sanitizedAsJson := sanitizeJSONOutput(llmResp)
+	c.logger.Trace().Str("Raw llm Response", llmResp).Msg("")
+
+	rawPlanJson, cot := cutCoT(llmResp)
+	c.logger.Trace().Str("CoT", cot).Msg("If any")
+
+	sanitizedAsJson := sanitizeJSONOutput(rawPlanJson)
 	c.logger.Trace().RawJSON("Cache Miss Plan", []byte(sanitizedAsJson)).Msg("")
+
 	task0Input, err := extractTask0Input(sanitizedAsJson)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract task0 input: %w", err)
@@ -241,17 +248,19 @@ func (c *VectorCache) getWithRetry(ctx context.Context,
 	if err := json.Unmarshal(task0Input, &task0InputMap); err != nil {
 		return nil, fmt.Errorf("failed to parse task0 input: %w", err)
 	}
+	c.logger.Trace().Interface("task0InputMap", task0InputMap).Msg("")
 
 	// Extract parameter mappings
 	mappings, err := extractParamMappings(params, task0InputMap)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract parameter mappings: %w", err)
 	}
+	c.logger.Trace().Interface("Task0 Param Mapping", mappings).Msg("")
 
 	// Create new cache entry
 	entry := &CacheEntry{
 		ID:            uuid.New().String(),
-		Response:      llmResp,
+		Response:      rawPlanJson,
 		ActionVector:  actionEmbedding,
 		ServicesHash:  servicesHash,
 		Task0Input:    task0Input,
@@ -271,7 +280,7 @@ func (c *VectorCache) getWithRetry(ctx context.Context,
 
 	return &CacheResult{
 		ID:         entry.ID,
-		Response:   llmResp,
+		Response:   rawPlanJson,
 		Task0Input: task0Input,
 		Hit:        false,
 	}, nil
@@ -383,4 +392,20 @@ func extractTask0Input(content string) (json.RawMessage, error) {
 	}
 
 	return nil, fmt.Errorf("task0 not found in calling plan")
+}
+
+func cutCoT(input string) (after string, cot string) {
+	trimmed := strings.TrimSpace(input)
+
+	afterTagStart, tagStart := strings.CutPrefix(trimmed, "<think>")
+	if !tagStart {
+		return input, ""
+	}
+
+	beforeTagEnd, afterTagEnd, tagEnd := strings.Cut(afterTagStart, "</think>")
+	if !tagEnd {
+		return input, ""
+	}
+
+	return afterTagEnd, beforeTagEnd
 }
