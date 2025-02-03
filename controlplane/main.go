@@ -33,7 +33,7 @@ func main() {
 
 	plane := NewControlPlane(cfg.OpenaiApiKey)
 	wsManager := NewWebSocketManager(app.Logger)
-	vCache, err := NewVectorCache(cfg.OpenaiApiKey, 1000, 24*time.Hour, app.Logger)
+	vCache, err := NewVectorCache(cfg.OpenaiApiKey, cfg.GroqApiKey, 1000, 24*time.Hour, app.Logger)
 	if err != nil {
 		log.Fatalf("could not initialise vector cache: %s", err.Error())
 	}
