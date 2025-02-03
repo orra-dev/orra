@@ -47,6 +47,7 @@ var (
 type Config struct {
 	Port         int `envconfig:"default=8005"`
 	OpenaiApiKey string
+	GroqApiKey   string
 }
 
 func Load() (Config, error) {

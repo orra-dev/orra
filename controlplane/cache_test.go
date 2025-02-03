@@ -163,7 +163,7 @@ func TestSubstituteTask0Params(t *testing.T) {
 		content       string
 		originalInput string
 		newParams     string
-		mappings      []ParamMapping
+		mappings      []TaskZeroCacheMapping
 		want          string
 	}{
 		{
@@ -188,8 +188,8 @@ func TestSubstituteTask0Params(t *testing.T) {
             }`,
 			originalInput: `{"message":"cust12345"}`,
 			newParams:     `[{"field":"customerId","value":"cust98765"},{"field":"productDescription","value":"Red shoes"}]`,
-			mappings: []ParamMapping{
-				{Task0Field: "message", ActionField: "customerId"},
+			mappings: []TaskZeroCacheMapping{
+				{Field: "message", ActionField: "customerId"},
 			},
 			want: `{
                 "tasks":[
@@ -222,9 +222,9 @@ func TestSubstituteTask0Params(t *testing.T) {
             }`,
 			originalInput: `{"text":"Peanuts collectible","id":"cust12345"}`,
 			newParams:     `[{"field":"customerId","value":"cust98765"},{"field":"productDescription","value":"Vintage comics"}]`,
-			mappings: []ParamMapping{
-				{Task0Field: "text", ActionField: "productDescription"},
-				{Task0Field: "id", ActionField: "customerId"},
+			mappings: []TaskZeroCacheMapping{
+				{Field: "text", ActionField: "productDescription"},
+				{Field: "id", ActionField: "customerId"},
 			},
 			want: `{
                 "tasks":[
@@ -255,8 +255,8 @@ func TestSubstituteTask0Params(t *testing.T) {
             }`,
 			originalInput: `{"constant":"some-fixed-value","message":"cust12345"}`,
 			newParams:     `[{"field":"customerId","value":"cust98765"}]`,
-			mappings: []ParamMapping{
-				{Task0Field: "message", ActionField: "customerId"},
+			mappings: []TaskZeroCacheMapping{
+				{Field: "message", ActionField: "customerId"},
 			},
 			want: `{
                 "tasks":[
@@ -297,7 +297,7 @@ func TestSubstituteTask0ParamsErrors(t *testing.T) {
 		content       string
 		originalInput string
 		newParams     string
-		mappings      []ParamMapping
+		mappings      []TaskZeroCacheMapping
 		errContains   string
 	}{
 		{
@@ -315,8 +315,8 @@ func TestSubstituteTask0ParamsErrors(t *testing.T) {
             }`,
 			originalInput: `{"message":"cust12345"}`,
 			newParams:     `[{"field":"otherField","value":"someValue"}]`,
-			mappings: []ParamMapping{
-				{Task0Field: "message", ActionField: "customerId"},
+			mappings: []TaskZeroCacheMapping{
+				{Field: "message", ActionField: "customerId"},
 			},
 			errContains: "missing required action parameter: customerId",
 		},
@@ -335,8 +335,8 @@ func TestSubstituteTask0ParamsErrors(t *testing.T) {
             }`,
 			originalInput: `{"message":"cust12345"}`,
 			newParams:     `[{"field":"customerId", bad json}]`,
-			mappings: []ParamMapping{
-				{Task0Field: "message", ActionField: "customerId"},
+			mappings: []TaskZeroCacheMapping{
+				{Field: "message", ActionField: "customerId"},
 			},
 			errContains: "failed to parse new action params",
 		},
@@ -355,8 +355,8 @@ func TestSubstituteTask0ParamsErrors(t *testing.T) {
             }`,
 			originalInput: `{"message":"cust12345"}`,
 			newParams:     `[{"field":"customerId","value":"cust98765"}]`,
-			mappings: []ParamMapping{
-				{Task0Field: "message", ActionField: "customerId"},
+			mappings: []TaskZeroCacheMapping{
+				{Field: "message", ActionField: "customerId"},
 			},
 			errContains: "task0 not found",
 		},
@@ -376,7 +376,7 @@ func TestExtractParamMappings(t *testing.T) {
 		name         string
 		actionParams ActionParams
 		task0Input   map[string]interface{}
-		want         []ParamMapping
+		want         []TaskZeroCacheMapping
 		wantErr      bool
 	}{
 		{
@@ -388,8 +388,8 @@ func TestExtractParamMappings(t *testing.T) {
 			task0Input: map[string]interface{}{
 				"message": "cust12345",
 			},
-			want: []ParamMapping{
-				{Task0Field: "message", ActionField: "customerId", Value: "cust12345"},
+			want: []TaskZeroCacheMapping{
+				{Field: "message", ActionField: "customerId", Value: "cust12345"},
 			},
 		},
 		{
@@ -402,9 +402,9 @@ func TestExtractParamMappings(t *testing.T) {
 				"text": "Red shoes",
 				"id":   "cust12345",
 			},
-			want: []ParamMapping{
-				{Task0Field: "id", ActionField: "customerId", Value: "cust12345"},
-				{Task0Field: "text", ActionField: "productDescription", Value: "Red shoes"},
+			want: []TaskZeroCacheMapping{
+				{Field: "id", ActionField: "customerId", Value: "cust12345"},
+				{Field: "text", ActionField: "productDescription", Value: "Red shoes"},
 			},
 		},
 		{
@@ -426,8 +426,8 @@ func TestExtractParamMappings(t *testing.T) {
 				"message": "cust12345",
 				"count":   42,
 			},
-			want: []ParamMapping{
-				{Task0Field: "message", ActionField: "customerId", Value: "cust12345"},
+			want: []TaskZeroCacheMapping{
+				{Field: "message", ActionField: "customerId", Value: "cust12345"},
 			},
 		},
 	}
@@ -443,10 +443,10 @@ func TestExtractParamMappings(t *testing.T) {
 
 			// Sort both slices for consistent comparison
 			sort.Slice(got, func(i, j int) bool {
-				return got[i].Task0Field < got[j].Task0Field
+				return got[i].Field < got[j].Field
 			})
 			sort.Slice(tt.want, func(i, j int) bool {
-				return tt.want[i].Task0Field < tt.want[j].Task0Field
+				return tt.want[i].Field < tt.want[j].Field
 			})
 
 			assert.Equal(t, tt.want, got)
