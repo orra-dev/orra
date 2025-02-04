@@ -20,7 +20,7 @@ import (
 func main() {
 	cfg, err := Load()
 	if err != nil {
-		log.Fatalf("could not load api config: %s", err.Error())
+		log.Fatalf("could not load control plane config: %s", err.Error())
 	}
 
 	app, err := NewApp(cfg, os.Args)
@@ -31,13 +31,14 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	plane := NewControlPlane()
-	wsManager := NewWebSocketManager(app.Logger)
-	vCache, err := NewVectorCache(cfg.OpenaiApiKey, cfg.GroqApiKey, 1000, 24*time.Hour, app.Logger)
+	llmClient, err := NewLLMClient(cfg, app.Logger)
 	if err != nil {
-		log.Fatalf("could not initialise vector cache: %s", err.Error())
+		log.Fatalf("could not initialise LLM client for control plane server: %s", err.Error())
 	}
 
+	plane := NewControlPlane()
+	wsManager := NewWebSocketManager(app.Logger)
+	vCache := NewVectorCache(llmClient, 1000, 24*time.Hour, app.Logger)
 	logManager := NewLogManager(ctx, LogsRetentionPeriod, plane)
 	logManager.Logger = app.Logger
 	plane.Initialise(ctx, logManager, wsManager, vCache, app.Logger)
