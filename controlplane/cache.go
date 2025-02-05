@@ -17,29 +17,17 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
-	"github.com/sashabaranov/go-openai"
-	"github.com/teilomillet/gollm"
 	"gonum.org/v1/gonum/mat"
 )
 
-func NewVectorCache(openAIKey string, groqAPIKey string, maxSize int, ttl time.Duration, logger zerolog.Logger) (*VectorCache, error) {
-	llm, err := gollm.NewLLM(
-		gollm.SetProvider("groq"),
-		gollm.SetModel("deepseek-r1-distill-llama-70b"),
-		gollm.SetAPIKey(groqAPIKey),
-		gollm.SetMaxTokens(MaxPlannerTokens),
-	)
-	if err != nil {
-		return nil, err
-	}
+func NewVectorCache(llmClient *LLMClient, maxSize int, ttl time.Duration, logger zerolog.Logger) *VectorCache {
 	return &VectorCache{
 		projectCaches: make(map[string]*ProjectCache),
-		embedder:      openai.NewClient(openAIKey),
-		llm:           llm,
+		llmClient:     llmClient,
 		ttl:           ttl,
 		maxSize:       maxSize,
 		logger:        logger,
-	}, nil
+	}
 }
 
 func newProjectCache(logger zerolog.Logger) *ProjectCache {
@@ -186,7 +174,7 @@ func (c *VectorCache) getWithRetry(ctx context.Context,
 
 	// Generate embedding for the action and its fields
 	actionWithFields := fmt.Sprintf("%s:::%s", action, actionParams.String())
-	actionEmbedding, err := c.generateEmbedding(ctx, actionWithFields)
+	actionEmbedding, err := c.generateEmbeddingVector(ctx, actionWithFields)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate embedding: %w", err)
 	}
@@ -230,8 +218,8 @@ func (c *VectorCache) getWithRetry(ctx context.Context,
 		Str("actionWithFields", actionWithFields).
 		Msg("CACHE MISS")
 
-	prompt := gollm.NewPrompt(generatePlannerPrompt(action, rawActionParams, serviceDescriptions))
-	llmResp, err := c.llm.Generate(ctx, prompt)
+	prompt := generatePlannerPrompt(action, rawActionParams, serviceDescriptions)
+	llmResp, err := c.llmClient.Generate(ctx, prompt)
 	if err != nil {
 		return nil, err
 	}
@@ -358,23 +346,27 @@ func (c *VectorCache) cleanup() {
 	}
 }
 
-func (c *VectorCache) generateEmbedding(ctx context.Context, text string) (*mat.VecDense, error) {
-	c.logger.Debug().Str("Input", text).Msg("generate embedding for input")
-	resp, err := c.embedder.CreateEmbeddings(ctx, openai.EmbeddingRequest{
-		Model: openai.AdaEmbeddingV2,
-		Input: []string{text},
-	})
+func (c *VectorCache) generateEmbeddingVector(ctx context.Context, text string) (*mat.VecDense, error) {
+	c.logger.Debug().Str("Input", text).Msg("generate embedding vector for input")
+	embeddings, err := c.llmClient.CreateEmbeddings(ctx, text)
 	if err != nil {
 		return nil, err
 	}
+	//resp, err := c.embedder.CreateEmbeddings(ctx, openai.EmbeddingRequest{
+	//	Model: openai.AdaEmbeddingV2,
+	//	Input: []string{text},
+	//})
+	//if err != nil {
+	//	return nil, err
+	//}
 
 	// Convert to dense vector
-	embedding := mat.NewVecDense(len(resp.Data[0].Embedding), nil)
-	for i, v := range resp.Data[0].Embedding {
-		embedding.SetVec(i, float64(v))
+	embeddingVector := mat.NewVecDense(len(embeddings), nil)
+	for i, v := range embeddings {
+		embeddingVector.SetVec(i, float64(v))
 	}
 
-	return embedding, nil
+	return embeddingVector, nil
 }
 
 func (p ActionParams) String() string {

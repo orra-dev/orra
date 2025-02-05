@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -17,7 +18,6 @@ import (
 )
 
 const (
-	MaxPlannerTokens              = 5000
 	TaskZero                      = "task0"
 	ResultAggregatorID            = "result_aggregator"
 	FailureTrackerID              = "failure_tracker"
@@ -34,20 +34,37 @@ const (
 	CompensationExpiredLogType    = "compensation_expired"
 	VersionHeader                 = "X-Orra-CP-Version"
 	PauseExecutionCode            = "PAUSE_EXECUTION"
+	LLMOpenAIProvider             = "openai"
+	LLMGroqProvider               = "groq"
+	O1MiniReasoningModel          = "o1-mini"
+	O3MiniReasoningModel          = "o3-mini"
+	R1ReasoningModel              = "deepseek-r1-distill-llama-70b"
 )
 
 var (
-	Version                   = "0.2.0"
-	LogsRetentionPeriod       = time.Hour * 24
-	DependencyPattern         = regexp.MustCompile(`^\$([^.]+)\.`)
-	WSWriteTimeOut            = time.Second * 120
-	WSMaxMessageBytes   int64 = 10 * 1024 // 10K
+	Version                          = "0.2.0"
+	LogsRetentionPeriod              = time.Hour * 24
+	DependencyPattern                = regexp.MustCompile(`^\$([^.]+)\.`)
+	WSWriteTimeOut                   = time.Second * 120
+	WSMaxMessageBytes          int64 = 10 * 1024 // 10K
+	AcceptedReasoningProviders       = []string{LLMOpenAIProvider, LLMGroqProvider}
+	AcceptedReasoningModels          = []string{O1MiniReasoningModel, O3MiniReasoningModel, R1ReasoningModel}
 )
 
-type Config struct {
-	Port         int `envconfig:"default=8005"`
+type Reasoning struct {
+	Provider string `envconfig:"default=openai"`
+	Model    string `envconfig:"default=o1-mini"`
+	ApiKey   string
+}
+
+type PlanCache struct {
 	OpenaiApiKey string
-	GroqApiKey   string
+}
+
+type Config struct {
+	Port      int `envconfig:"default=8005"`
+	Reasoning Reasoning
+	PlanCache PlanCache
 }
 
 func Load() (Config, error) {
@@ -56,7 +73,29 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	if err := validateReasoningConfig(cfg.Reasoning); err != nil {
+		return Config{}, err
+	}
 	return cfg, err
+}
+
+func validateReasoningConfig(reasoning Reasoning) error {
+	if !slices.Contains(AcceptedReasoningProviders, reasoning.Provider) {
+		return fmt.Errorf(
+			"invalid reasoning provider [%s], select one of [%+v]",
+			reasoning.Provider,
+			AcceptedReasoningProviders)
+	}
+	if !slices.Contains(AcceptedReasoningModels, reasoning.Model) {
+		return fmt.Errorf(
+			"invalid reasoning model [%s], select one of [%+v]",
+			reasoning.Model,
+			AcceptedReasoningModels)
+	}
+	if reasoning.ApiKey == "" {
+		return fmt.Errorf("reasoning api key is required")
+	}
+	return nil
 }
 
 type Status int
