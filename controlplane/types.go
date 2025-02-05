@@ -17,8 +17,6 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/olahol/melody"
 	"github.com/rs/zerolog"
-	"github.com/sashabaranov/go-openai"
-	"github.com/teilomillet/gollm"
 	"golang.org/x/sync/singleflight"
 	"gonum.org/v1/gonum/mat"
 )
@@ -34,7 +32,6 @@ type ControlPlane struct {
 	workerMu             sync.RWMutex
 	WebSocketManager     *WebSocketManager
 	VectorCache          *VectorCache
-	openAIKey            string
 	mu                   sync.RWMutex
 	Logger               zerolog.Logger
 }
@@ -331,8 +328,7 @@ type ProjectCache struct {
 type VectorCache struct {
 	mu            sync.RWMutex
 	projectCaches map[string]*ProjectCache
-	embedder      *openai.Client
-	llm           gollm.LLM
+	llmClient     *LLMClient
 	ttl           time.Duration
 	maxSize       int // Per project
 	group         singleflight.Group

@@ -1,2 +1,7 @@
-OPENAI_API_KEY=xxx
-GROQ_API_KEY=xxx
+# Reasoning Config providers:(openai,groq) models:(o1-mini, o3-mini, deepseek-r1-distill-llama-70b)
+REASONING_PROVIDER=xxx
+REASONING_MODEL=xxx
+REASONING_API_KEY=xxx
+
+# Execution Plan Cache OPENAI API KEY
+PLAN_CACHE_OPENAI_API_KEY=xxx

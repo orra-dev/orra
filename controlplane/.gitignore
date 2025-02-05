@@ -24,3 +24,5 @@ bin
 # Go workspace file
 go.work
 
+# dot env files
+.env.*

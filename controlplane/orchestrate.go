@@ -197,10 +197,6 @@ func (p *ControlPlane) discoverProjectServices(projectID string) ([]*ServiceInfo
 }
 
 func (p *ControlPlane) decomposeAction(orchestration *Orchestration, action string, actionParams json.RawMessage, serviceDescriptions string) (*ServiceCallingPlan, error) {
-	p.Logger.Trace().
-		Str("Prompt", generatePlannerPrompt(action, actionParams, serviceDescriptions)).
-		Msg("Decompose action prompt using cache powered completion")
-
 	resp, cachedEntryID, _, err := p.VectorCache.Get(
 		context.Background(),
 		orchestration.ProjectID,
