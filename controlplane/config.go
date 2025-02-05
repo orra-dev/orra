@@ -57,14 +57,14 @@ type Reasoning struct {
 	ApiKey   string
 }
 
-type Embeddings struct {
+type PlanCache struct {
 	OpenaiApiKey string
 }
 
 type Config struct {
-	Port       int `envconfig:"default=8005"`
-	Reasoning  Reasoning
-	Embeddings Embeddings
+	Port      int `envconfig:"default=8005"`
+	Reasoning Reasoning
+	PlanCache PlanCache
 }
 
 func Load() (Config, error) {

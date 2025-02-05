@@ -84,7 +84,7 @@ func NewLLMClient(cfg Config, logger zerolog.Logger) (*LLMClient, error) {
 		reasoningClient:  openai.NewClientWithConfig(reasoningConfig.baseConfig),
 		reasoningConfig:  reasoningConfig,
 		reasoningModel:   cfg.Reasoning.Model,
-		embeddingsClient: openai.NewClient(cfg.Embeddings.OpenaiApiKey),
+		embeddingsClient: openai.NewClient(cfg.PlanCache.OpenaiApiKey),
 		embeddingsModel:  string(openai.AdaEmbeddingV2),
 		logger:           logger,
 	}, nil
