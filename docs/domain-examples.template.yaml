@@ -1,0 +1,51 @@
+# Domain Examples Template
+#
+# Use this template to create domain examples for your project.
+# These examples help Orra generate better execution plans by grounding the planner
+# in your specific domain.
+#
+# Tips for using with LLMs:
+# 1. Describe your domain and typical actions
+# 2. List your available services and their capabilities
+# 3. Ask the LLM to generate examples following this format
+# 4. Review and adjust the generated examples
+
+# Unique name for this set of examples (e.g., "customer-support-examples")
+name: "your-domain-examples"
+
+# Main domain these examples belong to (e.g., "E-commerce Customer Support")
+domain: "Your Domain Name"
+
+# Semantic version of these examples
+version: "1.0"
+
+# Examples of actions in your domain
+examples:
+  # Example 1: Simple action pattern
+  - action: "Verb action for {variable}"     # Use {braces} for variables in action text
+    params:
+      variable: "example-value"              # Example values for the variables
+      context: "additional-context"          # Any additional parameters needed
+    capabilities:                            # List required capabilities
+      - "Core capability needed"             # Keep capabilities atomic and specific
+      - "Another required capability"
+    intent: "Clear description of what this action aims to achieve"
+
+  # Example 2: More complex action pattern
+  - action: "Verb {thing} with {context}"
+    params:
+      thing: "ITEM123"
+      context: "CONTEXT456"
+      extra: "optional-param"
+    capabilities:
+      - "Primary capability"
+      - "Secondary capability"
+    intent: "Clear description with any important variations or context"
+
+# OPTIONAL: Business rules and limitations that apply to all actions
+constraints:
+  - "Important business rule to follow"
+  - "Critical limitation to consider"
+  - "Security or privacy requirement"
+
+# NOTE: Delete all comments (lines starting with #) before using
