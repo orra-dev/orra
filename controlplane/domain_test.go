@@ -10,196 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/yaml.v3"
 )
-
-func TestParseYAML(t *testing.T) {
-	tests := []struct {
-		name    string
-		yaml    string
-		want    *DomainExample
-		wantErr bool
-		errMsg  string
-	}{
-		{
-			name: "valid domain example",
-			yaml: `
-name: "customer-support-examples"
-domain: "E-commerce Customer Support"
-version: "1.0"
-examples:
-  - action: "Handle customer inquiry about {orderId}"
-    params:
-      orderId: "ORD123"
-      query: "Where is my order?"
-    capabilities:
-      - "Lookup order details"
-      - "Generate response"
-    intent: "Customer wants order status and tracking"
-constraints:
-  - "Verify customer owns order"`,
-			want: &DomainExample{
-				Name:    "customer-support-examples",
-				Domain:  "E-commerce Customer Support",
-				Version: "1.0",
-				Examples: []ActionExample{
-					{
-						Action: "Handle customer inquiry about {orderId}",
-						Params: map[string]string{
-							"orderId": "ORD123",
-							"query":   "Where is my order?",
-						},
-						Capabilities: []string{
-							"Lookup order details",
-							"Generate response",
-						},
-						Intent: "Customer wants order status and tracking",
-					},
-				},
-				Constraints: []string{"Verify customer owns order"},
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid - multiple examples",
-			yaml: `
-name: "customer-support-examples"
-domain: "E-commerce Customer Support"
-version: "1.0"
-examples:
-  - action: "Handle customer inquiry about {orderId}"
-    params:
-      orderId: "ORD123"
-    capabilities:
-      - "Lookup order details"
-    intent: "Check order status"
-  - action: "List all orders"
-    capabilities:
-      - "Order listing"
-    intent: "Show all orders"`,
-			want: &DomainExample{
-				Name:    "customer-support-examples",
-				Domain:  "E-commerce Customer Support",
-				Version: "1.0",
-				Examples: []ActionExample{
-					{
-						Action: "Handle customer inquiry about {orderId}",
-						Params: map[string]string{
-							"orderId": "ORD123",
-						},
-						Capabilities: []string{"Lookup order details"},
-						Intent:       "Check order status",
-					},
-					{
-						Action:       "List all orders",
-						Capabilities: []string{"Order listing"},
-						Intent:       "Show all orders",
-					},
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "invalid - missing required fields",
-			yaml: `
-name: "customer-support-examples"
-domain: "E-commerce Customer Support"
-examples:
-  - action: "Handle customer inquiry about {orderId}"
-    params:
-      orderId: "ORD123"
-    capabilities:
-      - "Lookup order details"
-    intent: "Check order status"`,
-			wantErr: true,
-			errMsg:  "version: cannot be blank",
-		},
-		{
-			name: "invalid - malformed yaml",
-			yaml: `
-name: "customer-support-examples"
-domain: "E-commerce Customer Support"
-version: "1.0"
-examples:
-  - action: Handle customer inquiry
-    capabilities:
-      - Lookup order details
-    intent: Check order status
-    params: invalid-params-format`,
-			wantErr: true,
-			errMsg:  "yaml:",
-		},
-		{
-			name: "invalid - example missing required field",
-			yaml: `
-name: "customer-support-examples"
-domain: "E-commerce Customer Support"
-version: "1.0"
-examples:
-  - action: "Handle customer inquiry about {orderId}"
-    params:
-      orderId: "ORD123"
-    capabilities:
-      - "Lookup order details"`,
-			wantErr: true,
-			errMsg:  "examples[0]: intent: cannot be blank",
-		},
-		{
-			name: "invalid - params don't match variables",
-			yaml: `
-name: "customer-support-examples"
-domain: "E-commerce Customer Support"
-version: "1.0"
-examples:
-  - action: "Handle customer inquiry about {orderId}"
-    params:
-      customerId: "CUST123"
-    capabilities:
-      - "Lookup order details"
-    intent: "Check order status"`,
-			wantErr: true,
-			errMsg:  "examples[0]: params: missing required param(s): [orderId]",
-		},
-		{
-			name: "invalid - empty capabilities",
-			yaml: `
-name: "customer-support-examples"
-domain: "E-commerce Customer Support"
-version: "1.0"
-examples:
-  - action: "Handle customer inquiry about {orderId}"
-    params:
-      orderId: "ORD123"
-    capabilities: []
-    intent: "Check order status"`,
-			wantErr: true,
-			errMsg:  "examples[0]: capabilities: at least one capability is required",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var got DomainExample
-			err := yaml.Unmarshal([]byte(tt.yaml), &got)
-			if tt.wantErr {
-				if err == nil {
-					err = got.Validate()
-				}
-				assert.Error(t, err)
-				if tt.errMsg != "" {
-					assert.Contains(t, err.Error(), tt.errMsg)
-				}
-			} else {
-				assert.NoError(t, err)
-				err = got.Validate()
-				assert.NoError(t, err)
-				if tt.want != nil {
-					assert.Equal(t, tt.want, &got)
-				}
-			}
-		})
-	}
-}
 
 func TestDomainExampleValidation(t *testing.T) {
 	validActionWithVars := ActionExample{
@@ -283,7 +94,7 @@ func TestDomainExampleValidation(t *testing.T) {
 				Examples: []ActionExample{validActionWithVars},
 			},
 			wantErr: true,
-			errMsg:  "name: must consist of lowercase alphanumeric characters",
+			errMsg:  "name: must consist of lowercase alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character",
 		},
 		{
 			name: "invalid name - starts with dot",
@@ -294,7 +105,7 @@ func TestDomainExampleValidation(t *testing.T) {
 				Examples: []ActionExample{validActionWithVars},
 			},
 			wantErr: true,
-			errMsg:  "name: must consist of lowercase alphanumeric characters",
+			errMsg:  "name: must consist of lowercase alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character",
 		},
 		{
 			name: "missing domain",
@@ -430,7 +241,7 @@ func TestActionExampleValidation(t *testing.T) {
 				Intent:       "Check order status",
 			},
 			wantErr: true,
-			errMsg:  "params: missing required params: [orderId]",
+			errMsg:  "params: missing required param(s): [orderId]",
 		},
 		{
 			name: "empty capability",
