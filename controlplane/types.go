@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -367,4 +368,29 @@ type CompensationWorker struct {
 	backOff         *backoff.ExponentialBackOff
 	attemptCounts   map[string]int     // track attempts per task
 	cancel          context.CancelFunc // Store cancel function
+}
+
+// ActionExample represents a single example of how an action should be handled
+type ActionExample struct {
+	Action       string            `json:"action" yaml:"action"`
+	Params       map[string]string `json:"params" yaml:"params"`
+	Capabilities []string          `json:"capabilities" yaml:"capabilities"`
+	Intent       string            `json:"intent" yaml:"intent"`
+}
+
+// DomainExample represents a collection of examples for domain-specific actions
+type DomainExample struct {
+	Name        string          `json:"name" yaml:"name"`
+	Domain      string          `json:"domain" yaml:"domain"`
+	Version     string          `json:"version" yaml:"version"`
+	Examples    []ActionExample `json:"examples" yaml:"examples"`
+	Constraints []string        `json:"constraints" yaml:"constraints"`
+}
+
+// GetEmbeddingText returns a string suitable for embedding that captures the example's semantic meaning
+func (e *ActionExample) GetEmbeddingText() string {
+	return fmt.Sprintf("%s %s %s",
+		e.Action,
+		e.Intent,
+		strings.Join(e.Capabilities, " "))
 }
