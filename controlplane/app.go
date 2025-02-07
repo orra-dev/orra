@@ -56,6 +56,11 @@ func (app *App) configureRoutes() *App {
 	app.Router.HandleFunc("/orchestrations/inspections/{id}", app.APIKeyMiddleware(app.OrchestrationInspectionHandler)).Methods(http.MethodGet)
 	app.Router.HandleFunc("/register/agent", app.APIKeyMiddleware(app.RegisterAgent)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/ws", app.HandleWebSocket)
+	app.Router.HandleFunc("/domain-examples", app.APIKeyMiddleware(app.AddDomainExamples)).Methods(http.MethodPost)
+	app.Router.HandleFunc("/domain-examples", app.APIKeyMiddleware(app.ListDomainExamples)).Methods(http.MethodGet)
+	app.Router.HandleFunc("/domain-examples/{name}", app.APIKeyMiddleware(app.RemoveDomainExample)).Methods(http.MethodDelete)
+	app.Router.HandleFunc("/domain-examples", app.APIKeyMiddleware(app.RemoveAllDomainExamples)).Methods(http.MethodDelete)
+
 	return app
 }
 
@@ -373,4 +378,96 @@ func (app *App) healthHandler(w http.ResponseWriter, _ *http.Request) {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Internal, err))
 		return
 	}
+}
+
+// AddDomainExamples adds new domain examples to a project
+func (app *App) AddDomainExamples(w http.ResponseWriter, r *http.Request) {
+	apiKey := r.Context().Value("api_key").(string)
+	project, err := app.Plane.GetProjectByApiKey(apiKey)
+	if err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
+		return
+	}
+
+	var domainExample DomainExample
+	if err := json.NewDecoder(r.Body).Decode(&domainExample); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFail), err))
+		return
+	}
+
+	// Add domain examples to the project
+	if err := app.Plane.AddDomainExample(project.ID, &domainExample); err != nil {
+		if validErr, ok := err.(ValidationError); ok {
+			errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Validation, validErr))
+		} else {
+			errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	if err := json.NewEncoder(w).Encode(domainExample); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
+		return
+	}
+}
+
+// ListDomainExamples retrieves all domain examples for a project
+func (app *App) ListDomainExamples(w http.ResponseWriter, r *http.Request) {
+	apiKey := r.Context().Value("api_key").(string)
+	project, err := app.Plane.GetProjectByApiKey(apiKey)
+	if err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
+		return
+	}
+
+	examples, err := app.Plane.GetDomainExamples(project.ID)
+	if err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(examples); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Internal, err))
+		return
+	}
+}
+
+// RemoveDomainExample removes a specific domain example from a project
+func (app *App) RemoveDomainExample(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	name := vars["name"]
+
+	apiKey := r.Context().Value("api_key").(string)
+	project, err := app.Plane.GetProjectByApiKey(apiKey)
+	if err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
+		return
+	}
+
+	if err := app.Plane.RemoveDomainExampleByName(project.ID, name); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// RemoveAllDomainExamples removes domain examples for a specific project
+func (app *App) RemoveAllDomainExamples(w http.ResponseWriter, r *http.Request) {
+	apiKey := r.Context().Value("api_key").(string)
+	project, err := app.Plane.GetProjectByApiKey(apiKey)
+	if err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
+		return
+	}
+
+	if err := app.Plane.RemoveAllDomainExamples(project.ID); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

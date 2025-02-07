@@ -25,6 +25,8 @@ import (
 type ControlPlane struct {
 	projects             map[string]*Project
 	services             map[string]map[string]*ServiceInfo
+	domainExamples       map[string]map[string]*DomainExample
+	domainExamplesMu     sync.RWMutex
 	servicesMu           sync.RWMutex
 	orchestrationStore   map[string]*Orchestration
 	orchestrationStoreMu sync.RWMutex

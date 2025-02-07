@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -18,12 +19,21 @@ import (
 	"github.com/rs/zerolog"
 )
 
+type ValidationError struct {
+	Err error
+}
+
+func (e ValidationError) Error() string {
+	return fmt.Sprintf("%v", e.Err)
+}
+
 func NewControlPlane() *ControlPlane {
 	plane := &ControlPlane{
 		projects:           make(map[string]*Project),
 		services:           make(map[string]map[string]*ServiceInfo),
 		orchestrationStore: make(map[string]*Orchestration),
 		logWorkers:         make(map[string]map[string]context.CancelFunc),
+		domainExamples:     make(map[string]map[string]*DomainExample),
 	}
 	return plane
 }
@@ -37,7 +47,9 @@ func (p *ControlPlane) Initialise(ctx context.Context,
 	p.Logger = Logger
 	p.WebSocketManager = wsManager
 	p.VectorCache = vCache
-	p.VectorCache.StartCleanup(ctx)
+	if p.VectorCache != nil {
+		p.VectorCache.StartCleanup(ctx)
+	}
 }
 
 func (p *ControlPlane) RegisterOrUpdateService(service *ServiceInfo) error {
@@ -132,6 +144,112 @@ func (p *ControlPlane) GetServiceName(projectID string, serviceID string) (strin
 		return "", err
 	}
 	return service.Name, nil
+}
+
+// AddDomainExample adds domain examples to a project after validation
+func (p *ControlPlane) AddDomainExample(projectID string, example *DomainExample) error {
+	// Validate the example first
+	if err := example.Validate(); err != nil {
+		return ValidationError{Err: fmt.Errorf("invalid domain example: %w", err)}
+	}
+
+	p.domainExamplesMu.Lock()
+	defer p.domainExamplesMu.Unlock()
+
+	// Initialize project map if it doesn't exist
+	if p.domainExamples == nil {
+		p.domainExamples = make(map[string]map[string]*DomainExample)
+	}
+
+	// Initialize domain map for project if it doesn't exist
+	if p.domainExamples[projectID] == nil {
+		p.domainExamples[projectID] = make(map[string]*DomainExample)
+	}
+
+	// Store the example
+	p.domainExamples[projectID][example.Name] = example
+
+	p.Logger.Debug().
+		Str("projectID", projectID).
+		Str("domain", example.Domain).
+		Str("name", example.Name).
+		Msgf("Added domain example with %d action examples", len(example.Examples))
+
+	return nil
+}
+
+// GetDomainExamples retrieves all domain examples for a project
+func (p *ControlPlane) GetDomainExamples(projectID string) ([]*DomainExample, error) {
+	p.domainExamplesMu.RLock()
+	defer p.domainExamplesMu.RUnlock()
+
+	if p.domainExamples == nil {
+		return []*DomainExample{}, nil
+	}
+
+	projectExamples, exists := p.domainExamples[projectID]
+	if !exists {
+		return []*DomainExample{}, nil
+	}
+
+	// Convert map to slice
+	examples := make([]*DomainExample, 0, len(projectExamples))
+	for _, example := range projectExamples {
+		examples = append(examples, example)
+	}
+
+	sort.Slice(examples, func(i, j int) bool {
+		return examples[i].Name < examples[j].Name
+	})
+
+	return examples, nil
+}
+
+// RemoveDomainExampleByName removes a specific domain example from a project by its name
+func (p *ControlPlane) RemoveDomainExampleByName(projectID string, name string) error {
+	p.domainExamplesMu.Lock()
+	defer p.domainExamplesMu.Unlock()
+
+	if p.domainExamples == nil {
+		return fmt.Errorf("domain example not found")
+	}
+
+	projectExamples, exists := p.domainExamples[projectID]
+	if !exists {
+		return fmt.Errorf("domain example not found")
+	}
+
+	delete(projectExamples, name)
+
+	// If project has no more examples, remove the project entry
+	if len(projectExamples) == 0 {
+		delete(p.domainExamples, projectID)
+	}
+
+	p.Logger.Debug().
+		Str("projectID", projectID).
+		Str("name", name).
+		Msg("Removed domain example")
+
+	return nil
+}
+
+// RemoveAllDomainExamples removes all domain examples for a project
+func (p *ControlPlane) RemoveAllDomainExamples(projectID string) error {
+	p.domainExamplesMu.Lock()
+	defer p.domainExamplesMu.Unlock()
+
+	if p.domainExamples == nil {
+		return nil
+	}
+
+	delete(p.domainExamples, projectID)
+
+	p.Logger.Debug().
+		Str("projectID", projectID).
+		Msg("Removed all domain examples")
+
+	return nil
 }
 
 func (p *ControlPlane) GetProjectByApiKey(key string) (*Project, error) {
