@@ -25,7 +25,7 @@ import (
 type ControlPlane struct {
 	projects             map[string]*Project
 	services             map[string]map[string]*ServiceInfo
-	domainExamples       map[string]map[string]*DomainExample
+	groundings           map[string]map[string]*GroundingSpec
 	domainExamplesMu     sync.RWMutex
 	servicesMu           sync.RWMutex
 	orchestrationStore   map[string]*Orchestration
@@ -372,25 +372,25 @@ type CompensationWorker struct {
 	cancel          context.CancelFunc // Store cancel function
 }
 
-// ActionExample represents a single example of how an action should be handled
-type ActionExample struct {
+// GroundingUseCase represents grounding of how an action should be handled
+type GroundingUseCase struct {
 	Action       string            `json:"action" yaml:"action"`
 	Params       map[string]string `json:"params" yaml:"params"`
 	Capabilities []string          `json:"capabilities" yaml:"capabilities"`
 	Intent       string            `json:"intent" yaml:"intent"`
 }
 
-// DomainExample represents a collection of examples for domain-specific actions
-type DomainExample struct {
-	Name        string          `json:"name" yaml:"name"`
-	Domain      string          `json:"domain" yaml:"domain"`
-	Version     string          `json:"version" yaml:"version"`
-	Examples    []ActionExample `json:"examples" yaml:"examples"`
-	Constraints []string        `json:"constraints" yaml:"constraints"`
+// GroundingSpec represents a collection of planning grounding for domain-specific actions
+type GroundingSpec struct {
+	Name        string             `json:"name" yaml:"name"`
+	Domain      string             `json:"domain" yaml:"domain"`
+	Version     string             `json:"version" yaml:"version"`
+	UseCases    []GroundingUseCase `json:"useCases" yaml:"use-cases"`
+	Constraints []string           `json:"constraints" yaml:"constraints"`
 }
 
 // GetEmbeddingText returns a string suitable for embedding that captures the example's semantic meaning
-func (e *ActionExample) GetEmbeddingText() string {
+func (e *GroundingUseCase) GetEmbeddingText() string {
 	return fmt.Sprintf("%s %s %s",
 		e.Action,
 		e.Intent,

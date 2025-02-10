@@ -56,10 +56,10 @@ func (app *App) configureRoutes() *App {
 	app.Router.HandleFunc("/orchestrations/inspections/{id}", app.APIKeyMiddleware(app.OrchestrationInspectionHandler)).Methods(http.MethodGet)
 	app.Router.HandleFunc("/register/agent", app.APIKeyMiddleware(app.RegisterAgent)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/ws", app.HandleWebSocket)
-	app.Router.HandleFunc("/domain-examples", app.APIKeyMiddleware(app.AddDomainExamples)).Methods(http.MethodPost)
-	app.Router.HandleFunc("/domain-examples", app.APIKeyMiddleware(app.ListDomainExamples)).Methods(http.MethodGet)
-	app.Router.HandleFunc("/domain-examples/{name}", app.APIKeyMiddleware(app.RemoveDomainExample)).Methods(http.MethodDelete)
-	app.Router.HandleFunc("/domain-examples", app.APIKeyMiddleware(app.RemoveAllDomainExamples)).Methods(http.MethodDelete)
+	app.Router.HandleFunc("/groundings", app.APIKeyMiddleware(app.AddGrounding)).Methods(http.MethodPost)
+	app.Router.HandleFunc("/groundings", app.APIKeyMiddleware(app.ListGrounding)).Methods(http.MethodGet)
+	app.Router.HandleFunc("/groundings/{name}", app.APIKeyMiddleware(app.RemoveGrounding)).Methods(http.MethodDelete)
+	app.Router.HandleFunc("/groundings", app.APIKeyMiddleware(app.RemoveAllGrounding)).Methods(http.MethodDelete)
 
 	return app
 }
@@ -380,8 +380,8 @@ func (app *App) healthHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-// AddDomainExamples adds new domain examples to a project
-func (app *App) AddDomainExamples(w http.ResponseWriter, r *http.Request) {
+// AddGrounding adds new domain examples to a project
+func (app *App) AddGrounding(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Context().Value("api_key").(string)
 	project, err := app.Plane.GetProjectByApiKey(apiKey)
 	if err != nil {
@@ -389,14 +389,14 @@ func (app *App) AddDomainExamples(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var domainExample DomainExample
-	if err := json.NewDecoder(r.Body).Decode(&domainExample); err != nil {
+	var grounding GroundingSpec
+	if err := json.NewDecoder(r.Body).Decode(&grounding); err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFail), err))
 		return
 	}
 
 	// Add domain examples to the project
-	if err := app.Plane.AddDomainExample(project.ID, &domainExample); err != nil {
+	if err := app.Plane.AddGroundingSpec(project.ID, &grounding); err != nil {
 		if validErr, ok := err.(ValidationError); ok {
 			errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Validation, validErr))
 		} else {
@@ -406,14 +406,14 @@ func (app *App) AddDomainExamples(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	if err := json.NewEncoder(w).Encode(domainExample); err != nil {
+	if err := json.NewEncoder(w).Encode(grounding); err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
 		return
 	}
 }
 
-// ListDomainExamples retrieves all domain examples for a project
-func (app *App) ListDomainExamples(w http.ResponseWriter, r *http.Request) {
+// ListGrounding retrieves all domain examples for a project
+func (app *App) ListGrounding(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Context().Value("api_key").(string)
 	project, err := app.Plane.GetProjectByApiKey(apiKey)
 	if err != nil {
@@ -421,7 +421,7 @@ func (app *App) ListDomainExamples(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	examples, err := app.Plane.GetDomainExamples(project.ID)
+	groundings, err := app.Plane.GetGroundingSpecs(project.ID)
 	if err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
 		return
@@ -429,14 +429,14 @@ func (app *App) ListDomainExamples(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(examples); err != nil {
+	if err := json.NewEncoder(w).Encode(groundings); err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Internal, err))
 		return
 	}
 }
 
-// RemoveDomainExample removes a specific domain example from a project
-func (app *App) RemoveDomainExample(w http.ResponseWriter, r *http.Request) {
+// RemoveGrounding removes a specific domain example from a project
+func (app *App) RemoveGrounding(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["name"]
 
@@ -455,8 +455,8 @@ func (app *App) RemoveDomainExample(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// RemoveAllDomainExamples removes domain examples for a specific project
-func (app *App) RemoveAllDomainExamples(w http.ResponseWriter, r *http.Request) {
+// RemoveAllGrounding removes domain examples for a specific project
+func (app *App) RemoveAllGrounding(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Context().Value("api_key").(string)
 	project, err := app.Plane.GetProjectByApiKey(apiKey)
 	if err != nil {

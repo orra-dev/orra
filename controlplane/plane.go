@@ -33,7 +33,7 @@ func NewControlPlane() *ControlPlane {
 		services:           make(map[string]map[string]*ServiceInfo),
 		orchestrationStore: make(map[string]*Orchestration),
 		logWorkers:         make(map[string]map[string]context.CancelFunc),
-		domainExamples:     make(map[string]map[string]*DomainExample),
+		groundings:         make(map[string]map[string]*GroundingSpec),
 	}
 	return plane
 }
@@ -146,8 +146,8 @@ func (p *ControlPlane) GetServiceName(projectID string, serviceID string) (strin
 	return service.Name, nil
 }
 
-// AddDomainExample adds domain examples to a project after validation
-func (p *ControlPlane) AddDomainExample(projectID string, example *DomainExample) error {
+// AddGroundingSpec adds domain grounding to a project after validation
+func (p *ControlPlane) AddGroundingSpec(projectID string, example *GroundingSpec) error {
 	// Validate the example first
 	if err := example.Validate(); err != nil {
 		return ValidationError{Err: fmt.Errorf("invalid domain example: %w", err)}
@@ -157,43 +157,43 @@ func (p *ControlPlane) AddDomainExample(projectID string, example *DomainExample
 	defer p.domainExamplesMu.Unlock()
 
 	// Initialize project map if it doesn't exist
-	if p.domainExamples == nil {
-		p.domainExamples = make(map[string]map[string]*DomainExample)
+	if p.groundings == nil {
+		p.groundings = make(map[string]map[string]*GroundingSpec)
 	}
 
 	// Initialize domain map for project if it doesn't exist
-	if p.domainExamples[projectID] == nil {
-		p.domainExamples[projectID] = make(map[string]*DomainExample)
+	if p.groundings[projectID] == nil {
+		p.groundings[projectID] = make(map[string]*GroundingSpec)
 	}
 
 	// Store the example
-	p.domainExamples[projectID][example.Name] = example
+	p.groundings[projectID][example.Name] = example
 
 	p.Logger.Debug().
 		Str("projectID", projectID).
 		Str("domain", example.Domain).
 		Str("name", example.Name).
-		Msgf("Added domain example with %d action examples", len(example.Examples))
+		Msgf("Added domain example with %d action examples", len(example.UseCases))
 
 	return nil
 }
 
-// GetDomainExamples retrieves all domain examples for a project
-func (p *ControlPlane) GetDomainExamples(projectID string) ([]*DomainExample, error) {
+// GetGroundingSpecs retrieves all domain groundings for a project
+func (p *ControlPlane) GetGroundingSpecs(projectID string) ([]*GroundingSpec, error) {
 	p.domainExamplesMu.RLock()
 	defer p.domainExamplesMu.RUnlock()
 
-	if p.domainExamples == nil {
-		return []*DomainExample{}, nil
+	if p.groundings == nil {
+		return []*GroundingSpec{}, nil
 	}
 
-	projectExamples, exists := p.domainExamples[projectID]
+	projectExamples, exists := p.groundings[projectID]
 	if !exists {
-		return []*DomainExample{}, nil
+		return []*GroundingSpec{}, nil
 	}
 
 	// Convert map to slice
-	examples := make([]*DomainExample, 0, len(projectExamples))
+	examples := make([]*GroundingSpec, 0, len(projectExamples))
 	for _, example := range projectExamples {
 		examples = append(examples, example)
 	}
@@ -205,16 +205,16 @@ func (p *ControlPlane) GetDomainExamples(projectID string) ([]*DomainExample, er
 	return examples, nil
 }
 
-// RemoveDomainExampleByName removes a specific domain example from a project by its name
+// RemoveDomainExampleByName removes a specific domain grounding from a project by its name
 func (p *ControlPlane) RemoveDomainExampleByName(projectID string, name string) error {
 	p.domainExamplesMu.Lock()
 	defer p.domainExamplesMu.Unlock()
 
-	if p.domainExamples == nil {
+	if p.groundings == nil {
 		return fmt.Errorf("domain example not found")
 	}
 
-	projectExamples, exists := p.domainExamples[projectID]
+	projectExamples, exists := p.groundings[projectID]
 	if !exists {
 		return fmt.Errorf("domain example not found")
 	}
@@ -223,7 +223,7 @@ func (p *ControlPlane) RemoveDomainExampleByName(projectID string, name string) 
 
 	// If project has no more examples, remove the project entry
 	if len(projectExamples) == 0 {
-		delete(p.domainExamples, projectID)
+		delete(p.groundings, projectID)
 	}
 
 	p.Logger.Debug().
@@ -234,16 +234,16 @@ func (p *ControlPlane) RemoveDomainExampleByName(projectID string, name string) 
 	return nil
 }
 
-// RemoveAllDomainExamples removes all domain examples for a project
+// RemoveAllDomainExamples removes all domain grounding for a project
 func (p *ControlPlane) RemoveAllDomainExamples(projectID string) error {
 	p.domainExamplesMu.Lock()
 	defer p.domainExamplesMu.Unlock()
 
-	if p.domainExamples == nil {
+	if p.groundings == nil {
 		return nil
 	}
 
-	delete(p.domainExamples, projectID)
+	delete(p.groundings, projectID)
 
 	p.Logger.Debug().
 		Str("projectID", projectID).

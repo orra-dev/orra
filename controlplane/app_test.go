@@ -49,13 +49,13 @@ func setupTestApp(t *testing.T) (*App, *Project) {
 	return app, project
 }
 
-// createTestDomainExample returns a valid domain example for testing
-func createTestDomainExample() *DomainExample {
-	return &DomainExample{
+// createTestGroundingSpec returns a valid domain grounding spec for testing
+func createTestGroundingSpec() *GroundingSpec {
+	return &GroundingSpec{
 		Name:    "customer-support-examples",
-		Domain:  "E-commerce Customer Support",
+		Domain:  "e-commerce-customer-support",
 		Version: "1.0",
-		Examples: []ActionExample{
+		UseCases: []GroundingUseCase{
 			{
 				Action: "Handle customer inquiry about {orderId}",
 				Params: map[string]string{
@@ -75,17 +75,17 @@ func createTestDomainExample() *DomainExample {
 	}
 }
 
-func TestDomainExamplesAPI(t *testing.T) {
+func TestGroundingAPI(t *testing.T) {
 	app, project := setupTestApp(t)
-	example := createTestDomainExample()
+	expected := createTestGroundingSpec()
 
-	t.Run("Add Domain Example Success", func(t *testing.T) {
-		body, err := json.Marshal(example)
+	t.Run("Add Domain Grounding Spec Success", func(t *testing.T) {
+		body, err := json.Marshal(expected)
 		if err != nil {
-			t.Fatalf("Failed to marshal example: %v", err)
+			t.Fatalf("Failed to marshal expected: %v", err)
 		}
 
-		req := httptest.NewRequest(http.MethodPost, "/domain-examples", bytes.NewBuffer(body))
+		req := httptest.NewRequest(http.MethodPost, "/groundings", bytes.NewBuffer(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", project.APIKey))
 
@@ -96,27 +96,27 @@ func TestDomainExamplesAPI(t *testing.T) {
 			t.Errorf("Expected status code %d, got %d", http.StatusCreated, w.Code)
 		}
 
-		var response DomainExample
-		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
-			t.Fatalf("Failed to decode response: %v", err)
+		var actual GroundingSpec
+		if err := json.NewDecoder(w.Body).Decode(&actual); err != nil {
+			t.Fatalf("Failed to decode actual: %v", err)
 		}
 
-		domainExamples := app.Plane.domainExamples[project.ID]
-		if len(domainExamples) != 1 {
-			t.Errorf("Expected the plane to have 1 domain example, got %d", len(domainExamples))
+		groundings := app.Plane.groundings[project.ID]
+		if len(groundings) != 1 {
+			t.Errorf("Expected the plane to have 1 domain expected, got %d", len(groundings))
 		}
 
-		if response.Name != example.Name {
-			t.Errorf("Expected name %s, got %s", example.Name, response.Name)
+		if actual.Name != expected.Name {
+			t.Errorf("Expected name %s, got %s", expected.Name, actual.Name)
 		}
 	})
 
-	t.Run("List Domain Examples Success", func(t *testing.T) {
-		if err := app.Plane.AddDomainExample(project.ID, example); err != nil {
-			t.Fatalf("Failed to add example: %v", err)
+	t.Run("List Domain Grounding Specs Success", func(t *testing.T) {
+		if err := app.Plane.AddGroundingSpec(project.ID, expected); err != nil {
+			t.Fatalf("Failed to add expected: %v", err)
 		}
 
-		req := httptest.NewRequest(http.MethodGet, "/domain-examples", nil)
+		req := httptest.NewRequest(http.MethodGet, "/groundings", nil)
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", project.APIKey))
 
 		w := httptest.NewRecorder()
@@ -126,26 +126,26 @@ func TestDomainExamplesAPI(t *testing.T) {
 			t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
 		}
 
-		var examples []*DomainExample
-		if err := json.NewDecoder(w.Body).Decode(&examples); err != nil {
+		var specs []*GroundingSpec
+		if err := json.NewDecoder(w.Body).Decode(&specs); err != nil {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		if len(examples) != 1 {
-			t.Errorf("Expected 1 example, got %d", len(examples))
+		if len(specs) != 1 {
+			t.Errorf("Expected 1 expected, got %d", len(specs))
 		}
 
-		if examples[0].Name != example.Name {
-			t.Errorf("Expected name %s, got %s", example.Name, examples[0].Name)
+		if specs[0].Name != expected.Name {
+			t.Errorf("Expected name %s, got %s", expected.Name, specs[0].Name)
 		}
 	})
 
-	t.Run("Remove Domain Example By Name Success", func(t *testing.T) {
-		if err := app.Plane.AddDomainExample(project.ID, example); err != nil {
-			t.Fatalf("Failed to add example: %v", err)
+	t.Run("Remove Domain Grounding Spec By Name Success", func(t *testing.T) {
+		if err := app.Plane.AddGroundingSpec(project.ID, expected); err != nil {
+			t.Fatalf("Failed to add expected: %v", err)
 		}
 
-		req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/domain-examples/%s", example.Name), nil)
+		req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/groundings/%s", expected.Name), nil)
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", project.APIKey))
 
 		w := httptest.NewRecorder()
@@ -155,23 +155,23 @@ func TestDomainExamplesAPI(t *testing.T) {
 			t.Errorf("Expected status code %d, got %d", http.StatusNoContent, w.Code)
 		}
 
-		// Verify example was removed
-		examples, err := app.Plane.GetDomainExamples(project.ID)
+		// Verify expected was removed
+		specs, err := app.Plane.GetGroundingSpecs(project.ID)
 		if err != nil {
-			t.Fatalf("Failed to get examples: %v", err)
+			t.Fatalf("Failed to get specs: %v", err)
 		}
-		if len(examples) != 0 {
-			t.Errorf("Expected 0 examples after deletion, got %d", len(examples))
+		if len(specs) != 0 {
+			t.Errorf("Expected 0 specs after deletion, got %d", len(specs))
 		}
 	})
 
-	t.Run("Remove All Domain Examples Success", func(t *testing.T) {
-		// First add example back
-		if err := app.Plane.AddDomainExample(project.ID, example); err != nil {
-			t.Fatalf("Failed to add example: %v", err)
+	t.Run("Remove All Domain Grounding For A Project Success", func(t *testing.T) {
+		// First add expected back
+		if err := app.Plane.AddGroundingSpec(project.ID, expected); err != nil {
+			t.Fatalf("Failed to add expected: %v", err)
 		}
 
-		req := httptest.NewRequest(http.MethodDelete, "/domain-examples", nil)
+		req := httptest.NewRequest(http.MethodDelete, "/groundings", nil)
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", project.APIKey))
 
 		w := httptest.NewRecorder()
@@ -181,7 +181,7 @@ func TestDomainExamplesAPI(t *testing.T) {
 			t.Errorf("Expected status code %d, got %d", http.StatusNoContent, w.Code)
 		}
 
-		examples, err := app.Plane.GetDomainExamples(project.ID)
+		examples, err := app.Plane.GetGroundingSpecs(project.ID)
 		if err != nil {
 			t.Fatalf("Failed to get examples: %v", err)
 		}
@@ -191,9 +191,9 @@ func TestDomainExamplesAPI(t *testing.T) {
 	})
 }
 
-func TestDomainExamplesAPIAuth(t *testing.T) {
+func TestGroundingAPIAuth(t *testing.T) {
 	app, project := setupTestApp(t)
-	example := createTestDomainExample()
+	example := createTestGroundingSpec()
 
 	tests := []struct {
 		name       string
@@ -214,10 +214,10 @@ func TestDomainExamplesAPIAuth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := app.Plane.AddDomainExample(project.ID, example); err != nil {
+			if err := app.Plane.AddGroundingSpec(project.ID, example); err != nil {
 				t.Fatalf("Failed to add example: %v", err)
 			}
-			req := httptest.NewRequest(http.MethodGet, "/domain-examples", nil)
+			req := httptest.NewRequest(http.MethodGet, "/groundings", nil)
 			if tt.apiKey != "" {
 				req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", tt.apiKey))
 			}
@@ -232,21 +232,21 @@ func TestDomainExamplesAPIAuth(t *testing.T) {
 	}
 }
 
-func TestDomainExampleValidationViaApi(t *testing.T) {
+func TestGroundingValidationViaApi(t *testing.T) {
 	app, project := setupTestApp(t)
 
 	tests := []struct {
 		name       string
-		example    *DomainExample
+		example    *GroundingSpec
 		wantStatus int
 	}{
 		{
 			name: "Invalid Name Format",
-			example: &DomainExample{
+			example: &GroundingSpec{
 				Name:    "Invalid Name!",
 				Domain:  "Test Domain",
 				Version: "1.0",
-				Examples: []ActionExample{
+				UseCases: []GroundingUseCase{
 					{
 						Action:       "Test action",
 						Capabilities: []string{"test"},
@@ -257,22 +257,22 @@ func TestDomainExampleValidationViaApi(t *testing.T) {
 			wantStatus: http.StatusBadRequest,
 		},
 		{
-			name: "Missing Examples",
-			example: &DomainExample{
+			name: "Missing UseCases",
+			example: &GroundingSpec{
 				Name:     "valid-name",
 				Domain:   "Test Domain",
 				Version:  "1.0",
-				Examples: []ActionExample{},
+				UseCases: []GroundingUseCase{},
 			},
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name: "Invalid Action Example",
-			example: &DomainExample{
+			example: &GroundingSpec{
 				Name:    "valid-name",
 				Domain:  "Test Domain",
 				Version: "1.0",
-				Examples: []ActionExample{
+				UseCases: []GroundingUseCase{
 					{
 						Action:       "",
 						Capabilities: []string{"test"},
@@ -291,7 +291,7 @@ func TestDomainExampleValidationViaApi(t *testing.T) {
 				t.Fatalf("Failed to marshal example: %v", err)
 			}
 
-			req := httptest.NewRequest(http.MethodPost, "/domain-examples", bytes.NewBuffer(body))
+			req := httptest.NewRequest(http.MethodPost, "/groundings", bytes.NewBuffer(body))
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", project.APIKey))
 

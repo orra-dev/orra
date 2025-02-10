@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestDomainExampleValidation(t *testing.T) {
-	validActionWithVars := ActionExample{
+func TestGroundingSpecValidation(t *testing.T) {
+	validActionWithVars := GroundingUseCase{
 		Action: "Handle customer inquiry about {orderId}",
 		Params: map[string]string{
 			"orderId": "ORD123",
@@ -26,7 +26,7 @@ func TestDomainExampleValidation(t *testing.T) {
 		Intent: "Customer wants order status and tracking",
 	}
 
-	validActionNoVars := ActionExample{
+	validActionNoVars := GroundingUseCase{
 		Action: "List all active orders",
 		Capabilities: []string{
 			"Order listing",
@@ -37,114 +37,114 @@ func TestDomainExampleValidation(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		example DomainExample
+		example GroundingSpec
 		wantErr bool
 		errMsg  string
 	}{
 		{
 			name: "valid domain example with variable action",
-			example: DomainExample{
+			example: GroundingSpec{
 				Name:        "customer-support-examples",
-				Domain:      "E-commerce Customer Support",
+				Domain:      "e-commerce-customer-support",
 				Version:     "1.0",
-				Examples:    []ActionExample{validActionWithVars},
+				UseCases:    []GroundingUseCase{validActionWithVars},
 				Constraints: []string{"Verify customer owns order"},
 			},
 			wantErr: false,
 		},
 		{
 			name: "valid domain example with non-variable action",
-			example: DomainExample{
+			example: GroundingSpec{
 				Name:        "customer-support-examples",
-				Domain:      "E-commerce Customer Support",
+				Domain:      "e-commerce-customer-support",
 				Version:     "1.0",
-				Examples:    []ActionExample{validActionNoVars},
+				UseCases:    []GroundingUseCase{validActionNoVars},
 				Constraints: []string{"Verify customer owns order"},
 			},
 			wantErr: false,
 		},
 		{
 			name: "invalid name - too short",
-			example: DomainExample{
+			example: GroundingSpec{
 				Name:     "cs",
-				Domain:   "E-commerce Customer Support",
+				Domain:   "e-commerce-customer-support",
 				Version:  "1.0",
-				Examples: []ActionExample{validActionWithVars},
+				UseCases: []GroundingUseCase{validActionWithVars},
 			},
 			wantErr: true,
 			errMsg:  "name: must be between 3 and 63 characters",
 		},
 		{
 			name: "invalid name - too long",
-			example: DomainExample{
+			example: GroundingSpec{
 				Name:     "this-is-a-very-long-name-that-exceeds-the-maximum-length-limit-for-domain-examples",
-				Domain:   "E-commerce Customer Support",
+				Domain:   "e-commerce-customer-support",
 				Version:  "1.0",
-				Examples: []ActionExample{validActionWithVars},
+				UseCases: []GroundingUseCase{validActionWithVars},
 			},
 			wantErr: true,
 			errMsg:  "name: must be between 3 and 63 characters",
 		},
 		{
 			name: "invalid name - wrong characters",
-			example: DomainExample{
+			example: GroundingSpec{
 				Name:     "Customer_Support",
-				Domain:   "E-commerce Customer Support",
+				Domain:   "e-commerce-customer-support",
 				Version:  "1.0",
-				Examples: []ActionExample{validActionWithVars},
+				UseCases: []GroundingUseCase{validActionWithVars},
 			},
 			wantErr: true,
 			errMsg:  "name: must consist of lowercase alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character",
 		},
 		{
 			name: "invalid name - starts with dot",
-			example: DomainExample{
+			example: GroundingSpec{
 				Name:     ".customer-support",
-				Domain:   "E-commerce Customer Support",
+				Domain:   "e-commerce-customer-support",
 				Version:  "1.0",
-				Examples: []ActionExample{validActionWithVars},
+				UseCases: []GroundingUseCase{validActionWithVars},
 			},
 			wantErr: true,
 			errMsg:  "name: must consist of lowercase alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character",
 		},
 		{
 			name: "missing domain",
-			example: DomainExample{
+			example: GroundingSpec{
 				Name:     "customer-support-examples",
 				Version:  "1.0",
-				Examples: []ActionExample{validActionWithVars},
+				UseCases: []GroundingUseCase{validActionWithVars},
 			},
 			wantErr: true,
-			errMsg:  "domain: cannot be blank",
+			errMsg:  "domain: must be between 3 and 63 characters",
 		},
 		{
 			name: "missing version",
-			example: DomainExample{
+			example: GroundingSpec{
 				Name:     "customer-support-examples",
-				Domain:   "E-commerce Customer Support",
-				Examples: []ActionExample{validActionWithVars},
+				Domain:   "e-commerce-customer-support",
+				UseCases: []GroundingUseCase{validActionWithVars},
 			},
 			wantErr: true,
 			errMsg:  "version: cannot be blank",
 		},
 		{
 			name: "empty examples",
-			example: DomainExample{
+			example: GroundingSpec{
 				Name:     "customer-support-examples",
-				Domain:   "E-commerce Customer Support",
+				Domain:   "e-commerce-customer-support",
 				Version:  "1.0",
-				Examples: []ActionExample{},
+				UseCases: []GroundingUseCase{},
 			},
 			wantErr: true,
 			errMsg:  "examples: cannot be empty",
 		},
 		{
 			name: "invalid - empty constraint text",
-			example: DomainExample{
+			example: GroundingSpec{
 				Name:        "customer-support-examples",
-				Domain:      "E-commerce Customer Support",
+				Domain:      "e-commerce-customer-support",
 				Version:     "1.0",
-				Examples:    []ActionExample{validActionWithVars},
+				UseCases:    []GroundingUseCase{validActionWithVars},
 				Constraints: []string{"Valid constraint", "   ", "Another valid one"},
 			},
 			wantErr: true,
@@ -152,11 +152,11 @@ func TestDomainExampleValidation(t *testing.T) {
 		},
 		{
 			name: "valid - no constraints",
-			example: DomainExample{
+			example: GroundingSpec{
 				Name:     "customer-support-examples",
-				Domain:   "E-commerce Customer Support",
+				Domain:   "e-commerce-customer-support",
 				Version:  "1.0",
-				Examples: []ActionExample{validActionWithVars},
+				UseCases: []GroundingUseCase{validActionWithVars},
 			},
 			wantErr: false,
 		},
@@ -177,16 +177,16 @@ func TestDomainExampleValidation(t *testing.T) {
 	}
 }
 
-func TestActionExampleValidation(t *testing.T) {
+func TestGroundingUseCasesValidation(t *testing.T) {
 	tests := []struct {
 		name    string
-		example ActionExample
+		example GroundingUseCase
 		wantErr bool
 		errMsg  string
 	}{
 		{
-			name: "valid action example with variables",
-			example: ActionExample{
+			name: "valid action with variables",
+			example: GroundingUseCase{
 				Action: "Handle customer inquiry about {orderId}",
 				Params: map[string]string{
 					"orderId": "ORD123",
@@ -201,8 +201,8 @@ func TestActionExampleValidation(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "valid action example without variables",
-			example: ActionExample{
+			name: "valid action without variables",
+			example: GroundingUseCase{
 				Action: "List all active orders",
 				Capabilities: []string{
 					"Order listing",
@@ -214,7 +214,7 @@ func TestActionExampleValidation(t *testing.T) {
 		},
 		{
 			name: "missing action",
-			example: ActionExample{
+			example: GroundingUseCase{
 				Params:       map[string]string{"orderId": "ORD123"},
 				Capabilities: []string{"Lookup order details"},
 				Intent:       "Check order status",
@@ -224,7 +224,7 @@ func TestActionExampleValidation(t *testing.T) {
 		},
 		{
 			name: "missing params for action with variables",
-			example: ActionExample{
+			example: GroundingUseCase{
 				Action:       "Handle customer inquiry about {orderId}",
 				Capabilities: []string{"Lookup order details"},
 				Intent:       "Check order status",
@@ -234,7 +234,7 @@ func TestActionExampleValidation(t *testing.T) {
 		},
 		{
 			name: "missing param for variable",
-			example: ActionExample{
+			example: GroundingUseCase{
 				Action:       "Handle customer inquiry about {orderId}",
 				Params:       map[string]string{"customerId": "CUST123"},
 				Capabilities: []string{"Lookup order details"},
@@ -245,7 +245,7 @@ func TestActionExampleValidation(t *testing.T) {
 		},
 		{
 			name: "empty capability",
-			example: ActionExample{
+			example: GroundingUseCase{
 				Action:       "List all active orders",
 				Capabilities: []string{"", "Generate response"},
 				Intent:       "Check order status",
@@ -255,7 +255,7 @@ func TestActionExampleValidation(t *testing.T) {
 		},
 		{
 			name: "missing intent",
-			example: ActionExample{
+			example: GroundingUseCase{
 				Action:       "List all active orders",
 				Capabilities: []string{"Lookup order details"},
 			},

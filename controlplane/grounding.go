@@ -66,8 +66,8 @@ func validateCapabilities(caps []string) error {
 	return nil
 }
 
-// Validate checks if the ActionExample is valid
-func (e *ActionExample) Validate() error {
+// Validate checks if the GroundingUseCase is valid
+func (e *GroundingUseCase) Validate() error {
 	// Validate action
 	if strings.TrimSpace(e.Action) == "" {
 		return fmt.Errorf("action: cannot be blank")
@@ -109,20 +109,16 @@ func validateConstraints(constraints []string) error {
 	return nil
 }
 
-// Validate validates the DomainExample
-func (d *DomainExample) Validate() error {
+// Validate validates the GroundingSpec
+func (d *GroundingSpec) Validate() error {
 	// Validate name
-	if len(d.Name) < 3 || len(d.Name) > 63 {
-		return fmt.Errorf("name: must be between 3 and 63 characters")
-	}
-	nameRegex := regexp.MustCompile(`^[a-z0-9][a-z0-9.-]*[a-z0-9]$`)
-	if !nameRegex.MatchString(d.Name) {
-		return fmt.Errorf("name: must consist of lowercase alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character")
+	if err := validateNaming(d.Name, "name"); err != nil {
+		return err
 	}
 
 	// Validate domain
-	if strings.TrimSpace(d.Domain) == "" {
-		return fmt.Errorf("domain: cannot be blank")
+	if err := validateNaming(d.Domain, "domain"); err != nil {
+		return err
 	}
 
 	// Validate version
@@ -131,10 +127,10 @@ func (d *DomainExample) Validate() error {
 	}
 
 	// Validate examples
-	if len(d.Examples) == 0 {
+	if len(d.UseCases) == 0 {
 		return fmt.Errorf("examples: cannot be empty")
 	}
-	for i, example := range d.Examples {
+	for i, example := range d.UseCases {
 		if err := example.Validate(); err != nil {
 			return fmt.Errorf("examples[%d]: %v", i, err)
 		}
@@ -147,5 +143,16 @@ func (d *DomainExample) Validate() error {
 		}
 	}
 
+	return nil
+}
+
+func validateNaming(v string, field string) error {
+	if len(v) < 3 || len(v) > 63 {
+		return fmt.Errorf("%s: must be between 3 and 63 characters", field)
+	}
+	nameRegex := regexp.MustCompile(`^[a-z0-9][a-z0-9.-]*[a-z0-9]$`)
+	if !nameRegex.MatchString(v) {
+		return fmt.Errorf("%s: must consist of lowercase alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character", field)
+	}
 	return nil
 }
