@@ -1,6 +1,6 @@
 # Domain Grounding
 
-Domain grounding helps ground Orra's planning system in a project's domain. A grounding spec provides real-world use cases of actions and their execution patterns, helping Orra generate more accurate and reliable execution plans.
+Domain grounding helps ground Orra's execution planning system in a project's domain. A grounding spec provides real-world use cases of actions and their execution patterns, helping Orra generate more accurate and reliable execution plans.
 
 ## Quick Start
 
