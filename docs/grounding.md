@@ -1,18 +1,18 @@
-# Domain Examples
+# Domain Grounding
 
-Domain examples help ground Orra's planning system in your specific domain. They provide real-world examples of actions and their execution patterns, helping Orra generate more accurate and reliable execution plans.
+Domain grounding helps ground Orra's planning system in a project's domain. A grounding spec provides real-world use cases of actions and their execution patterns, helping Orra generate more accurate and reliable execution plans.
 
 ## Quick Start
 
-1. Create a domain example file:
+1. Create a domain grounding file:
 
 ```yaml
-# customer-support.domain.yaml
-name: "customer-support-examples"
-domain: "E-commerce Customer Support"
+# customer-support.grounding.yaml
+name: "customer-support-use-cases"
+domain: "e-commerce-customer-support"
 version: "1.0"
 
-examples:
+use-cases:
   - action: "Handle customer inquiry about {orderId}"
     params:
       orderId: "ORD123"
@@ -40,23 +40,23 @@ constraints:
 
 ```bash
 # Add domain examples
-orra domain ground examples.yaml
+orra grounding apply grounding.yaml
 
 # Test execution planning
-orra domain test-ground examples.yaml
+orra grounding test examples.yaml
 ```
 
-## Understanding Domain Examples
+## Understanding Domain Grounding
 
-Domain examples consist of:
+Domain grounding consists of a spec that defines:
 
 1. **Metadata**
    - `name`: Identifier for this set of examples
    - `domain`: The domain these examples belong to
    - `version`: Version of the examples
 
-2. **Action Examples**
-   - `action`: Pattern of the action with variables in {braces}
+2. **Use Cases**
+   - `action`: Pattern of the action with optional variables in {braces}
    - `params`: Example parameters that would be provided
    - `capabilities`: The required capabilities to handle the action
    - `intent`: Clear description of what the action aims to achieve
@@ -69,11 +69,10 @@ Domain examples consist of:
 Organize examples by domain functionality:
 
 ```
-domains/
-  ecommerce/
-    customer-support.domain.yaml     # Support-related examples
-    order-processing.domain.yaml     # Order-related examples
-    inventory.domain.yaml            # Inventory-related examples
+ecommerce/
+   customer-support.grounding.yaml     # Support-related examples
+   order-processing.grounding.yaml     # Order-related examples
+   inventory.grounding.yaml            # Inventory-related examples
 ```
 
 Each file should focus on a specific aspect of your domain. This makes examples:
@@ -84,7 +83,7 @@ Each file should focus on a specific aspect of your domain. This makes examples:
 
 ## Best Practices
 
-1. **Keep Examples Simple**
+1. **Keep Grounding Simple**
    - Focus on common patterns
    - Use clear, descriptive intents
    - Include essential capabilities only
@@ -93,6 +92,11 @@ Each file should focus on a specific aspect of your domain. This makes examples:
    ```yaml
    # Good
    action: "Process refund for {orderId}"
+   ```
+   
+   ```yaml
+   # Good
+   action: "Process refund for order"
    ```
    
    ```yaml
@@ -125,14 +129,14 @@ Each file should focus on a specific aspect of your domain. This makes examples:
    intent: "Handle order query"
    ```
 
-## Example Patterns
+## Example Use Cases
 
-Here are some patterns for common domains:
+Here are some spec for common domains:
 
 ### Customer Support
 
 ```yaml
-examples:
+use-cases:
   - action: "Find order status for {customerId}"
     params:
       customerId: "CUST123"
@@ -155,7 +159,7 @@ examples:
 ### Order Processing
 
 ```yaml
-examples:
+use-cases:
   - action: "Process payment for {orderId}"
     params:
       orderId: "ORD789"
@@ -177,11 +181,11 @@ examples:
 
 ## FAQs
 
-**Q: How many examples should I include?**  
-A: Start with 2-3 key examples per major action pattern. Add more as needed based on testing results.
+**Q: How many use cases should I include?**  
+A: Start with 2-3 key use cases per major action pattern. Add more as needed based on testing results.
 
-**Q: Can I have multiple domain files?**  
-A: Yes! Split examples by functionality to keep files focused and maintainable.
+**Q: Can I have multiple grounding files?**  
+A: Yes! Split use cases by functionality to keep files focused and maintainable.
 
 **Q: How detailed should capabilities be?**  
 A: List specific, atomic capabilities. They should match your actual service capabilities.
