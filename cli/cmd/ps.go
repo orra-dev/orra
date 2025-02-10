@@ -60,7 +60,7 @@ func newPsCmd(opts *CliOpts) *cobra.Command {
 			}
 
 			// Define columns based on view mode
-			columns := []column{
+			columns := []psColumn{
 				{"ID", func(o api.OrchestrationView) string { return o.ID }, 25},
 				{"ACTION", func(o api.OrchestrationView) string { return truncateString(o.Action, 34) }, 36},
 				{"STATUS", func(o api.OrchestrationView) string { return formatStatus(o.Status.String()) }, 18},
@@ -69,7 +69,7 @@ func newPsCmd(opts *CliOpts) *cobra.Command {
 			}
 
 			if wide {
-				columns = append(columns, column{
+				columns = append(columns, psColumn{
 					"ERROR",
 					func(o api.OrchestrationView) string { return truncateString(formatListError(o.Error), 35) },
 					37,
@@ -115,7 +115,7 @@ func newPsCmd(opts *CliOpts) *cobra.Command {
 	return cmd
 }
 
-type column struct {
+type psColumn struct {
 	header string
 	value  func(o api.OrchestrationView) string
 	width  int
@@ -128,7 +128,7 @@ func truncateString(s string, length int) string {
 	return s[:length-3] + "..."
 }
 
-func calculateLineWidth(columns []column) int {
+func calculateLineWidth(columns []psColumn) int {
 	width := len(columns) + 1 // Account for spacing between columns
 	for _, col := range columns {
 		width += col.width
@@ -136,7 +136,7 @@ func calculateLineWidth(columns []column) int {
 	return width
 }
 
-func buildFormatString(columns []column) string {
+func buildFormatString(columns []psColumn) string {
 	formats := make([]string, len(columns))
 	for i, col := range columns {
 		formats[i] = fmt.Sprintf("%%-%ds", col.width)
@@ -144,7 +144,7 @@ func buildFormatString(columns []column) string {
 	return strings.Join(formats, " ")
 }
 
-func getHeaders(columns []column) []string {
+func getHeaders(columns []psColumn) []string {
 	headers := make([]string, len(columns))
 	for i, col := range columns {
 		headers[i] = col.header

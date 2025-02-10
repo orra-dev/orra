@@ -18,6 +18,14 @@ import (
 	"github.com/carlmjohnson/requests"
 )
 
+type ApiError struct {
+	Error struct {
+		Kind    string `json:"kind"`
+		Param   string `json:"param"`
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
 type Project struct {
 	ID        string `json:"id"`
 	CliAPIKey string `json:"apiKey"`
@@ -80,7 +88,7 @@ type OrchestrationView struct {
 
 type CompensationSummary struct {
 	Active    bool `json:"active"`    // Are any compensations still running?
-	Total     int  `json:"total"`     // Total number of compensatable tasks
+	Total     int  `json:"total"`     // Total number of compensate-able tasks
 	Completed int  `json:"completed"` // Number of completed compensations
 	Failed    int  `json:"failed"`    // Number of failed compensations
 }
@@ -211,6 +219,21 @@ type TaskStatusEvent struct {
 	Timestamp       time.Time `json:"timestamp"`
 	ServiceID       string    `json:"serviceId,omitempty"`
 	Error           string    `json:"error,omitempty"`
+}
+
+type GroundingUseCase struct {
+	Action       string            `json:"action" yaml:"action"`
+	Params       map[string]string `json:"params" yaml:"params"`
+	Capabilities []string          `json:"capabilities" yaml:"capabilities"`
+	Intent       string            `json:"intent" yaml:"intent"`
+}
+
+type GroundingSpec struct {
+	Name        string             `json:"name" yaml:"name"`
+	Domain      string             `json:"domain" yaml:"domain"`
+	Version     string             `json:"version" yaml:"version"`
+	UseCases    []GroundingUseCase `json:"useCases" yaml:"use-cases"`
+	Constraints []string           `json:"constraints" yaml:"constraints"`
 }
 
 type NotFoundError struct {
@@ -371,6 +394,79 @@ func (c *Client) CreateOrchestration(ctx context.Context, or OrchestrationReques
 	return response, nil
 }
 
+func (c *Client) ApplyGroundingSpec(ctx context.Context, spec GroundingSpec) (*GroundingSpec, error) {
+	var response *GroundingSpec
+
+	err := requests.
+		URL(c.baseURL).
+		Path("/groundings").
+		Method(http.MethodPost).
+		Client(c.httpClient).
+		BodyJSON(spec).
+		Header("Authorization", "Bearer "+c.apiKey).
+		AddValidator(nil).
+		Handle(requests.ChainHandlers(
+			ResponseHandlerWithExcludedCodes(http.StatusBadRequest, http.StatusUnprocessableEntity),
+			requests.ToJSON(&response),
+		)).
+		Fetch(ctx)
+
+	//if requests.HasStatusErr(err, http.StatusBadRequest) {
+	//	//fmt.Printf("RESPONSE ERR: %+v\n", err)
+	//	return nil, err
+	//}
+	//
+	//if requests.HasStatusErr(err, http.StatusUnprocessableEntity) {
+	//	fmt.Printf("RESPONSE ERR: %+v\n", err)
+	//	return nil, err
+	//}
+
+	return response, err
+}
+
+func (c *Client) ListGroundingSpecs(ctx context.Context) ([]GroundingSpec, error) {
+	var response []GroundingSpec
+
+	err := requests.
+		URL(c.baseURL).
+		Path("/groundings").
+		Method(http.MethodGet).
+		Client(c.httpClient).
+		Header("Authorization", "Bearer "+c.apiKey).
+		ToJSON(&response).
+		Fetch(ctx)
+
+	return response, err
+}
+
+func (c *Client) RemoveAllGroundingSpecs(ctx context.Context) error {
+	err := requests.
+		URL(c.baseURL).
+		Path("/groundings").
+		Method(http.MethodDelete).
+		Client(c.httpClient).
+		Header("Authorization", "Bearer "+c.apiKey).
+		Fetch(ctx)
+
+	return err
+}
+
+func (c *Client) RemoveGroundingSpec(ctx context.Context, specName string) error {
+	err := requests.
+		URL(c.baseURL).
+		Path(fmt.Sprintf("/groundings/%s", specName)).
+		Method(http.MethodDelete).
+		Client(c.httpClient).
+		Header("Authorization", "Bearer "+c.apiKey).
+		Fetch(ctx)
+
+	if requests.HasStatusErr(err, http.StatusNotFound) {
+		return NotFoundError{Err: fmt.Errorf("grounding spec not found: %s", specName)}
+	}
+
+	return err
+}
+
 func (v OrchestrationListView) Empty() bool {
 	return len(v.Pending) == 0 &&
 		len(v.Processing) == 0 &&
@@ -392,9 +488,9 @@ func forErr(validator requests.ResponseHandler, resp *http.Response, excludedCod
 			return fmt.Errorf("error reading body: %w", readErr)
 		}
 		if requests.HasStatusErr(err, excludedCodes...) {
-			return err
+			return fmt.Errorf(string(resData))
 		}
-		return fmt.Errorf("unanticipated error for respons %s: %w", string(resData), err)
+		return fmt.Errorf("%s: %w", string(resData), err)
 	}
 	return nil
 }
