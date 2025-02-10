@@ -26,7 +26,7 @@ type ControlPlane struct {
 	projects             map[string]*Project
 	services             map[string]map[string]*ServiceInfo
 	groundings           map[string]map[string]*GroundingSpec
-	domainExamplesMu     sync.RWMutex
+	groundingsMu         sync.RWMutex
 	servicesMu           sync.RWMutex
 	orchestrationStore   map[string]*Orchestration
 	orchestrationStoreMu sync.RWMutex

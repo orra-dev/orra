@@ -380,7 +380,7 @@ func (app *App) healthHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-// AddGrounding adds new domain examples to a project
+// AddGrounding adds new domain grounding spec to a project
 func (app *App) AddGrounding(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Context().Value("api_key").(string)
 	project, err := app.Plane.GetProjectByApiKey(apiKey)
@@ -412,7 +412,7 @@ func (app *App) AddGrounding(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ListGrounding retrieves all domain examples for a project
+// ListGrounding retrieves all domain grounding for a project
 func (app *App) ListGrounding(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Context().Value("api_key").(string)
 	project, err := app.Plane.GetProjectByApiKey(apiKey)
@@ -435,7 +435,7 @@ func (app *App) ListGrounding(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// RemoveGrounding removes a specific domain example from a project
+// RemoveGrounding removes a specific domain grounding spec from a project
 func (app *App) RemoveGrounding(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["name"]
@@ -455,7 +455,7 @@ func (app *App) RemoveGrounding(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// RemoveAllGrounding removes domain examples for a specific project
+// RemoveAllGrounding removes domain grounding for a specific project
 func (app *App) RemoveAllGrounding(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Context().Value("api_key").(string)
 	project, err := app.Plane.GetProjectByApiKey(apiKey)

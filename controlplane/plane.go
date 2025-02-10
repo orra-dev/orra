@@ -147,14 +147,14 @@ func (p *ControlPlane) GetServiceName(projectID string, serviceID string) (strin
 }
 
 // AddGroundingSpec adds domain grounding to a project after validation
-func (p *ControlPlane) AddGroundingSpec(projectID string, example *GroundingSpec) error {
-	// Validate the example first
-	if err := example.Validate(); err != nil {
-		return ValidationError{Err: fmt.Errorf("invalid domain example: %w", err)}
+func (p *ControlPlane) AddGroundingSpec(projectID string, spec *GroundingSpec) error {
+	// Validate the spec first
+	if err := spec.Validate(); err != nil {
+		return ValidationError{Err: fmt.Errorf("invalid grounding spec: %w", err)}
 	}
 
-	p.domainExamplesMu.Lock()
-	defer p.domainExamplesMu.Unlock()
+	p.groundingsMu.Lock()
+	defer p.groundingsMu.Unlock()
 
 	// Initialize project map if it doesn't exist
 	if p.groundings == nil {
@@ -166,49 +166,49 @@ func (p *ControlPlane) AddGroundingSpec(projectID string, example *GroundingSpec
 		p.groundings[projectID] = make(map[string]*GroundingSpec)
 	}
 
-	// Store the example
-	p.groundings[projectID][example.Name] = example
+	// Store the spec
+	p.groundings[projectID][spec.Name] = spec
 
 	p.Logger.Debug().
 		Str("projectID", projectID).
-		Str("domain", example.Domain).
-		Str("name", example.Name).
-		Msgf("Added domain example with %d action examples", len(example.UseCases))
+		Str("name", spec.Name).
+		Str("domain", spec.Domain).
+		Msgf("Added grounding spec with %d action uses cases", len(spec.UseCases))
 
 	return nil
 }
 
 // GetGroundingSpecs retrieves all domain groundings for a project
-func (p *ControlPlane) GetGroundingSpecs(projectID string) ([]*GroundingSpec, error) {
-	p.domainExamplesMu.RLock()
-	defer p.domainExamplesMu.RUnlock()
+func (p *ControlPlane) GetGroundingSpecs(projectID string) ([]GroundingSpec, error) {
+	p.groundingsMu.RLock()
+	defer p.groundingsMu.RUnlock()
 
 	if p.groundings == nil {
-		return []*GroundingSpec{}, nil
+		return nil, nil
 	}
 
-	projectExamples, exists := p.groundings[projectID]
+	groundings, exists := p.groundings[projectID]
 	if !exists {
-		return []*GroundingSpec{}, nil
+		return nil, nil
 	}
 
 	// Convert map to slice
-	examples := make([]*GroundingSpec, 0, len(projectExamples))
-	for _, example := range projectExamples {
-		examples = append(examples, example)
+	out := make([]GroundingSpec, 0, len(groundings))
+	for _, spec := range groundings {
+		out = append(out, *spec)
 	}
 
-	sort.Slice(examples, func(i, j int) bool {
-		return examples[i].Name < examples[j].Name
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Name < out[j].Name
 	})
 
-	return examples, nil
+	return out, nil
 }
 
 // RemoveDomainExampleByName removes a specific domain grounding from a project by its name
 func (p *ControlPlane) RemoveDomainExampleByName(projectID string, name string) error {
-	p.domainExamplesMu.Lock()
-	defer p.domainExamplesMu.Unlock()
+	p.groundingsMu.Lock()
+	defer p.groundingsMu.Unlock()
 
 	if p.groundings == nil {
 		return fmt.Errorf("domain example not found")
@@ -236,8 +236,8 @@ func (p *ControlPlane) RemoveDomainExampleByName(projectID string, name string) 
 
 // RemoveAllDomainExamples removes all domain grounding for a project
 func (p *ControlPlane) RemoveAllDomainExamples(projectID string) error {
-	p.domainExamplesMu.Lock()
-	defer p.domainExamplesMu.Unlock()
+	p.groundingsMu.Lock()
+	defer p.groundingsMu.Unlock()
 
 	if p.groundings == nil {
 		return nil
