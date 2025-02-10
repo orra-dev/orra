@@ -112,10 +112,6 @@ func TestGroundingAPI(t *testing.T) {
 	})
 
 	t.Run("List Domain Grounding Specs Success", func(t *testing.T) {
-		if err := app.Plane.AddGroundingSpec(project.ID, expected); err != nil {
-			t.Fatalf("Failed to add expected: %v", err)
-		}
-
 		req := httptest.NewRequest(http.MethodGet, "/groundings", nil)
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", project.APIKey))
 
@@ -141,10 +137,6 @@ func TestGroundingAPI(t *testing.T) {
 	})
 
 	t.Run("Remove Domain Grounding Spec By Name Success", func(t *testing.T) {
-		if err := app.Plane.AddGroundingSpec(project.ID, expected); err != nil {
-			t.Fatalf("Failed to add expected: %v", err)
-		}
-
 		req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/groundings/%s", expected.Name), nil)
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", project.APIKey))
 
@@ -166,11 +158,6 @@ func TestGroundingAPI(t *testing.T) {
 	})
 
 	t.Run("Remove All Domain Grounding For A Project Success", func(t *testing.T) {
-		// First add expected back
-		if err := app.Plane.AddGroundingSpec(project.ID, expected); err != nil {
-			t.Fatalf("Failed to add expected: %v", err)
-		}
-
 		req := httptest.NewRequest(http.MethodDelete, "/groundings", nil)
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", project.APIKey))
 
@@ -214,7 +201,7 @@ func TestGroundingAPIAuth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := app.Plane.AddGroundingSpec(project.ID, example); err != nil {
+			if err := app.Plane.ApplyGroundingSpec(project.ID, example); err != nil {
 				t.Fatalf("Failed to add example: %v", err)
 			}
 			req := httptest.NewRequest(http.MethodGet, "/groundings", nil)
@@ -227,6 +214,10 @@ func TestGroundingAPIAuth(t *testing.T) {
 
 			if w.Code != tt.wantStatus {
 				t.Errorf("Expected status code %d, got %d", tt.wantStatus, w.Code)
+			}
+
+			if err := app.Plane.RemoveProjectGrounding(project.ID); err != nil {
+				t.Fatalf("Failed to remove groundings: %v", err)
 			}
 		})
 	}

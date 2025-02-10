@@ -136,7 +136,7 @@ func TestGroundingSpecValidation(t *testing.T) {
 				UseCases: []GroundingUseCase{},
 			},
 			wantErr: true,
-			errMsg:  "examples: cannot be empty",
+			errMsg:  "use-cases: cannot be empty",
 		},
 		{
 			name: "invalid - empty constraint text",

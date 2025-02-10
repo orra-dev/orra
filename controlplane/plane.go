@@ -20,11 +20,23 @@ import (
 )
 
 type ValidationError struct {
-	Err error
+	field string
+	err   error
 }
 
+func (e ValidationError) Field() string {
+	return e.field
+}
 func (e ValidationError) Error() string {
-	return fmt.Sprintf("%v", e.Err)
+	return fmt.Sprintf("%v", e.err)
+}
+
+type SpecVersionError struct {
+	err error
+}
+
+func (e SpecVersionError) Error() string {
+	return fmt.Sprintf("%v", e.err)
 }
 
 func NewControlPlane() *ControlPlane {
@@ -146,24 +158,30 @@ func (p *ControlPlane) GetServiceName(projectID string, serviceID string) (strin
 	return service.Name, nil
 }
 
-// AddGroundingSpec adds domain grounding to a project after validation
-func (p *ControlPlane) AddGroundingSpec(projectID string, spec *GroundingSpec) error {
-	// Validate the spec first
+// ApplyGroundingSpec adds domain grounding to a project after validation
+func (p *ControlPlane) ApplyGroundingSpec(projectID string, spec *GroundingSpec) error {
 	if err := spec.Validate(); err != nil {
-		return ValidationError{Err: fmt.Errorf("invalid grounding spec: %w", err)}
+		return err
 	}
 
 	p.groundingsMu.Lock()
 	defer p.groundingsMu.Unlock()
 
-	// Initialize project map if it doesn't exist
 	if p.groundings == nil {
 		p.groundings = make(map[string]map[string]*GroundingSpec)
 	}
 
-	// Initialize domain map for project if it doesn't exist
 	if p.groundings[projectID] == nil {
 		p.groundings[projectID] = make(map[string]*GroundingSpec)
+	}
+
+	if existing, ok := p.groundings[projectID][spec.Name]; ok && existing.Version == spec.Version {
+		return SpecVersionError{err: fmt.Errorf(
+			"project %s already has a grounding spec with name %s and version %s",
+			projectID,
+			spec.Name,
+			spec.Version,
+		)}
 	}
 
 	// Store the spec
@@ -183,7 +201,15 @@ func (p *ControlPlane) GetGroundingSpecs(projectID string) ([]GroundingSpec, err
 	p.groundingsMu.RLock()
 	defer p.groundingsMu.RUnlock()
 
+	p.Logger.Trace().
+		Str("projectID", projectID).
+		Msg("Getting grounding specs")
+
 	if p.groundings == nil {
+		p.Logger.Trace().
+			Str("projectID", projectID).
+			Msg("No grounding specs found")
+
 		return nil, nil
 	}
 
@@ -205,18 +231,18 @@ func (p *ControlPlane) GetGroundingSpecs(projectID string) ([]GroundingSpec, err
 	return out, nil
 }
 
-// RemoveDomainExampleByName removes a specific domain grounding from a project by its name
-func (p *ControlPlane) RemoveDomainExampleByName(projectID string, name string) error {
+// RemoveGroundingSpecByName removes a specific domain grounding from a project by its name
+func (p *ControlPlane) RemoveGroundingSpecByName(projectID string, name string) error {
 	p.groundingsMu.Lock()
 	defer p.groundingsMu.Unlock()
 
 	if p.groundings == nil {
-		return fmt.Errorf("domain example not found")
+		return fmt.Errorf("grounding spec not found")
 	}
 
 	projectExamples, exists := p.groundings[projectID]
 	if !exists {
-		return fmt.Errorf("domain example not found")
+		return fmt.Errorf("grounding spec not found")
 	}
 
 	delete(projectExamples, name)
@@ -229,13 +255,13 @@ func (p *ControlPlane) RemoveDomainExampleByName(projectID string, name string) 
 	p.Logger.Debug().
 		Str("projectID", projectID).
 		Str("name", name).
-		Msg("Removed domain example")
+		Msg("Removed grounding spec")
 
 	return nil
 }
 
-// RemoveAllDomainExamples removes all domain grounding for a project
-func (p *ControlPlane) RemoveAllDomainExamples(projectID string) error {
+// RemoveProjectGrounding removes all domain grounding for a project
+func (p *ControlPlane) RemoveProjectGrounding(projectID string) error {
 	p.groundingsMu.Lock()
 	defer p.groundingsMu.Unlock()
 

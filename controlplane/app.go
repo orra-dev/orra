@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -56,7 +57,7 @@ func (app *App) configureRoutes() *App {
 	app.Router.HandleFunc("/orchestrations/inspections/{id}", app.APIKeyMiddleware(app.OrchestrationInspectionHandler)).Methods(http.MethodGet)
 	app.Router.HandleFunc("/register/agent", app.APIKeyMiddleware(app.RegisterAgent)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/ws", app.HandleWebSocket)
-	app.Router.HandleFunc("/groundings", app.APIKeyMiddleware(app.AddGrounding)).Methods(http.MethodPost)
+	app.Router.HandleFunc("/groundings", app.APIKeyMiddleware(app.ApplyGrounding)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/groundings", app.APIKeyMiddleware(app.ListGrounding)).Methods(http.MethodGet)
 	app.Router.HandleFunc("/groundings/{name}", app.APIKeyMiddleware(app.RemoveGrounding)).Methods(http.MethodDelete)
 	app.Router.HandleFunc("/groundings", app.APIKeyMiddleware(app.RemoveAllGrounding)).Methods(http.MethodDelete)
@@ -380,8 +381,8 @@ func (app *App) healthHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-// AddGrounding adds new domain grounding spec to a project
-func (app *App) AddGrounding(w http.ResponseWriter, r *http.Request) {
+// ApplyGrounding apply new domain grounding spec to a project
+func (app *App) ApplyGrounding(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Context().Value("api_key").(string)
 	project, err := app.Plane.GetProjectByApiKey(apiKey)
 	if err != nil {
@@ -395,19 +396,28 @@ func (app *App) AddGrounding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Add domain examples to the project
-	if err := app.Plane.AddGroundingSpec(project.ID, &grounding); err != nil {
-		if validErr, ok := err.(ValidationError); ok {
-			errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Validation, validErr))
-		} else {
-			errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
+	if err := app.Plane.ApplyGroundingSpec(project.ID, &grounding); err != nil {
+		var validErr ValidationError
+		if errors.As(err, &validErr) {
+			errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Parameter(validErr.Field()), validErr.Error()))
+			return
 		}
+
+		var specErr SpecVersionError
+		if errors.As(err, &specErr) {
+			errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Invalid, errs.Parameter("version"), specErr.Error()))
+			return
+		}
+
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
+	app.Logger.Trace().Interface("Grounding", grounding).Msg("Successfully applied grounding spec")
+
 	if err := json.NewEncoder(w).Encode(grounding); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(JSONMarshalingFail), err))
 		return
 	}
 }
@@ -430,7 +440,7 @@ func (app *App) ListGrounding(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(groundings); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Internal, err))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Internal, errs.Code(JSONMarshalingFail), err))
 		return
 	}
 }
@@ -447,7 +457,7 @@ func (app *App) RemoveGrounding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := app.Plane.RemoveDomainExampleByName(project.ID, name); err != nil {
+	if err := app.Plane.RemoveGroundingSpecByName(project.ID, name); err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
 		return
 	}
@@ -464,7 +474,7 @@ func (app *App) RemoveAllGrounding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := app.Plane.RemoveAllDomainExamples(project.ID); err != nil {
+	if err := app.Plane.RemoveProjectGrounding(project.ID); err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
 		return
 	}

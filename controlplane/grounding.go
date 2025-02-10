@@ -113,33 +113,33 @@ func validateConstraints(constraints []string) error {
 func (d *GroundingSpec) Validate() error {
 	// Validate name
 	if err := validateNaming(d.Name, "name"); err != nil {
-		return err
+		return ValidationError{field: "name", err: err}
 	}
 
 	// Validate domain
 	if err := validateNaming(d.Domain, "domain"); err != nil {
-		return err
+		return ValidationError{field: "domain", err: err}
 	}
 
 	// Validate version
 	if strings.TrimSpace(d.Version) == "" {
-		return fmt.Errorf("version: cannot be blank")
+		return ValidationError{field: "version", err: fmt.Errorf("version: cannot be blank")}
 	}
 
 	// Validate examples
 	if len(d.UseCases) == 0 {
-		return fmt.Errorf("examples: cannot be empty")
+		return ValidationError{field: "use-cases", err: fmt.Errorf("use-cases: cannot be empty")}
 	}
-	for i, example := range d.UseCases {
-		if err := example.Validate(); err != nil {
-			return fmt.Errorf("examples[%d]: %v", i, err)
+	for i, useCase := range d.UseCases {
+		if err := useCase.Validate(); err != nil {
+			return ValidationError{field: "use-cases", err: fmt.Errorf("use-case[%d]: %v", i, err)}
 		}
 	}
 
 	// Validate constraints if provided
 	if len(d.Constraints) > 0 {
 		if err := validateConstraints(d.Constraints); err != nil {
-			return fmt.Errorf("constraints: %v", err)
+			return ValidationError{field: "constraints", err: fmt.Errorf("constraints: %v", err)}
 		}
 	}
 
