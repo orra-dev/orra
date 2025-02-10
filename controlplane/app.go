@@ -24,6 +24,7 @@ import (
 )
 
 const JSONMarshalingFail = "Orra:JSONMarshalingFail"
+const UnknownOrchestration = "Orra:UnknownOrchestration"
 
 type App struct {
 	Plane  *ControlPlane
@@ -349,8 +350,7 @@ func (app *App) OrchestrationInspectionHandler(w http.ResponseWriter, r *http.Re
 	orchestrationID := vars["id"]
 
 	if !app.Plane.OrchestrationBelongsToProject(orchestrationID, project.ID) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.NotExist, errs.Code(UnknownOrchestration), "unknown orchestration: "+orchestrationID))
 		return
 	}
 

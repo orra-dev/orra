@@ -8,7 +8,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -22,7 +21,9 @@ import (
 func newGroundingCmd(opts *CliOpts) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "grounding",
-		Short: "Ground execution planning in a project's domain",
+		Short: "Manage grounding specs for a project",
+		Long: `Manage grounding specs that help define domain-specific behaviors.
+Examples and documentation available at: https://orra.dev/docs/grounding`,
 	}
 
 	cmd.AddCommand(
@@ -39,13 +40,13 @@ func newGroundingApplyCmd(opts *CliOpts) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "apply",
-		Short: "Apply grounding to a project",
+		Short: "Apply a grounding spec to a project",
 		Long: `Apply a grounding spec to a project. The spec can be re-applied if the version has changed.
 Example:
   orra grounding apply -f customer-support.grounding.yaml`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Get project config
-			proj, projectName, err := config.GetProject(opts.Config, opts.ProjectID)
+			proj, _, err := config.GetProject(opts.Config, opts.ProjectID)
 			if err != nil {
 				return err
 			}
@@ -70,10 +71,10 @@ Example:
 			defer cancel()
 
 			if _, err := client.ApplyGroundingSpec(ctx, toApply); err != nil {
-				return fmt.Errorf("failed to apply grounding spec from file [%s]: %w", filename, err)
+				return fmt.Errorf("cannot apply [%s] - %w", filename, err)
 			}
 
-			fmt.Printf("✓ Applied grounding spec from %s to project %s\n", filename, projectName)
+			fmt.Printf("✓ Applied grounding spec from %s\n", filename)
 			return nil
 		},
 	}
@@ -104,7 +105,7 @@ func newGroundingListCmd(opts *CliOpts) *cobra.Command {
 
 			specs, err := client.ListGroundingSpecs(ctx)
 			if err != nil {
-				return fmt.Errorf("failed to list grounding specs: %w", err)
+				return fmt.Errorf("could not list grounding specs - %w", err)
 			}
 
 			// Project Info Section
@@ -120,11 +121,11 @@ func newGroundingListCmd(opts *CliOpts) *cobra.Command {
 				{"NAME", func(s api.GroundingSpec) string { return s.Name }, 30},
 				{"DOMAIN", func(s api.GroundingSpec) string { return s.Domain }, 30},
 				{"VERSION", func(s api.GroundingSpec) string { return s.Version }, 15},
-				{"USE CASES", func(s api.GroundingSpec) string { return fmt.Sprintf("%d", len(s.UseCases)) }, 10},
+				{"EXAMPLES", func(s api.GroundingSpec) string { return fmt.Sprintf("%d", len(s.UseCases)) }, 10},
 			}
 
 			// Print table with styling
-			fmt.Printf("\n┌─ Grounding\n")
+			fmt.Printf("\n┌─ Grounding Specs\n")
 
 			// Header
 			headerFmt := buildFormatStringGC(columns)
@@ -162,7 +163,7 @@ Example:
   orra grounding rm customer-support-examples
   orra grounding rm --all`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			proj, projectName, err := config.GetProject(opts.Config, opts.ProjectID)
+			proj, _, err := config.GetProject(opts.Config, opts.ProjectID)
 			if err != nil {
 				return err
 			}
@@ -176,9 +177,9 @@ Example:
 
 			if removeAll {
 				if err := client.RemoveAllGroundingSpecs(ctx); err != nil {
-					return fmt.Errorf("failed to remove all grounding specs: %w", err)
+					return fmt.Errorf("could not remove all grounding specs - %w", err)
 				}
-				fmt.Printf("✓ Removed all grounding specs from project %s\n", projectName)
+				fmt.Println("✓ Removed all grounding specs")
 				return nil
 			}
 
@@ -187,14 +188,10 @@ Example:
 			}
 
 			if err := client.RemoveGroundingSpec(ctx, args[0]); err != nil {
-				var notFoundError api.NotFoundError
-				if errors.As(err, &notFoundError) {
-					return err
-				}
-				return fmt.Errorf("failed to remove grounding spec '%s': %w", args[0], err)
+				return fmt.Errorf("could not remove grounding spec '%s' - %w", args[0], err)
 			}
 
-			fmt.Printf("✓ Removed grounding spec '%s' from project %s\n", args[0], projectName)
+			fmt.Printf("✓ Removed grounding spec '%s'\n", args[0])
 			return nil
 		},
 	}

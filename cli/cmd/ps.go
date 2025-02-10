@@ -48,7 +48,7 @@ func newPsCmd(opts *CliOpts) *cobra.Command {
 
 			orchestrations, err := client.ListOrchestrations(ctx)
 			if err != nil {
-				return fmt.Errorf("failed to list orchestrated actions: %w", err)
+				return fmt.Errorf("failed to list orchestrated actions - %w", err)
 			}
 
 			// Project Info Section
