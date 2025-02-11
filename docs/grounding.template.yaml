@@ -1,0 +1,51 @@
+# Domain Grounding Template
+#
+# Use this template to create domain grounding specs for your project.
+# The spec includes use cases that help Orra generate better execution
+# plans by grounding the planner in your specific domain.
+#
+# Tips for using with LLMs to generate a grounding a spec with useful use cases:
+# 1. Describe your domain and typical actions
+# 2. List your available services and their capabilities
+# 3. Ask the LLM to generate specs following this format
+# 4. Review and adjust the generated specs
+
+# Unique name for this grounding spec (e.g., "customer-support")
+name: "your-grounding-spec-name"
+
+# Main domain these grounding use cases belong to (e.g., "e-commerce-customer-support")
+domain: "your-domain-name"
+
+# Semantic version of these use cases
+version: "1.0"
+
+# Use cases of actions in your domain
+use-cases:
+  # Use case 1: Simple action pattern
+  - action: "Verb action for achieving something"
+    params:
+      variable: "example-value"                       # Example values for the variables
+      context: "additional-context"                   # Any additional parameters needed
+    capabilities:                                     # List required capabilities
+      - "Core capability needed"                      # Keep capabilities atomic and specific
+      - "Another required capability"
+    intent: "Clear description of what this action aims to achieve"
+
+  # Use case 2: More complex action pattern
+  - action: "Verb {thing} with {context}"  # Use {braces} for variables in action text
+    params:
+      thing: "ITEM123"
+      context: "CONTEXT456"
+      extra: "optional-param"
+    capabilities:
+      - "Primary capability"
+      - "Secondary capability"
+    intent: "Clear description with any important variations or context"
+
+# OPTIONAL: Business rules and limitations that apply to all actions
+constraints:
+  - "Important business rule to follow"
+  - "Critical limitation to consider"
+  - "Security or privacy requirement"
+
+# NOTE: Delete all comments (lines starting with #) before using

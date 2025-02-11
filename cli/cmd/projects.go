@@ -58,7 +58,7 @@ func newProjectCreateCmd(opts *CliOpts) *cobra.Command {
 
 			project, err := client.CreateProject(ctx)
 			if err != nil {
-				return fmt.Errorf("failed to create project: %w", err)
+				return fmt.Errorf("failed to create project - %w", err)
 			}
 
 			if err := config.SaveNewProject(opts.ConfigPath, projectName, project.ID, project.CliAPIKey, serverAddr); err != nil {

@@ -62,7 +62,7 @@ func newWebhookAddCmd(opts *CliOpts) *cobra.Command {
 
 			webhook, err := client.AddWebhook(ctx, webhookUrl)
 			if err != nil {
-				return fmt.Errorf("failed to create API key: %w", err)
+				return fmt.Errorf("failed to add webhook - %w", err)
 			}
 
 			proj.Webhooks = append(proj.Webhooks, webhook.Url)
