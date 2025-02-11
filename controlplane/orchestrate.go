@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orchestration) {
+func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orchestration, specs []GroundingSpec) {
 	orchestration.ID = p.GenerateOrchestrationKey()
 	orchestration.Status = Pending
 	orchestration.Timestamp = time.Now().UTC()
@@ -62,9 +62,17 @@ func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orc
 		return
 	}
 
+	var targetGrounding *GroundingSpec
+	if len(specs) > 0 {
+		targetGrounding = &specs[0]
+	}
+
 	callingPlan, err := p.decomposeAction(
 		orchestration,
-		orchestration.Action.Content, actionParams, serviceDescriptions,
+		orchestration.Action.Content,
+		actionParams,
+		serviceDescriptions,
+		targetGrounding,
 	)
 	if err != nil {
 		prepForError(orchestration, fmt.Errorf("error decomposing action: %w", err))
@@ -196,13 +204,20 @@ func (p *ControlPlane) discoverProjectServices(projectID string) ([]*ServiceInfo
 	return out, nil
 }
 
-func (p *ControlPlane) decomposeAction(orchestration *Orchestration, action string, actionParams json.RawMessage, serviceDescriptions string) (*ServiceCallingPlan, error) {
+func (p *ControlPlane) decomposeAction(
+	orchestration *Orchestration,
+	action string,
+	actionParams json.RawMessage,
+	serviceDescriptions string,
+	grounding *GroundingSpec,
+) (*ServiceCallingPlan, error) {
 	resp, cachedEntryID, _, err := p.VectorCache.Get(
 		context.Background(),
 		orchestration.ProjectID,
 		action,
 		actionParams,
 		serviceDescriptions,
+		grounding,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("error calling OpenAI API: %v", err)

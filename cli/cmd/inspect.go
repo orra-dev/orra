@@ -42,10 +42,7 @@ func newInspectCmd(opts *CliOpts) *cobra.Command {
 			orchestrationID := args[0]
 			inspection, err := client.GetOrchestrationInspection(ctx, orchestrationID)
 			if err != nil {
-				if _, ok := err.(api.NotFoundError); ok {
-					return err
-				}
-				return fmt.Errorf("failed to inspect orchestration: %w", err)
+				return fmt.Errorf("failed to inspect orchestration - %w", err)
 			}
 
 			// Project Info Section

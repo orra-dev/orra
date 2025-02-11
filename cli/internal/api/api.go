@@ -10,7 +10,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -80,7 +79,7 @@ type OrchestrationView struct {
 
 type CompensationSummary struct {
 	Active    bool `json:"active"`    // Are any compensations still running?
-	Total     int  `json:"total"`     // Total number of compensatable tasks
+	Total     int  `json:"total"`     // Total number of compensate-able tasks
 	Completed int  `json:"completed"` // Number of completed compensations
 	Failed    int  `json:"failed"`    // Number of failed compensations
 }
@@ -213,6 +212,21 @@ type TaskStatusEvent struct {
 	Error           string    `json:"error,omitempty"`
 }
 
+type GroundingUseCase struct {
+	Action       string            `json:"action" yaml:"action"`
+	Params       map[string]string `json:"params" yaml:"params"`
+	Capabilities []string          `json:"capabilities" yaml:"capabilities"`
+	Intent       string            `json:"intent" yaml:"intent"`
+}
+
+type GroundingSpec struct {
+	Name        string             `json:"name" yaml:"name"`
+	Domain      string             `json:"domain" yaml:"domain"`
+	Version     string             `json:"version" yaml:"version"`
+	UseCases    []GroundingUseCase `json:"useCases" yaml:"use-cases"`
+	Constraints []string           `json:"constraints" yaml:"constraints"`
+}
+
 type NotFoundError struct {
 	Err error
 }
@@ -248,6 +262,7 @@ func (c *Client) GetTimeout() time.Duration {
 
 func (c *Client) CreateProject(ctx context.Context) (*Project, error) {
 	var project Project
+	var apiErr ErrorResponse
 
 	err := requests.
 		URL(c.baseURL).
@@ -256,10 +271,11 @@ func (c *Client) CreateProject(ctx context.Context) (*Project, error) {
 		Client(c.httpClient).
 		BodyJSON(map[string]any{}).
 		ToJSON(&project).
+		ErrorJSON(&apiErr).
 		Fetch(ctx)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to create project: %w", err)
+		return nil, FormatAPIError(apiErr, "project")
 	}
 
 	return &project, nil
@@ -267,6 +283,7 @@ func (c *Client) CreateProject(ctx context.Context) (*Project, error) {
 
 func (c *Client) GenerateAdditionalApiKey(ctx context.Context) (*AdditionalAPIKey, error) {
 	var response AdditionalAPIKey
+	var apiErr ErrorResponse
 
 	err := requests.
 		URL(c.baseURL).
@@ -275,10 +292,11 @@ func (c *Client) GenerateAdditionalApiKey(ctx context.Context) (*AdditionalAPIKe
 		Client(c.httpClient).
 		Header("Authorization", "Bearer "+c.apiKey).
 		ToJSON(&response).
+		ErrorJSON(&apiErr).
 		Fetch(ctx)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate API key: %w", err)
+		return nil, FormatAPIError(apiErr, "ApiKey")
 	}
 
 	return &response, nil
@@ -286,6 +304,7 @@ func (c *Client) GenerateAdditionalApiKey(ctx context.Context) (*AdditionalAPIKe
 
 func (c *Client) AddWebhook(ctx context.Context, webhookUrl string) (*Webhook, error) {
 	var response Webhook
+	var apiErr ErrorResponse
 
 	err := requests.
 		URL(c.baseURL).
@@ -295,10 +314,11 @@ func (c *Client) AddWebhook(ctx context.Context, webhookUrl string) (*Webhook, e
 		BodyJSON(Webhook{Url: webhookUrl}).
 		Header("Authorization", "Bearer "+c.apiKey).
 		ToJSON(&response).
+		ErrorJSON(&apiErr).
 		Fetch(ctx)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to add webhook [%s]: %w", webhookUrl, err)
+		return nil, FormatAPIError(apiErr, "webhook")
 	}
 
 	return &response, nil
@@ -307,6 +327,7 @@ func (c *Client) AddWebhook(ctx context.Context, webhookUrl string) (*Webhook, e
 // ListOrchestrations retrieves all orchestrations for a project
 func (c *Client) ListOrchestrations(ctx context.Context) (*OrchestrationListView, error) {
 	var response OrchestrationListView
+	var apiErr ErrorResponse
 
 	err := requests.
 		URL(c.baseURL).
@@ -315,10 +336,11 @@ func (c *Client) ListOrchestrations(ctx context.Context) (*OrchestrationListView
 		Client(c.httpClient).
 		Header("Authorization", "Bearer "+c.apiKey).
 		ToJSON(&response).
+		ErrorJSON(&apiErr).
 		Fetch(ctx)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to list orchestrations: %w", err)
+		return nil, FormatAPIError(apiErr, "orchestrations list")
 	}
 
 	return &response, nil
@@ -326,6 +348,7 @@ func (c *Client) ListOrchestrations(ctx context.Context) (*OrchestrationListView
 
 func (c *Client) GetOrchestrationInspection(ctx context.Context, id string) (*OrchestrationInspectResponse, error) {
 	var inspection OrchestrationInspectResponse
+	var apiErr ErrorResponse
 
 	err := requests.
 		URL(c.baseURL).
@@ -333,26 +356,20 @@ func (c *Client) GetOrchestrationInspection(ctx context.Context, id string) (*Or
 		Method(http.MethodGet).
 		Client(c.httpClient).
 		Header("Authorization", "Bearer "+c.apiKey).
-		AddValidator(nil).
-		Handle(requests.ChainHandlers(
-			ResponseHandlerWithExcludedCodes(http.StatusNotFound),
-			requests.ToJSON(&inspection),
-		)).
+		ToJSON(&inspection).
+		ErrorJSON(&apiErr).
 		Fetch(ctx)
 
-	if requests.HasStatusErr(err, http.StatusNotFound) {
-		return nil, NotFoundError{Err: fmt.Errorf("orchestration not found: %s", id)}
-	}
-
 	if err != nil {
-		return nil, fmt.Errorf("failed to get orchestration inspection: %w", err)
+		return nil, FormatAPIError(apiErr, "orchestration")
 	}
 
-	return &inspection, nil
+	return &inspection, err
 }
 
 func (c *Client) CreateOrchestration(ctx context.Context, or OrchestrationRequest) (*Orchestration, error) {
 	var response *Orchestration
+	var apiErr ErrorResponse
 
 	err := requests.
 		URL(c.baseURL).
@@ -362,13 +379,95 @@ func (c *Client) CreateOrchestration(ctx context.Context, or OrchestrationReques
 		BodyJSON(or).
 		Header("Authorization", "Bearer "+c.apiKey).
 		ToJSON(&response).
+		ErrorJSON(&apiErr).
 		Fetch(ctx)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to create orchestration for action [%s]: %w", or.Action.Content, err)
+		return nil, FormatAPIError(apiErr, "orchestration action: "+or.Action.Content)
 	}
 
 	return response, nil
+}
+
+func (c *Client) ApplyGroundingSpec(ctx context.Context, spec GroundingSpec) (*GroundingSpec, error) {
+	var response *GroundingSpec
+	var apiErr ErrorResponse
+
+	err := requests.
+		URL(c.baseURL).
+		Path("/groundings").
+		Method(http.MethodPost).
+		Client(c.httpClient).
+		BodyJSON(spec).
+		Header("Authorization", "Bearer "+c.apiKey).
+		ToJSON(&response).
+		ErrorJSON(&apiErr).
+		Fetch(ctx)
+
+	if err != nil {
+		return nil, FormatAPIError(apiErr, "grounding spec")
+	}
+
+	return response, err
+}
+
+func (c *Client) ListGroundingSpecs(ctx context.Context) ([]GroundingSpec, error) {
+	var response []GroundingSpec
+	var apiErr ErrorResponse
+
+	err := requests.
+		URL(c.baseURL).
+		Path("/groundings").
+		Method(http.MethodGet).
+		Client(c.httpClient).
+		Header("Authorization", "Bearer "+c.apiKey).
+		ToJSON(&response).
+		ErrorJSON(&apiErr).
+		Fetch(ctx)
+
+	if err != nil {
+		return nil, FormatAPIError(apiErr, "grounding specs")
+	}
+
+	return response, err
+}
+
+func (c *Client) RemoveAllGroundingSpecs(ctx context.Context) error {
+	var apiErr ErrorResponse
+
+	err := requests.
+		URL(c.baseURL).
+		Path("/groundings").
+		Method(http.MethodDelete).
+		Client(c.httpClient).
+		Header("Authorization", "Bearer "+c.apiKey).
+		ErrorJSON(&apiErr).
+		Fetch(ctx)
+
+	if err != nil {
+		return FormatAPIError(apiErr, "grounding specs")
+	}
+
+	return err
+}
+
+func (c *Client) RemoveGroundingSpec(ctx context.Context, specName string) error {
+	var apiErr ErrorResponse
+
+	err := requests.
+		URL(c.baseURL).
+		Path(fmt.Sprintf("/groundings/%s", specName)).
+		Method(http.MethodDelete).
+		Client(c.httpClient).
+		Header("Authorization", "Bearer "+c.apiKey).
+		ErrorJSON(&apiErr).
+		Fetch(ctx)
+
+	if err != nil {
+		return FormatAPIError(apiErr, "grounding")
+	}
+
+	return err
 }
 
 func (v OrchestrationListView) Empty() bool {
@@ -377,24 +476,4 @@ func (v OrchestrationListView) Empty() bool {
 		len(v.Completed) == 0 &&
 		len(v.Failed) == 0 &&
 		len(v.NotActionable) == 0
-}
-
-func ResponseHandlerWithExcludedCodes(excludedCodes ...int) requests.ResponseHandler {
-	return func(resp *http.Response) error {
-		return forErr(requests.DefaultValidator, resp, excludedCodes...)
-	}
-}
-
-func forErr(validator requests.ResponseHandler, resp *http.Response, excludedCodes ...int) error {
-	if err := validator(resp); err != nil {
-		resData, readErr := io.ReadAll(resp.Body)
-		if readErr != nil {
-			return fmt.Errorf("error reading body: %w", readErr)
-		}
-		if requests.HasStatusErr(err, excludedCodes...) {
-			return err
-		}
-		return fmt.Errorf("unanticipated error for respons %s: %w", string(resData), err)
-	}
-	return nil
 }

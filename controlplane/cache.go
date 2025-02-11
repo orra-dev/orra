@@ -118,15 +118,9 @@ func (c *VectorCache) getProjectCache(projectID string) *ProjectCache {
 	return pc
 }
 
-func (c *VectorCache) Get(
-	ctx context.Context,
-	projectID,
-	action string,
-	actionParams json.RawMessage,
-	serviceDescriptions string,
-) (string, string, json.RawMessage, error) {
+func (c *VectorCache) Get(ctx context.Context, projectID, action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec) (string, string, json.RawMessage, error) {
 	result, err, _ := c.group.Do(fmt.Sprintf("%s:%s", projectID, action), func() (interface{}, error) {
-		return c.getWithRetry(ctx, projectID, action, actionParams, serviceDescriptions)
+		return c.getWithRetry(ctx, projectID, action, actionParams, serviceDescriptions, grounding)
 	})
 
 	if err != nil {
@@ -153,12 +147,7 @@ func (c *VectorCache) Get(
 	return cacheResult.Response, cacheResult.ID, actionParams, nil
 }
 
-func (c *VectorCache) getWithRetry(ctx context.Context,
-	projectID,
-	action string,
-	rawActionParams json.RawMessage,
-	serviceDescriptions string,
-) (*CacheResult, error) {
+func (c *VectorCache) getWithRetry(ctx context.Context, projectID, action string, rawActionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec) (*CacheResult, error) {
 	var actionParams ActionParams
 	if err := json.Unmarshal(rawActionParams, &actionParams); err != nil {
 		return nil, fmt.Errorf("failed to parse action params: %w", err)
@@ -218,7 +207,7 @@ func (c *VectorCache) getWithRetry(ctx context.Context,
 		Str("actionWithFields", actionWithFields).
 		Msg("CACHE MISS")
 
-	prompt := generatePlannerPrompt(action, rawActionParams, serviceDescriptions)
+	prompt := generatePlannerPrompt(action, rawActionParams, serviceDescriptions, grounding)
 	llmResp, err := c.llmClient.Generate(ctx, prompt)
 	if err != nil {
 		return nil, err

@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,6 +25,8 @@ import (
 type ControlPlane struct {
 	projects             map[string]*Project
 	services             map[string]map[string]*ServiceInfo
+	groundings           map[string]map[string]*GroundingSpec
+	groundingsMu         sync.RWMutex
 	servicesMu           sync.RWMutex
 	orchestrationStore   map[string]*Orchestration
 	orchestrationStoreMu sync.RWMutex
@@ -367,4 +370,29 @@ type CompensationWorker struct {
 	backOff         *backoff.ExponentialBackOff
 	attemptCounts   map[string]int     // track attempts per task
 	cancel          context.CancelFunc // Store cancel function
+}
+
+// GroundingUseCase represents grounding of how an action should be handled
+type GroundingUseCase struct {
+	Action       string            `json:"action" yaml:"action"`
+	Params       map[string]string `json:"params" yaml:"params"`
+	Capabilities []string          `json:"capabilities" yaml:"capabilities"`
+	Intent       string            `json:"intent" yaml:"intent"`
+}
+
+// GroundingSpec represents a collection of planning grounding for domain-specific actions
+type GroundingSpec struct {
+	Name        string             `json:"name" yaml:"name"`
+	Domain      string             `json:"domain" yaml:"domain"`
+	Version     string             `json:"version" yaml:"version"`
+	UseCases    []GroundingUseCase `json:"useCases" yaml:"use-cases"`
+	Constraints []string           `json:"constraints" yaml:"constraints"`
+}
+
+// GetEmbeddingText returns a string suitable for embedding that captures the example's semantic meaning
+func (e *GroundingUseCase) GetEmbeddingText() string {
+	return fmt.Sprintf("%s %s %s",
+		e.Action,
+		e.Intent,
+		strings.Join(e.Capabilities, " "))
 }
