@@ -215,7 +215,7 @@ func (app *App) OrchestrationsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.Plane.PrepareOrchestration(project.ID, &orchestration)
+	app.Plane.PrepareOrchestration(project.ID, &orchestration, app.Plane.GetGroundingSpecs(project.ID))
 
 	if !orchestration.Executable() {
 		app.Logger.
@@ -431,11 +431,7 @@ func (app *App) ListGrounding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	groundings, err := app.Plane.GetGroundingSpecs(project.ID)
-	if err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
-		return
-	}
+	groundings := app.Plane.GetGroundingSpecs(project.ID)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

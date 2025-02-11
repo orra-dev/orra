@@ -197,7 +197,7 @@ func (p *ControlPlane) ApplyGroundingSpec(projectID string, spec *GroundingSpec)
 }
 
 // GetGroundingSpecs retrieves all domain groundings for a project
-func (p *ControlPlane) GetGroundingSpecs(projectID string) ([]GroundingSpec, error) {
+func (p *ControlPlane) GetGroundingSpecs(projectID string) []GroundingSpec {
 	p.groundingsMu.RLock()
 	defer p.groundingsMu.RUnlock()
 
@@ -210,12 +210,12 @@ func (p *ControlPlane) GetGroundingSpecs(projectID string) ([]GroundingSpec, err
 			Str("projectID", projectID).
 			Msg("No grounding specs found")
 
-		return nil, nil
+		return nil
 	}
 
 	groundings, exists := p.groundings[projectID]
 	if !exists {
-		return nil, nil
+		return nil
 	}
 
 	// Convert map to slice
@@ -228,7 +228,7 @@ func (p *ControlPlane) GetGroundingSpecs(projectID string) ([]GroundingSpec, err
 		return out[i].Name < out[j].Name
 	})
 
-	return out, nil
+	return out
 }
 
 // RemoveGroundingSpecByName removes a specific domain grounding from a project by its name

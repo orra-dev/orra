@@ -148,10 +148,7 @@ func TestGroundingAPI(t *testing.T) {
 		}
 
 		// Verify expected was removed
-		specs, err := app.Plane.GetGroundingSpecs(project.ID)
-		if err != nil {
-			t.Fatalf("Failed to get specs: %v", err)
-		}
+		specs := app.Plane.GetGroundingSpecs(project.ID)
 		if len(specs) != 0 {
 			t.Errorf("Expected 0 specs after deletion, got %d", len(specs))
 		}
@@ -168,10 +165,7 @@ func TestGroundingAPI(t *testing.T) {
 			t.Errorf("Expected status code %d, got %d", http.StatusNoContent, w.Code)
 		}
 
-		examples, err := app.Plane.GetGroundingSpecs(project.ID)
-		if err != nil {
-			t.Fatalf("Failed to get examples: %v", err)
-		}
+		examples := app.Plane.GetGroundingSpecs(project.ID)
 		if len(examples) != 0 {
 			t.Errorf("Expected 0 examples after deletion, got %d", len(examples))
 		}

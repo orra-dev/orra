@@ -9,9 +9,75 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
-func generatePlannerPrompt(action string, actionParams json.RawMessage, serviceDescriptions string) string {
+// generateDomainContext creates a Domain Context string from a slice of GroundingUseCase.
+// It uses a template-based transformation:
+//   - If the Action field contains inline placeholders (e.g., "{orderId}"), it replaces each occurrence
+//     with the corresponding value from Params.
+//   - Otherwise, if Params is provided, it generates an "Example" line by joining key-value pairs.
+func generateDomainContext(useCases []GroundingUseCase, constraints []string) string {
+	if len(useCases) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("Domain Context:\n")
+	for i, uc := range useCases {
+		// Print the action
+		sb.WriteString(fmt.Sprintf("%d. Action: \"%s\"\n", i+1, uc.Action))
+		var exampleLine string
+		// Check if the Action string contains placeholders indicated by curly braces.
+		if strings.Contains(uc.Action, "{") && strings.Contains(uc.Action, "}") {
+			// Copy the action and replace the placeholders with parameter values.
+			exampleLine = uc.Action
+			for key, val := range uc.Params {
+				placeholder := fmt.Sprintf("{%s}", key)
+				exampleLine = strings.ReplaceAll(exampleLine, placeholder, val)
+			}
+		} else if len(uc.Params) > 0 {
+			// Provide a generic example by listing all parameters.
+			var parts []string
+			for key, val := range uc.Params {
+				parts = append(parts, fmt.Sprintf("%s \"%s\"", key, val))
+			}
+			exampleLine = "For " + strings.Join(parts, ", ")
+		} else {
+			// No parameters to show.
+			exampleLine = "No parameters provided"
+		}
+		sb.WriteString(fmt.Sprintf("   - Example: %s\n", exampleLine))
+		// List the capabilities, if any.
+		if len(uc.Capabilities) > 0 {
+			capStr := strings.Join(uc.Capabilities, ", ")
+			sb.WriteString(fmt.Sprintf("   - Capabilities: %s\n", capStr))
+		}
+		// Finally, output the intent.
+		sb.WriteString(fmt.Sprintf("   - Intent: %s\n", uc.Intent))
+	}
+	if len(constraints) == 0 {
+		return sb.String()
+	}
+
+	sb.WriteString("Constraints:\n")
+	for _, constraint := range constraints {
+		sb.WriteString(fmt.Sprintf("- %s\n", constraint))
+	}
+	return sb.String()
+}
+
+func generatePlannerPrompt(action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec) string {
+	var (
+		useCases    []GroundingUseCase
+		constraints []string
+	)
+
+	if grounding != nil {
+		useCases = grounding.UseCases
+		constraints = grounding.Constraints
+	}
+
 	prompt := fmt.Sprintf(`You are an AI orchestrator tasked with planning the execution of services based on a user's action. A user's action contains PARAMS for the action to be executed, USE THEM. Your goal is to create an efficient, parallel execution plan that fulfills the user's request.
 
 Available Services:
@@ -22,6 +88,7 @@ User Action: %s
 Action Params:
 %s
 
+%s
 Guidelines:
 1. Each service described above contains input/output types and description. You must strictly adhere to these types and descriptions when using the services.
 2. Each task in the plan should strictly use one of the available services. Follow the JSON conventions for each task.
@@ -75,6 +142,7 @@ Generate the execution plan:`,
 		serviceDescriptions,
 		action,
 		string(actionParams),
+		generateDomainContext(useCases, constraints),
 	)
 
 	return prompt
