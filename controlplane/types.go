@@ -7,7 +7,6 @@
 package main
 
 import (
-	"container/list"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -15,12 +14,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
+	back "github.com/cenkalti/backoff/v4"
 	"github.com/olahol/melody"
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/singleflight"
 	"gonum.org/v1/gonum/mat"
 )
+
+type contextKey struct{}
+
+var apiKeyContextKey = contextKey{}
 
 type ControlPlane struct {
 	projects             map[string]*Project
@@ -35,13 +38,7 @@ type ControlPlane struct {
 	workerMu             sync.RWMutex
 	WebSocketManager     *WebSocketManager
 	VectorCache          *VectorCache
-	mu                   sync.RWMutex
 	Logger               zerolog.Logger
-}
-
-type WebSocketMessageQueue struct {
-	*list.List
-	mu sync.Mutex
 }
 
 type ServiceFinder func(serviceID string) (*ServiceInfo, error)
@@ -51,8 +48,6 @@ type WebSocketManager struct {
 	logger            zerolog.Logger
 	connMap           map[string]*melody.Session
 	connMu            sync.RWMutex
-	messageQueues     map[string]*WebSocketMessageQueue
-	messageQueuesMu   sync.RWMutex
 	messageExpiration time.Duration
 	pingInterval      time.Duration
 	pongWait          time.Duration
@@ -143,7 +138,7 @@ type TaskWorker struct {
 	HealthCheckGracePeriod time.Duration
 	LogManager             *LogManager
 	logState               *LogState
-	backOff                *backoff.ExponentialBackOff
+	backOff                *back.ExponentialBackOff
 	pauseStart             time.Time // Track pause duration
 	consecutiveErrs        int       // Track consecutive failures
 }
@@ -282,11 +277,12 @@ type TaskDependenciesWithKeys map[string][]TaskDependencyMapping
 // SubTask represents a single task in the ServiceCallingPlan
 type SubTask struct {
 	ID             string         `json:"id"`
-	Service        string         `json:"service,omitempty"`
-	ServiceDetails string         `json:"service_details,omitempty"`
+	Service        string         `json:"service"`
 	Input          map[string]any `json:"input"`
-	Status         Status         `json:"status,omitempty"`
-	Error          string         `json:"error,omitempty"`
+	ServiceName    string         `json:"service_name,omitempty"`
+	Capabilities   []string       `json:"capabilities,omitempty"`
+	ExpectedInput  Spec           `json:"expected_input,omitempty"`
+	ExpectedOutput Spec           `json:"expected_output,omitempty"`
 }
 
 type TaskDependencyMapping struct {
@@ -367,7 +363,7 @@ type CompensationWorker struct {
 	OrchestrationID string
 	LogManager      *LogManager
 	Candidates      []CompensationCandidate
-	backOff         *backoff.ExponentialBackOff
+	backOff         *back.ExponentialBackOff
 	attemptCounts   map[string]int     // track attempts per task
 	cancel          context.CancelFunc // Store cancel function
 }

@@ -160,7 +160,7 @@ func (app *App) RegisterProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) RegisterServiceOrAgent(w http.ResponseWriter, r *http.Request, serviceType ServiceType) {
-	apiKey := r.Context().Value("api_key").(string)
+	apiKey := r.Context().Value(apiKeyContextKey).(string)
 	project, err := app.Plane.GetProjectByApiKey(apiKey)
 	if err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
@@ -202,7 +202,7 @@ func (app *App) RegisterAgent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) OrchestrationsHandler(w http.ResponseWriter, r *http.Request) {
-	apiKey := r.Context().Value("api_key").(string)
+	apiKey := r.Context().Value(apiKeyContextKey).(string)
 	project, err := app.Plane.GetProjectByApiKey(apiKey)
 	if err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
@@ -270,7 +270,7 @@ func (app *App) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) CreateAdditionalApiKey(w http.ResponseWriter, r *http.Request) {
-	apiKey := r.Context().Value("api_key").(string)
+	apiKey := r.Context().Value(apiKeyContextKey).(string)
 	project, err := app.Plane.GetProjectByApiKey(apiKey)
 	if err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
@@ -290,7 +290,7 @@ func (app *App) CreateAdditionalApiKey(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) AddWebhook(w http.ResponseWriter, r *http.Request) {
-	apiKey := r.Context().Value("api_key").(string)
+	apiKey := r.Context().Value(apiKeyContextKey).(string)
 	project, err := app.Plane.GetProjectByApiKey(apiKey)
 	if err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
@@ -321,7 +321,7 @@ func (app *App) AddWebhook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *App) ListOrchestrationsHandler(w http.ResponseWriter, r *http.Request) {
-	apiKey := r.Context().Value("api_key").(string)
+	apiKey := r.Context().Value(apiKeyContextKey).(string)
 	project, err := app.Plane.GetProjectByApiKey(apiKey)
 	if err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
@@ -340,7 +340,7 @@ func (app *App) ListOrchestrationsHandler(w http.ResponseWriter, r *http.Request
 
 func (app *App) OrchestrationInspectionHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	apiKey := r.Context().Value("api_key").(string)
+	apiKey := r.Context().Value(apiKeyContextKey).(string)
 	project, err := app.Plane.GetProjectByApiKey(apiKey)
 	if err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
@@ -383,7 +383,7 @@ func (app *App) healthHandler(w http.ResponseWriter, _ *http.Request) {
 
 // ApplyGrounding apply new domain grounding spec to a project
 func (app *App) ApplyGrounding(w http.ResponseWriter, r *http.Request) {
-	apiKey := r.Context().Value("api_key").(string)
+	apiKey := r.Context().Value(apiKeyContextKey).(string)
 	project, err := app.Plane.GetProjectByApiKey(apiKey)
 	if err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
@@ -424,7 +424,7 @@ func (app *App) ApplyGrounding(w http.ResponseWriter, r *http.Request) {
 
 // ListGrounding retrieves all domain grounding for a project
 func (app *App) ListGrounding(w http.ResponseWriter, r *http.Request) {
-	apiKey := r.Context().Value("api_key").(string)
+	apiKey := r.Context().Value(apiKeyContextKey).(string)
 	project, err := app.Plane.GetProjectByApiKey(apiKey)
 	if err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
@@ -446,7 +446,7 @@ func (app *App) RemoveGrounding(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name := vars["name"]
 
-	apiKey := r.Context().Value("api_key").(string)
+	apiKey := r.Context().Value(apiKeyContextKey).(string)
 	project, err := app.Plane.GetProjectByApiKey(apiKey)
 	if err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
@@ -463,7 +463,7 @@ func (app *App) RemoveGrounding(w http.ResponseWriter, r *http.Request) {
 
 // RemoveAllGrounding removes domain grounding for a specific project
 func (app *App) RemoveAllGrounding(w http.ResponseWriter, r *http.Request) {
-	apiKey := r.Context().Value("api_key").(string)
+	apiKey := r.Context().Value(apiKeyContextKey).(string)
 	project, err := app.Plane.GetProjectByApiKey(apiKey)
 	if err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))

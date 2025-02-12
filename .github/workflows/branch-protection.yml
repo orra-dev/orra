@@ -1,0 +1,34 @@
+name: Branch Protection
+
+on:
+  pull_request_review:
+    types: [submitted]
+  check_run:
+    types: [completed]
+  status:
+    types: [success]
+
+jobs:
+  protection:
+    name: Protection Rules Check
+    runs-on: ubuntu-latest
+    if: github.event.review.state == 'approved' || github.event.check_run.conclusion == 'success' || github.event.state == 'success'
+    
+    steps:
+    - name: Verify Required Checks
+      run: |
+        if [[ "${{ github.event.pull_request.merged }}" == "true" ]]; then
+          echo "Pull request is already merged"
+          exit 0
+        fi
+        
+        required_checks=("test" "lint" "build")
+        for check in "${required_checks[@]}"; do
+          if [[ "$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/commits/${{ github.event.pull_request.head.sha }}/check-runs?check_name=$check" \
+            | jq -r '.check_runs[0].conclusion')" != "success" ]]; then
+            echo "Required check '$check' has not passed"
+            exit 1
+          fi
+        done
+        echo "All required checks have passed"

@@ -33,7 +33,7 @@ func validateActionParams(action string, params map[string]string) error {
 		return nil // No variables in action, params not required
 	}
 
-	if params == nil || len(params) == 0 {
+	if len(params) == 0 {
 		return fmt.Errorf("params required when action contains variables: %v", variables)
 	}
 
@@ -53,7 +53,7 @@ func validateActionParams(action string, params map[string]string) error {
 
 // validateCapabilities checks if capabilities are valid
 func validateCapabilities(caps []string) error {
-	if caps == nil || len(caps) == 0 {
+	if len(caps) == 0 {
 		return fmt.Errorf("at least one capability is required")
 	}
 

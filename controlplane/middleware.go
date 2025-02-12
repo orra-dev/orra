@@ -31,7 +31,7 @@ func (app *App) APIKeyMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		apiKey := parts[1]
 
 		// Store the API key in the request context
-		ctx := context.WithValue(r.Context(), "api_key", apiKey)
+		ctx := context.WithValue(r.Context(), apiKeyContextKey, apiKey)
 		r = r.WithContext(ctx)
 
 		next.ServeHTTP(w, r)
