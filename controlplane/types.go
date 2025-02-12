@@ -282,11 +282,12 @@ type TaskDependenciesWithKeys map[string][]TaskDependencyMapping
 // SubTask represents a single task in the ServiceCallingPlan
 type SubTask struct {
 	ID             string         `json:"id"`
-	Service        string         `json:"service,omitempty"`
-	ServiceDetails string         `json:"service_details,omitempty"`
+	Service        string         `json:"service"`
 	Input          map[string]any `json:"input"`
-	Status         Status         `json:"status,omitempty"`
-	Error          string         `json:"error,omitempty"`
+	ServiceName    string         `json:"service_name,omitempty"`
+	Capabilities   []string       `json:"capabilities,omitempty"`
+	ExpectedInput  Spec           `json:"expected_input,omitempty"`
+	ExpectedOutput Spec           `json:"expected_output,omitempty"`
 }
 
 type TaskDependencyMapping struct {
