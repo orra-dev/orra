@@ -65,15 +65,12 @@ func (r *ResultAggregator) PollLog(ctx context.Context, _ string, logStream *Log
 	for {
 		select {
 		case <-ticker.C:
-			var processableEntries []LogEntry
-
 			entries := logStream.ReadFrom(r.logState.LastOffset)
 			for _, entry := range entries {
 				if !r.shouldProcess(entry) {
 					continue
 				}
 
-				processableEntries = append(processableEntries, entry)
 				select {
 				case entriesChan <- entry:
 					r.logState.LastOffset = entry.Offset() + 1
@@ -81,10 +78,6 @@ func (r *ResultAggregator) PollLog(ctx context.Context, _ string, logStream *Log
 					return
 				}
 			}
-
-			//r.LogManager.Logger.Debug().
-			//	Interface("entries", processableEntries).
-			//	Msgf("polling log entries for result aggregator in orchestration: %s", orchestrationID)
 
 		case <-ctx.Done():
 			return

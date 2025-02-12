@@ -64,7 +64,6 @@ func (f *FailureTracker) PollLog(ctx context.Context, _ string, logStream *Log, 
 	for {
 		select {
 		case <-ticker.C:
-			var processableEntries []LogEntry
 
 			entries := logStream.ReadFrom(f.logState.LastOffset)
 			for _, entry := range entries {
@@ -72,7 +71,6 @@ func (f *FailureTracker) PollLog(ctx context.Context, _ string, logStream *Log, 
 					continue
 				}
 
-				processableEntries = append(processableEntries, entry)
 				select {
 				case entriesChan <- entry:
 					f.logState.LastOffset = entry.Offset() + 1
@@ -81,9 +79,6 @@ func (f *FailureTracker) PollLog(ctx context.Context, _ string, logStream *Log, 
 				}
 			}
 
-			//f.LogManager.Logger.Debug().
-			//	Interface("entries", processableEntries).
-			//	Msgf("polling entries for failure tracker in orchestration: %s", orchestrationID)
 		case <-ctx.Done():
 			return
 		}

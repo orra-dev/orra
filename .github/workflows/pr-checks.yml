@@ -60,11 +60,9 @@ jobs:
         cache: true
     
     - name: golangci-lint
-      uses: golangci/golangci-lint-action@v3
-      with:
-        version: latest
-        working-directory: controlplane
-        args: --timeout=5m
+      run: |
+        cd controlplane
+        make lint
 
   build:
     name: Build Check

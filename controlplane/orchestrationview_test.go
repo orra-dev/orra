@@ -9,7 +9,7 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"testing"
 	"time"
 
@@ -101,7 +101,7 @@ func (ts *TestState) addTaskState(status Status, errMsg string, afterMinutes int
 	timestamp := ts.baseTime.Add(time.Duration(afterMinutes) * time.Minute)
 	err := error(nil)
 	if errMsg != "" {
-		err = fmt.Errorf(errMsg)
+		err = errors.New(errMsg)
 	}
 
 	_ = ts.plane.LogManager.AppendTaskStatusEvent(ts.orchestrationID, "task1", "s_echo", status, err, timestamp, ts.attempts)

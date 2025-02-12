@@ -15,7 +15,7 @@ import (
 
 	v "github.com/RussellLuo/validating/v3"
 	"github.com/google/uuid"
-	"github.com/lithammer/shortuuid/v4"
+	short "github.com/lithammer/shortuuid/v4"
 	"github.com/rs/zerolog"
 )
 
@@ -321,11 +321,11 @@ func (p *ControlPlane) OrchestrationBelongsToProject(orchestrationID, projectID 
 }
 
 func (p *ControlPlane) GenerateProjectKey() string {
-	return fmt.Sprintf("p_%s", shortuuid.New())
+	return fmt.Sprintf("p_%s", short.New())
 }
 
 func (p *ControlPlane) GenerateOrchestrationKey() string {
-	return fmt.Sprintf("o_%s", shortuuid.New())
+	return fmt.Sprintf("o_%s", short.New())
 }
 
 func (p *ControlPlane) GenerateAPIKey() string {
@@ -335,7 +335,7 @@ func (p *ControlPlane) GenerateAPIKey() string {
 }
 
 func (p *ControlPlane) GenerateServiceKey() string {
-	return fmt.Sprintf("s_%s", shortuuid.New())
+	return fmt.Sprintf("s_%s", short.New())
 }
 
 func (p *ControlPlane) GetProjectIDForService(serviceID string) (string, error) {

@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lithammer/shortuuid/v4"
+	short "github.com/lithammer/shortuuid/v4"
 )
 
 func NewLogManager(ctx context.Context, retention time.Duration, controlPlane *ControlPlane) *LogManager {
@@ -159,7 +159,7 @@ func (lm *LogManager) AppendTaskFailureToLog(orchestrationID, id, producerID, fa
 		return fmt.Errorf("failed to marshal failure for log entry: %w", err)
 	}
 
-	failureID := fmt.Sprintf("task_fail_%s_%s", strings.ToLower(id), shortuuid.New())
+	failureID := fmt.Sprintf("task_fail_%s_%s", strings.ToLower(id), short.New())
 	lm.AppendToLog(orchestrationID, "task_failure", failureID, value, producerID, attemptNo)
 	return nil
 }
@@ -176,7 +176,7 @@ func (lm *LogManager) AppendTaskStatusEvent(
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 
-	eventID := fmt.Sprintf("evt_%s_%s", strings.ToLower(taskID), shortuuid.New())
+	eventID := fmt.Sprintf("evt_%s_%s", strings.ToLower(taskID), short.New())
 	event := TaskStatusEvent{
 		ID:              eventID,
 		OrchestrationID: orchestrationID,
@@ -419,8 +419,6 @@ func (l *Log) Append(entry LogEntry) {
 	l.CurrentOffset += 1
 	l.lastAccessed = time.Now().UTC()
 	l.seenEntries[entry.ID()] = true
-
-	return
 }
 
 func (l *Log) ReadFrom(offset uint64) []LogEntry {

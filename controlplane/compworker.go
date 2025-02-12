@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
-	"github.com/lithammer/shortuuid/v4"
+	back "github.com/cenkalti/backoff/v4"
+	short "github.com/lithammer/shortuuid/v4"
 )
 
 const (
@@ -25,7 +25,7 @@ const (
 )
 
 func NewCompensationWorker(orchestrationID string, logManager *LogManager, candidates []CompensationCandidate, cancel context.CancelFunc) LogWorker {
-	expBackoff := backoff.NewExponentialBackOff()
+	expBackoff := back.NewExponentialBackOff()
 	expBackoff.InitialInterval = 2 * time.Second
 	expBackoff.MaxInterval = CompensationBackoffMax
 	expBackoff.Multiplier = 2.0
@@ -141,7 +141,7 @@ func (w *CompensationWorker) executeCompensationWithRetry(ctx context.Context, c
 		if time.Now().UTC().After(expiresAt) {
 			logger.Trace().Time("ExpiresAt", expiresAt).Msg("Compensation data expired")
 			err := fmt.Errorf("compensation data expired for task %s", taskID)
-			return backoff.Permanent(err)
+			return back.Permanent(err)
 		}
 
 		var err error
@@ -150,7 +150,7 @@ func (w *CompensationWorker) executeCompensationWithRetry(ctx context.Context, c
 			w.attemptCounts[taskID]++
 			if w.stopRetrying(taskID) {
 				logger.Trace().Err(err).Msg("MaxCompensationAttempts reached")
-				return backoff.Permanent(fmt.Errorf("max compensation attempts (%d) reached: %w", MaxCompensationAttempts, err))
+				return back.Permanent(fmt.Errorf("max compensation attempts (%d) reached: %w", MaxCompensationAttempts, err))
 			}
 
 			logger.Trace().Err(err).Msg("Retrying failed compensation")
@@ -160,7 +160,7 @@ func (w *CompensationWorker) executeCompensationWithRetry(ctx context.Context, c
 		return nil
 	}
 
-	err := backoff.RetryNotify(operation, w.backOff,
+	err := back.RetryNotify(operation, w.backOff,
 		func(err error, duration time.Duration) {
 			w.LogManager.Logger.Info().
 				Str("Operation", "executeCompensationWithRetry").
@@ -193,7 +193,7 @@ func (w *CompensationWorker) tryExecuteCompensation(ctx context.Context, candida
 	}
 
 	idempotencyKey := w.generateIdempotencyKey(w.OrchestrationID, taskID)
-	executionID := fmt.Sprintf("e_comp_%s", shortuuid.New())
+	executionID := fmt.Sprintf("e_comp_%s", short.New())
 
 	execution, isNewExecution, err := service.IdempotencyStore.InitializeOrGetExecution(idempotencyKey, executionID)
 	if err != nil {
