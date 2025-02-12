@@ -24,7 +24,7 @@ func validateSpec(spec *Spec) v.Schema {
 	case "object":
 		baseSchema[v.F("properties", spec.Properties)] = v.All(
 			v.Is(func(m map[string]Spec) bool {
-				return m != nil && len(m) > 0
+				return len(m) > 0
 			}).Msg("properties are required for object type and must have at least one entry"),
 			v.Map(func(m map[string]Spec) map[string]v.Validator {
 				schemas := make(map[string]v.Validator)

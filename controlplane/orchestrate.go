@@ -106,10 +106,15 @@ func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orc
 		return
 	}
 
-	if err := p.addServiceDetails(services, onlyServicesCallingPlan.Tasks); err != nil {
-		prepForError(orchestration, fmt.Errorf("error adding service details to calling plan: %w", err))
+	if err := p.enhanceWithServiceDetails(services, onlyServicesCallingPlan.Tasks); err != nil {
+		prepForError(orchestration, fmt.Errorf("error enhancing calling plan with service details: %w", err))
 		return
 	}
+
+	p.Logger.Trace().
+		Str("OrchestrationID", orchestration.ID).
+		Interface("ServiceCallingPlan", onlyServicesCallingPlan).
+		Msg("enhanced service calling plan")
 
 	orchestration.Plan = onlyServicesCallingPlan
 	orchestration.taskZero = taskZeroInput
@@ -279,7 +284,7 @@ func (p *ControlPlane) validateInput(services []*ServiceInfo, subTasks []*SubTas
 	return nil
 }
 
-func (p *ControlPlane) addServiceDetails(services []*ServiceInfo, subTasks []*SubTask) error {
+func (p *ControlPlane) enhanceWithServiceDetails(services []*ServiceInfo, subTasks []*SubTask) error {
 	serviceMap := make(map[string]*ServiceInfo)
 	for _, service := range services {
 		serviceMap[service.ID] = service
@@ -290,7 +295,10 @@ func (p *ControlPlane) addServiceDetails(services []*ServiceInfo, subTasks []*Su
 		if !ok {
 			return fmt.Errorf("service %s not found for subtask %s", subTask.Service, subTask.ID)
 		}
-		subTask.ServiceDetails = service.String()
+		subTask.ServiceName = service.Name
+		subTask.Capabilities = []string{service.Description}
+		subTask.ExpectedInput = service.Schema.Input
+		subTask.ExpectedOutput = service.Schema.Output
 	}
 
 	return nil

@@ -12,7 +12,7 @@ import (
 	"os"
 
 	"github.com/gilcrest/diygoapi/logger"
-	"github.com/peterbourgon/ff/v3"
+	_ff "github.com/peterbourgon/ff/v3"
 	"github.com/rs/zerolog"
 )
 
@@ -57,7 +57,7 @@ func newFlags(args []string) (flags, error) {
 	)
 
 	// Parse the command line flags from above
-	err := ff.Parse(fs, args[1:], ff.WithEnvVars())
+	err := _ff.Parse(fs, args[1:], _ff.WithEnvVars())
 	if err != nil {
 		return flags{}, err
 	}

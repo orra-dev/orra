@@ -11,7 +11,7 @@ import (
 	"fmt"
 
 	"github.com/rs/zerolog"
-	"github.com/sashabaranov/go-openai"
+	open "github.com/sashabaranov/go-openai"
 )
 
 const (
@@ -20,24 +20,23 @@ const (
 )
 
 type LLMClient struct {
-	reasoningClient  *openai.Client
+	reasoningClient  *open.Client
 	reasoningModel   string
 	reasoningConfig  LLMClientConfig
-	embeddingsClient *openai.Client
+	embeddingsClient *open.Client
 	embeddingsModel  string
 	logger           zerolog.Logger
 }
 
 type LLMClientConfig struct {
-	baseConfig          openai.ClientConfig
-	maxCompletionTokens int
-	temperature         float32
-	topP                float32
-	n                   int
+	baseConfig  open.ClientConfig
+	temperature float32
+	topP        float32
+	n           int
 }
 
 func GroqConfig(authToken string) LLMClientConfig {
-	cfg := openai.DefaultConfig(authToken)
+	cfg := open.DefaultConfig(authToken)
 	cfg.BaseURL = groqAPIURLv1
 	cfg.APIType = APITypeGroq
 	return LLMClientConfig{
@@ -49,7 +48,7 @@ func GroqConfig(authToken string) LLMClientConfig {
 }
 
 func OpenAIConfig(authToken string) LLMClientConfig {
-	cfg := openai.DefaultConfig(authToken)
+	cfg := open.DefaultConfig(authToken)
 	return LLMClientConfig{
 		baseConfig:  cfg,
 		temperature: 1.0,
@@ -81,11 +80,11 @@ func NewLLMClient(cfg Config, logger zerolog.Logger) (*LLMClient, error) {
 		Msg("initialising LLM provider")
 
 	return &LLMClient{
-		reasoningClient:  openai.NewClientWithConfig(reasoningConfig.baseConfig),
+		reasoningClient:  open.NewClientWithConfig(reasoningConfig.baseConfig),
 		reasoningConfig:  reasoningConfig,
 		reasoningModel:   cfg.Reasoning.Model,
-		embeddingsClient: openai.NewClient(cfg.PlanCache.OpenaiApiKey),
-		embeddingsModel:  string(openai.AdaEmbeddingV2),
+		embeddingsClient: open.NewClient(cfg.PlanCache.OpenaiApiKey),
+		embeddingsModel:  string(open.AdaEmbeddingV2),
 		logger:           logger,
 	}, nil
 }
@@ -95,11 +94,11 @@ func (l *LLMClient) Generate(ctx context.Context, prompt string) (response strin
 		Str("Prompt", prompt).
 		Msg("Decompose action prompt using cache powered completion")
 
-	request := openai.ChatCompletionRequest{
+	request := open.ChatCompletionRequest{
 		Model: l.reasoningModel,
-		Messages: []openai.ChatCompletionMessage{
+		Messages: []open.ChatCompletionMessage{
 			{
-				Role:    openai.ChatMessageRoleUser,
+				Role:    open.ChatMessageRoleUser,
 				Content: prompt,
 			},
 		},
@@ -125,8 +124,8 @@ func (l *LLMClient) Generate(ctx context.Context, prompt string) (response strin
 }
 
 func (l *LLMClient) CreateEmbeddings(ctx context.Context, text string) ([]float32, error) {
-	resp, err := l.embeddingsClient.CreateEmbeddings(ctx, openai.EmbeddingRequest{
-		Model: openai.EmbeddingModel(l.embeddingsModel),
+	resp, err := l.embeddingsClient.CreateEmbeddings(ctx, open.EmbeddingRequest{
+		Model: open.EmbeddingModel(l.embeddingsModel),
 		Input: []string{text},
 	})
 	if err != nil {
