@@ -46,14 +46,11 @@ const OrchestrationFlow = ({ orchestrationData }) => {
 					const task = tasks.find(t => t.id === taskId);
 					if (!task || task.id === 'task0') return null;
 					
-					const parts = task.service_details?.split(' - ') || [];
-					const typeAndName = parts[0]?.match(/\[(.*?)\]\s*(.*)/) || [];
-					
 					return {
 						id: taskId,
-						type: typeAndName[1]?.toLowerCase().includes('agent') ? 'agent' : 'service',
-						name: typeAndName[2] || task.service,
-						description: getTaskDescription(typeAndName[2]),
+						type: task['service_name']?.toLowerCase().includes('agent') ? 'agent' : 'service',
+						name: task['service_name'] || task.service,
+						description: getTaskDescription(task['service_name']),
 						status: 'processing'
 					};
 				})
