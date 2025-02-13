@@ -459,18 +459,11 @@ func (p *ControlPlane) triggerWebhook(orchestration *Orchestration) error {
 		return fmt.Errorf("failed to trigger webhook failed to marshal payload: %w", err)
 	}
 
-	p.Logger.Debug().
-		Fields(struct {
-			OrchestrationID string
-			ProjectID       string
-			Webhook         string
-			Payload         string
-		}{
-			OrchestrationID: orchestration.ID,
-			ProjectID:       orchestration.ProjectID,
-			Webhook:         orchestration.Webhook,
-			Payload:         string(jsonPayload),
-		}).
+	p.Logger.Trace().
+		Str("ProjectID", orchestration.ProjectID).
+		Str("OrchestrationID", orchestration.ID).
+		Str("Webhook", orchestration.Webhook).
+		RawJSON("Payload", jsonPayload).
 		Msg("Triggering webhook")
 
 	// Create a new request
