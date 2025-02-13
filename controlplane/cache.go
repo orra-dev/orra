@@ -132,7 +132,7 @@ func (c *VectorCache) Get(ctx context.Context, projectID, action string, actionP
 	if cacheResult.Hit && cacheResult.Task0Input != nil {
 		modifiedResponse := cacheResult.Response
 		newContent, err := substituteTask0Params(
-			sanitizeJSONOutput(modifiedResponse),
+			modifiedResponse,
 			cacheResult.Task0Input,
 			actionParams,
 			cacheResult.CacheMappings,
@@ -218,10 +218,13 @@ func (c *VectorCache) getWithRetry(ctx context.Context, projectID, action string
 	rawPlanJson, cot := cutCoT(llmResp)
 	c.logger.Trace().Str("CoT", cot).Msg("If any")
 
-	sanitizedAsJson := sanitizeJSONOutput(rawPlanJson)
-	c.logger.Trace().RawJSON("Cache Miss Plan", []byte(sanitizedAsJson)).Msg("")
+	planJson, err := extractValidJSONOutput(rawPlanJson)
+	if err != nil {
+		return nil, fmt.Errorf("cannot extract JSON from LLM response: %w", err)
+	}
+	c.logger.Trace().RawJSON("Cache Miss Plan", []byte(planJson)).Msg("")
 
-	task0Input, err := extractTask0Input(sanitizedAsJson)
+	task0Input, err := extractTask0Input(planJson)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract task0 input: %w", err)
 	}
@@ -242,7 +245,7 @@ func (c *VectorCache) getWithRetry(ctx context.Context, projectID, action string
 	// Create new cache entry
 	entry := &CacheEntry{
 		ID:                     uuid.New().String(),
-		Response:               rawPlanJson,
+		Response:               planJson,
 		ActionVector:           actionEmbedding,
 		ServicesHash:           servicesHash,
 		Task0Input:             task0Input,
@@ -262,7 +265,7 @@ func (c *VectorCache) getWithRetry(ctx context.Context, projectID, action string
 
 	return &CacheResult{
 		ID:         entry.ID,
-		Response:   rawPlanJson,
+		Response:   planJson,
 		Task0Input: task0Input,
 		Hit:        false,
 	}, nil
@@ -341,13 +344,6 @@ func (c *VectorCache) generateEmbeddingVector(ctx context.Context, text string) 
 	if err != nil {
 		return nil, err
 	}
-	//resp, err := c.embedder.CreateEmbeddings(ctx, openai.EmbeddingRequest{
-	//	Model: openai.AdaEmbeddingV2,
-	//	Input: []string{text},
-	//})
-	//if err != nil {
-	//	return nil, err
-	//}
 
 	// Convert to dense vector
 	embeddingVector := mat.NewVecDense(len(embeddings), nil)

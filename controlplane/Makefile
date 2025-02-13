@@ -13,6 +13,10 @@ test:
 	@echo "Running tests..."
 	@go test -race -cover ./...
 
+# Run the latest build
+run:
+	@./bin/orra-cp -log-level trace
+
 # Clean build artifacts
 clean:
 	@echo "Cleaning build artifacts..."

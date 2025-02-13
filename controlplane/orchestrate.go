@@ -216,7 +216,7 @@ func (p *ControlPlane) decomposeAction(
 	serviceDescriptions string,
 	grounding *GroundingSpec,
 ) (*ServiceCallingPlan, error) {
-	resp, cachedEntryID, _, err := p.VectorCache.Get(
+	planJson, cachedEntryID, _, err := p.VectorCache.Get(
 		context.Background(),
 		orchestration.ProjectID,
 		action,
@@ -225,17 +225,11 @@ func (p *ControlPlane) decomposeAction(
 		grounding,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("error calling OpenAI API: %v", err)
+		return nil, fmt.Errorf("error calling OpenAI API: %w", err)
 	}
 
 	var result *ServiceCallingPlan
-	sanitisedJSON := sanitizeJSONOutput(resp)
-	p.Logger.Debug().
-		Str("Sanitized JSON", sanitisedJSON).
-		Msg("Service calling plan")
-
-	err = json.Unmarshal([]byte(sanitisedJSON), &result)
-	if err != nil {
+	if err = json.Unmarshal([]byte(planJson), &result); err != nil {
 		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
 		return nil, fmt.Errorf("error parsing LLM response as JSON: %w", err)
 	}
@@ -532,14 +526,33 @@ func (si *ServiceInfo) String() string {
 	return fmt.Sprintf("[%s] %s - %s", si.Type.String(), si.Name, si.Description)
 }
 
-func sanitizeJSONOutput(input string) string {
-	trimmed := strings.TrimSpace(input)
+func extractValidJSONOutput(input string) (string, error) {
+	// Define the markers to locate the JSON block.
+	startMarker := "```json"
+	endMarker := "```"
 
-	if strings.HasPrefix(trimmed, "```json") && strings.HasSuffix(trimmed, "```") {
-		withoutStart := strings.TrimPrefix(trimmed, "```json")
-		withoutEnd := strings.TrimSuffix(withoutStart, "```")
-		return strings.TrimSpace(withoutEnd)
+	// Find the start of the JSON block.
+	startIdx := strings.Index(input, startMarker)
+	if startIdx == -1 {
+		// Return full input if the JSON start marker is not found.
+		return "", fmt.Errorf("cannot find opening JSON marker in %s", input)
 	}
 
-	return input
+	// Start after the marker.
+	startIdx += len(startMarker)
+
+	// Find the closing marker after the start.
+	endIdx := strings.Index(input[startIdx:], endMarker)
+	if endIdx == -1 {
+		// Return full input if no closing marker is found.
+		return "", fmt.Errorf("cannot find closing JSON marker in %s", input)
+	}
+
+	var temp map[string]any
+	jsonContent := strings.TrimSpace(input[startIdx : startIdx+endIdx])
+	if err := json.Unmarshal([]byte(jsonContent), &temp); err != nil {
+		return "", fmt.Errorf("cannot parse invalid JSON: %s", input)
+	}
+
+	return jsonContent, nil
 }
