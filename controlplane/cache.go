@@ -11,6 +11,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -263,8 +264,7 @@ func (c *VectorCache) generateExecutionPlan(ctx context.Context, action string, 
 // prepTaskZeroForCache prepares task zero so future cache hits can dynamically work with
 // incoming action parameter values
 func (c *VectorCache) prepTaskZeroForCache(execPlanJson string, actionParams ActionParams) (json.RawMessage, []TaskZeroCacheMapping, error) {
-
-	task0Input, err := extractTask0Input(execPlanJson)
+	task0Input, err := extractTaskZeroInput(execPlanJson)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to extract task0 input: %w", err)
 	}
@@ -313,6 +313,9 @@ func (c *VectorCache) cache(projectID string, planJson string, actionVector *mat
 }
 
 func (c *VectorCache) Remove(projectID, id string) bool {
+	if len(id) == 0 {
+		return false
+	}
 	c.mu.RLock()
 	pc, exists := c.projectCaches[projectID]
 	c.mu.RUnlock()

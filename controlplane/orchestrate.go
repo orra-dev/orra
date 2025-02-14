@@ -72,7 +72,7 @@ func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orc
 		targetGrounding = &specs[0]
 	}
 
-	callingPlan, status, err := p.decomposeAction(
+	callingPlan, cachedEntryID, err := p.decomposeAction(
 		orchestration,
 		orchestration.Action.Content,
 		actionParams,
@@ -81,7 +81,15 @@ func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orc
 	)
 	if err != nil {
 		err := fmt.Errorf("failed to generate execution plan: %w", err)
-		p.prepForError(orchestration, err, status)
+		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
+		p.prepForError(orchestration, err, Failed)
+		return err
+	}
+
+	if err := p.validateActionable(callingPlan.Tasks); err != nil {
+		err := fmt.Errorf("failed to generate execution plan: %w", err)
+		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
+		p.prepForError(orchestration, err, NotActionable)
 		return err
 	}
 
@@ -89,6 +97,7 @@ func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orc
 	if taskZero == nil {
 		orchestration.Plan = callingPlan
 		err := fmt.Errorf("failed to locate task zero in execution plan")
+		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
 		p.prepForError(orchestration, err, Failed)
 		return err
 	}
@@ -96,18 +105,21 @@ func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orc
 	taskZeroInput, err := json.Marshal(taskZero.Input)
 	if err != nil {
 		err := fmt.Errorf("failed to convert task zero in execution plan into valid params: %w", err)
+		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
 		p.prepForError(orchestration, err, Failed)
 		return err
 	}
 
 	if err = p.validateSubTaskInputs(services, onlyServicesCallingPlan.Tasks); err != nil {
 		err := fmt.Errorf("execution plan input/output failed validation: %w", err)
+		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
 		p.prepForError(orchestration, err, Failed)
 		return err
 	}
 
 	if err := p.enhanceWithServiceDetails(services, onlyServicesCallingPlan.Tasks); err != nil {
 		err := fmt.Errorf("error enhancing execution plan with service details: %w", err)
+		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
 		p.prepForError(orchestration, err, Failed)
 		return err
 	}
@@ -218,7 +230,7 @@ func (p *ControlPlane) decomposeAction(
 	actionParams json.RawMessage,
 	serviceDescriptions string,
 	grounding *GroundingSpec,
-) (*ServiceCallingPlan, Status, error) {
+) (*ServiceCallingPlan, string, error) {
 	planJson, cachedEntryID, _, err := p.VectorCache.Get(
 		context.Background(),
 		orchestration.ProjectID,
@@ -228,23 +240,21 @@ func (p *ControlPlane) decomposeAction(
 		grounding,
 	)
 	if err != nil {
-		return nil, Failed, err
+		return nil, cachedEntryID, err
 	}
 
 	var result *ServiceCallingPlan
 	if err = json.Unmarshal([]byte(planJson), &result); err != nil {
-		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
-		return nil, Failed, fmt.Errorf("error parsing LLM response as JSON: %w", err)
+		return nil, cachedEntryID, fmt.Errorf("error parsing LLM response as JSON: %w", err)
 	}
 
-	if err := p.validateActionable(result.Tasks); err != nil {
-		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
-		return nil, NotActionable, err
+	for i := 0; i < len(result.Tasks); i++ {
+		result.Tasks[i].Service = strings.ToLower(result.Tasks[i].Service)
 	}
 
 	result.ProjectID = orchestration.ProjectID
 
-	return result, Preparing, nil
+	return result, cachedEntryID, nil
 }
 
 func (p *ControlPlane) validateWebhook(projectID string, webhookUrl string) error {
