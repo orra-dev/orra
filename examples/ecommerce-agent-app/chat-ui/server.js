@@ -101,14 +101,14 @@ app.prepare().then(() => {
 					triggeredBy: msg.triggerId
 				});
 			} catch (error) {
-				if (error.response && error.response.status === 422) {
-					if (error.response.data?.status === "not_actionable"){
+				if (error.response && error.response.status === 400) {
+					if (error.response.data?.error?.code === "Orra:ActionNotActionable"){
 						io.emit('orra_err', "Sorry, I can't help with that. 😐");
 					}else{
-						io.emit('orra_err', `${error.response.data?.error}. ❌`);
+						io.emit('orra_err', `${error.response.data?.error?.message}. ❌`);
 					}
 				}else {
-					console.error('Error posting to external API:', error);
+					console.error('Error posting to external API:', JSON.stringify(error.response.data));
 					io.emit('orra_err', "Something went wrong while processing your request. Please try again. 🔄");
 				}
 			}
