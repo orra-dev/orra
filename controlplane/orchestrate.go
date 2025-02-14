@@ -19,7 +19,17 @@ import (
 	"time"
 )
 
-func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orchestration, specs []GroundingSpec) {
+func (p *ControlPlane) prepForError(orchestration *Orchestration, err error, status Status) {
+	p.Logger.Error().
+		Str("OrchestrationID", orchestration.ID).
+		Err(err)
+	orchestration.Status = status
+	orchestration.Timestamp = time.Now().UTC()
+	marshaledErr, _ := json.Marshal(err.Error())
+	orchestration.Error = marshaledErr
+}
+
+func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orchestration, specs []GroundingSpec) error {
 	orchestration.ID = p.GenerateOrchestrationKey()
 	orchestration.Status = Pending
 	orchestration.Timestamp = time.Now().UTC()
@@ -29,37 +39,31 @@ func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orc
 	p.orchestrationStore[orchestration.ID] = orchestration
 	p.orchestrationStoreMu.Unlock()
 
-	prepForError := func(orchestration *Orchestration, err error) {
-		p.Logger.Error().
-			Str("OrchestrationID", orchestration.ID).
-			Err(err)
-		orchestration.Status = Failed
-		orchestration.Timestamp = time.Now().UTC()
-		marshaledErr, _ := json.Marshal(err.Error())
-		orchestration.Error = marshaledErr
-	}
-
 	if err := p.validateWebhook(orchestration.ProjectID, orchestration.Webhook); err != nil {
-		prepForError(orchestration, fmt.Errorf("invalid orchestration: %w", err))
-		return
+		err := fmt.Errorf("invalid orchestration: %w", err)
+		p.prepForError(orchestration, err, Failed)
+		return err
 	}
 
 	services, err := p.discoverProjectServices(orchestration.ProjectID)
 	if err != nil {
-		prepForError(orchestration, fmt.Errorf("error discovering services: %w", err))
-		return
+		err := fmt.Errorf("error discovering services: %w", err)
+		p.prepForError(orchestration, err, Failed)
+		return err
 	}
 
 	serviceDescriptions, err := p.serviceDescriptions(services)
 	if err != nil {
-		prepForError(orchestration, fmt.Errorf("failed to create service descriptions required for prompting: %w", err))
-		return
+		err := fmt.Errorf("failed to create service descriptions required for prompting: %w", err)
+		p.prepForError(orchestration, err, Failed)
+		return err
 	}
 
 	actionParams, err := orchestration.Params.Json()
 	if err != nil {
-		prepForError(orchestration, fmt.Errorf("failed to convert action parameters to prompt friendly format: %w", err))
-		return
+		err := fmt.Errorf("failed to convert action parameters to prompt friendly format: %w", err)
+		p.prepForError(orchestration, err, Failed)
+		return err
 	}
 
 	var targetGrounding *GroundingSpec
@@ -67,7 +71,7 @@ func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orc
 		targetGrounding = &specs[0]
 	}
 
-	callingPlan, err := p.decomposeAction(
+	callingPlan, status, err := p.decomposeAction(
 		orchestration,
 		orchestration.Action.Content,
 		actionParams,
@@ -75,40 +79,36 @@ func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orc
 		targetGrounding,
 	)
 	if err != nil {
-		prepForError(orchestration, fmt.Errorf("error decomposing action: %w", err))
-		return
-	}
-
-	if err := p.validateActionable(callingPlan.Tasks); err != nil {
-		orchestration.Plan = callingPlan
-		orchestration.Status = NotActionable
-		orchestration.Timestamp = time.Now().UTC()
-		marshaledErr, _ := json.Marshal(err.Error())
-		orchestration.Error = marshaledErr
-		return
+		err := fmt.Errorf("failed to generate execution plan: %w", err)
+		p.prepForError(orchestration, err, status)
+		return err
 	}
 
 	taskZero, onlyServicesCallingPlan := p.callingPlanMinusTaskZero(callingPlan)
 	if taskZero == nil {
 		orchestration.Plan = callingPlan
-		prepForError(orchestration, fmt.Errorf("error locating task zero in calling plan"))
-		return
+		err := fmt.Errorf("failed to locate task zero in execution plan")
+		p.prepForError(orchestration, err, Failed)
+		return err
 	}
 
 	taskZeroInput, err := json.Marshal(taskZero.Input)
 	if err != nil {
-		prepForError(orchestration, fmt.Errorf("failed to convert task zero into valid params: %w", err))
-		return
+		err := fmt.Errorf("failed to convert task zero in execution plan into valid params: %w", err)
+		p.prepForError(orchestration, err, Failed)
+		return err
 	}
 
 	if err = p.validateInput(services, onlyServicesCallingPlan.Tasks); err != nil {
-		prepForError(orchestration, fmt.Errorf("error validating plan input/output: %w", err))
-		return
+		err := fmt.Errorf("execution plan input/output failed validation: %w", err)
+		p.prepForError(orchestration, err, Failed)
+		return err
 	}
 
 	if err := p.enhanceWithServiceDetails(services, onlyServicesCallingPlan.Tasks); err != nil {
-		prepForError(orchestration, fmt.Errorf("error enhancing calling plan with service details: %w", err))
-		return
+		err := fmt.Errorf("error enhancing execution plan with service details: %w", err)
+		p.prepForError(orchestration, err, Failed)
+		return err
 	}
 
 	p.Logger.Trace().
@@ -118,6 +118,8 @@ func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orc
 
 	orchestration.Plan = onlyServicesCallingPlan
 	orchestration.taskZero = taskZeroInput
+
+	return nil
 }
 
 func (p *ControlPlane) ExecuteOrchestration(orchestration *Orchestration) {
@@ -215,7 +217,7 @@ func (p *ControlPlane) decomposeAction(
 	actionParams json.RawMessage,
 	serviceDescriptions string,
 	grounding *GroundingSpec,
-) (*ServiceCallingPlan, error) {
+) (*ServiceCallingPlan, Status, error) {
 	planJson, cachedEntryID, _, err := p.VectorCache.Get(
 		context.Background(),
 		orchestration.ProjectID,
@@ -225,18 +227,23 @@ func (p *ControlPlane) decomposeAction(
 		grounding,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("error calling OpenAI API: %w", err)
+		return nil, Failed, err
 	}
 
 	var result *ServiceCallingPlan
 	if err = json.Unmarshal([]byte(planJson), &result); err != nil {
 		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
-		return nil, fmt.Errorf("error parsing LLM response as JSON: %w", err)
+		return nil, Failed, fmt.Errorf("error parsing LLM response as JSON: %w", err)
+	}
+
+	if err := p.validateActionable(result.Tasks); err != nil {
+		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
+		return nil, NotActionable, err
 	}
 
 	result.ProjectID = orchestration.ProjectID
 
-	return result, nil
+	return result, Preparing, nil
 }
 
 func (p *ControlPlane) validateWebhook(projectID string, webhookUrl string) error {
