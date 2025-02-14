@@ -95,15 +95,16 @@ Guidelines:
 3. Each task MUST have a unique ID, which is strictly increasing.
 4. With the excpetion of Task 0, whose inputs are constants derived from the User Action, inputs for other tasks have to be outputs from preceding tasks. In the latter case, use the format $taskId to denote the ID of the previous task whose output will be the input.
 5. There can only be a single Task 0, other tasks HAVE TO CORRESPOND TO AVAILABLE SERVICES.
-6. Ensure the plan maximizes parallelizability.
-7. Only use the provided services.
+6. Task 0 should not be assigned a service, as it is a placeholder for inputs that are constants derived from the User Action params.
+7. When assigning service IDs to tasks, PLEASE PRESERVE THE EXACT ORIGINAL CASING of the IDs because they are case sensitive.
+8. Ensure the plan maximizes parallelizability.
+9. Only use the provided services, NEVER introduce new services other than the ones provided.
 	- If a query cannot be addressed using these, USE A "final" TASK TO SUGGEST THE NEXT STEPS.
 		- The final task MUST have "final" as the task ID: { "id": "final".
 		- The final task DOES NOT require a service.
 		- The final task input PARAM key should be "error" and the value should explain why the query cannot be addressed.   
 		- EXCEPT FOR TASK 0, NO OTHER TASKS ARE REQUIRED AND SHOULD BE REMOVED. 
-8. Never explain the plan with comments.
-9. Never introduce new services other than the ones provided.
+10. NEVER explain the plan with comments.
 
 Please generate a plan in the following JSON format:
 
