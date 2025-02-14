@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -99,7 +100,7 @@ func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orc
 		return err
 	}
 
-	if err = p.validateInput(services, onlyServicesCallingPlan.Tasks); err != nil {
+	if err = p.validateSubTaskInputs(services, onlyServicesCallingPlan.Tasks); err != nil {
 		err := fmt.Errorf("execution plan input/output failed validation: %w", err)
 		p.prepForError(orchestration, err, Failed)
 		return err
@@ -263,26 +264,64 @@ func (p *ControlPlane) validateWebhook(projectID string, webhookUrl string) erro
 	return nil
 }
 
-func (p *ControlPlane) validateInput(services []*ServiceInfo, subTasks []*SubTask) error {
-	serviceMap := make(map[string]*ServiceInfo)
+// validateSubTaskInputs checks that each subTask's input keys are valid for its service
+// and that every required key provided by the service is present in the subTask.
+func (p *ControlPlane) validateSubTaskInputs(services []*ServiceInfo, subTasks []*SubTask) error {
+	// Build a lookup map for services.
+	serviceMap := make(map[string]*ServiceInfo, len(services))
 	for _, service := range services {
 		serviceMap[service.ID] = service
 	}
 
+	var validationErrors []error
+
+	// Process each subTask independently.
 	for _, subTask := range subTasks {
-		service, ok := serviceMap[subTask.Service]
+		svc, ok := serviceMap[subTask.Service]
 		if !ok {
-			return fmt.Errorf("service %s not found for subtask %s", subTask.Service, subTask.ID)
+			validationErrors = append(validationErrors,
+				fmt.Errorf("service %s not found for subtask %s", subTask.Service, subTask.ID))
+			continue
 		}
 
+		// Create a set of expected keys.
+		expectedKeys := svc.InputPropKeys()
+		expectedSet := make(map[string]struct{}, len(expectedKeys))
+		for _, key := range expectedKeys {
+			expectedSet[key] = struct{}{}
+		}
+
+		// Check that every input provided is allowed.
 		for inputKey := range subTask.Input {
-			if !service.Schema.InputIncludes(inputKey) {
-				return fmt.Errorf("input %s not supported by service %s for subtask %s", inputKey, subTask.Service, subTask.ID)
+			if _, ok := expectedSet[inputKey]; !ok {
+				validationErrors = append(validationErrors,
+					fmt.Errorf("input %s not supported by service %s for subtask %s", inputKey, svc.ID, subTask.ID))
+			}
+		}
+
+		// Check that every expected key is present.
+		for _, key := range expectedKeys {
+			if _, present := subTask.Input[key]; !present {
+				validationErrors = append(validationErrors,
+					fmt.Errorf("service %s is missing required input %s in subtask %s", svc.ID, key, subTask.ID))
 			}
 		}
 	}
 
+	if len(validationErrors) > 0 {
+		// Use errors.Join to compose a single error that wraps all the individual errors.
+		return fmt.Errorf("input validation errors: %w", errors.Join(validationErrors...))
+	}
+
 	return nil
+}
+
+func (s *SubTask) InputKeys() []string {
+	var out []string
+	for k := range s.Input {
+		out = append(out, k)
+	}
+	return out
 }
 
 func (p *ControlPlane) enhanceWithServiceDetails(services []*ServiceInfo, subTasks []*SubTask) error {
@@ -504,15 +543,6 @@ func (p *ControlPlane) triggerWebhook(orchestration *Orchestration) error {
 	return nil
 }
 
-func (s ServiceSchema) InputIncludes(src string) bool {
-	return s.Input.IncludesProp(src)
-}
-
-func (s Spec) IncludesProp(src string) bool {
-	_, ok := s.Properties[src]
-	return ok
-}
-
 func (s Spec) String() (string, error) {
 	data, err := json.Marshal(s)
 	if err != nil {
@@ -531,6 +561,14 @@ func (p ActionParams) Json() (json.RawMessage, error) {
 
 func (si *ServiceInfo) String() string {
 	return fmt.Sprintf("[%s] %s - %s", si.Type.String(), si.Name, si.Description)
+}
+
+func (si *ServiceInfo) InputPropKeys() []string {
+	var out []string
+	for k := range si.Schema.Input.Properties {
+		out = append(out, k)
+	}
+	return out
 }
 
 func extractValidJSONOutput(input string) (string, error) {
