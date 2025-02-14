@@ -98,10 +98,10 @@ Guidelines:
 6. Ensure the plan maximizes parallelizability.
 7. Only use the provided services.
 	- If a query cannot be addressed using these, USE A "final" TASK TO SUGGEST THE NEXT STEPS.
-		- The final task MUST have "final" as the task ID.
+		- The final task MUST have "final" as the task ID: { "id": "final".
 		- The final task DOES NOT require a service.
 		- The final task input PARAM key should be "error" and the value should explain why the query cannot be addressed.   
-		- NO OTHER TASKS ARE REQUIRED. 
+		- EXCEPT FOR TASK 0, NO OTHER TASKS ARE REQUIRED AND SHOULD BE REMOVED. 
 8. Never explain the plan with comments.
 9. Never introduce new services other than the ones provided.
 
