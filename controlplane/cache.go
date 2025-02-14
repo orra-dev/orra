@@ -428,26 +428,30 @@ func (c *CacheEntry) MatchesActionParams(actionParams ActionParams) bool {
 	return c.CacheMappings.ContainsAll(actionParams)
 }
 
-// extractTask0Input extracts the input parameters from task0 in the calling plan
-func extractTask0Input(content string) (json.RawMessage, error) {
+// extractTaskZeroInput extracts the input parameters from task0 in the calling plan
+func extractTaskZeroInput(content string) (json.RawMessage, error) {
 	var plan ServiceCallingPlan
 	if err := json.Unmarshal([]byte(content), &plan); err != nil {
-		return nil, fmt.Errorf("failed to parse calling plan: %w", err)
+		return nil, fmt.Errorf("failed to parse eexcution plan: %w", err)
 	}
 
-	// Find task0
 	for _, task := range plan.Tasks {
-		if task.ID == "task0" {
-			// Marshal the input map to get the exact JSON structure
-			input, err := json.Marshal(task.Input)
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal task0 input: %w", err)
-			}
-			return input, nil
+		if !strings.EqualFold(task.ID, TaskZero) {
+			continue
 		}
+
+		if task.Service != "" {
+			return nil, errors.New("task0 must only contain constant inputs from the user action, not assigned a service")
+		}
+
+		input, err := json.Marshal(task.Input)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal task0 input: %w", err)
+		}
+		return input, nil
 	}
 
-	return nil, fmt.Errorf("task0 not found in calling plan")
+	return nil, fmt.Errorf("task0 not found in execution plan")
 }
 
 func cutCoT(input string) (after string, cot string) {
