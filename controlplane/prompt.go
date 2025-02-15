@@ -67,7 +67,27 @@ func generateDomainContext(useCases []GroundingUseCase, constraints []string) st
 	return sb.String()
 }
 
-func generatePlannerPrompt(action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec) string {
+func buildPromptExtras(domainContext, backPromptContext string) string {
+	dc := strings.TrimSpace(domainContext)
+	bc := strings.TrimSpace(backPromptContext)
+
+	var parts []string
+	if dc != "" {
+		parts = append(parts, dc)
+	}
+	if bc != "" {
+		parts = append(parts, fmt.Sprintf("Context from previous attempt:\n%s", bc))
+	}
+
+	result := strings.Join(parts, "\n\n")
+	if result != "" {
+		result += "\n"
+	}
+
+	return result
+}
+
+func buildPlannerPrompt(action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, backPromptContext string) string {
 	var (
 		useCases    []GroundingUseCase
 		constraints []string
@@ -78,6 +98,7 @@ func generatePlannerPrompt(action string, actionParams json.RawMessage, serviceD
 		constraints = grounding.Constraints
 	}
 
+	promptExtras := buildPromptExtras(generateDomainContext(useCases, constraints), backPromptContext)
 	prompt := fmt.Sprintf(`You are an AI orchestrator tasked with planning the execution of services based on a user's action. A user's action contains PARAMS for the action to be executed, USE THEM. Your goal is to create an efficient, parallel execution plan that fulfills the user's request.
 
 Available Services:
@@ -143,7 +164,7 @@ Generate the execution plan:`,
 		serviceDescriptions,
 		action,
 		string(actionParams),
-		generateDomainContext(useCases, constraints),
+		promptExtras,
 	)
 
 	return prompt

@@ -119,9 +119,9 @@ func (c *VectorCache) getProjectCache(projectID string) *ProjectCache {
 	return pc
 }
 
-func (c *VectorCache) Get(ctx context.Context, projectID, action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec) (string, string, json.RawMessage, error) {
+func (c *VectorCache) Get(ctx context.Context, projectID, action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, backPromptContext string) (string, string, json.RawMessage, error) {
 	result, err, _ := c.group.Do(fmt.Sprintf("%s:%s", projectID, action), func() (interface{}, error) {
-		return c.getWithRetry(ctx, projectID, action, actionParams, serviceDescriptions, grounding)
+		return c.getWithRetry(ctx, projectID, action, actionParams, serviceDescriptions, grounding, backPromptContext)
 	})
 
 	if err != nil {
@@ -148,7 +148,7 @@ func (c *VectorCache) Get(ctx context.Context, projectID, action string, actionP
 	return cacheResult.Response, cacheResult.ID, actionParams, nil
 }
 
-func (c *VectorCache) getWithRetry(ctx context.Context, projectID, action string, rawActionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec) (*CacheResult, error) {
+func (c *VectorCache) getWithRetry(ctx context.Context, projectID, action string, rawActionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, backPromptContext string) (*CacheResult, error) {
 	var actionParams ActionParams
 	if err := json.Unmarshal(rawActionParams, &actionParams); err != nil {
 		return nil, fmt.Errorf("failed to parse action params: %w", err)
@@ -182,7 +182,7 @@ func (c *VectorCache) getWithRetry(ctx context.Context, projectID, action string
 		Str("actionWithFields", actionWithFields).
 		Msg("CACHE MISS")
 
-	planJson, err := c.generateExecutionPlan(ctx, action, rawActionParams, serviceDescriptions, grounding)
+	planJson, err := c.genExecutionPlan(ctx, action, rawActionParams, serviceDescriptions, grounding, backPromptContext)
 	if err != nil {
 		return nil, err
 	}
@@ -240,9 +240,9 @@ func (c *VectorCache) lookupProjectCache(projectID string, query CacheQuery) (*C
 	return nil, false
 }
 
-// generateExecutionPlan queries the LLM and extracts the execution plan.
-func (c *VectorCache) generateExecutionPlan(ctx context.Context, action string, rawActionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec) (string, error) {
-	prompt := generatePlannerPrompt(action, rawActionParams, serviceDescriptions, grounding)
+// genExecutionPlan queries the LLM and extracts the execution plan.
+func (c *VectorCache) genExecutionPlan(ctx context.Context, action string, rawActionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, backPromptContext string) (string, error) {
+	prompt := buildPlannerPrompt(action, rawActionParams, serviceDescriptions, grounding, backPromptContext)
 	llmResp, err := c.llmClient.Generate(ctx, prompt)
 	if err != nil {
 		return "", err
@@ -313,6 +313,11 @@ func (c *VectorCache) cache(projectID string, planJson string, actionVector *mat
 }
 
 func (c *VectorCache) Remove(projectID, id string) bool {
+	c.logger.Debug().
+		Str("projectID", projectID).
+		Str("id", id).
+		Msg("About removed cache entry")
+
 	if len(id) == 0 {
 		return false
 	}
@@ -435,7 +440,7 @@ func (c *CacheEntry) MatchesActionParams(actionParams ActionParams) bool {
 func extractTaskZeroInput(content string) (json.RawMessage, error) {
 	var plan ServiceCallingPlan
 	if err := json.Unmarshal([]byte(content), &plan); err != nil {
-		return nil, fmt.Errorf("failed to parse eexcution plan: %w", err)
+		return nil, fmt.Errorf("failed to parse execution plan: %w", err)
 	}
 
 	for _, task := range plan.Tasks {
