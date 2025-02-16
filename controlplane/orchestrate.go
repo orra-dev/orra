@@ -241,7 +241,7 @@ func (p *ControlPlane) attemptRetryablePreparation(
 
 	if err := p.validateExecPlanAgainstDomain(ctx, orchestration.ProjectID, orchestration.Action.Content, callingPlan); err != nil {
 		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
-		return PreparationError{Status: Failed, Err: fmt.Errorf("execution plan is invalid against domain: %w", err)}
+		return fmt.Errorf("execution plan is invalid against domain: %w", err)
 	}
 
 	// Store the final plan
