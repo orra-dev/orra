@@ -7,6 +7,7 @@
 package main
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -14,541 +15,344 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestPddlDomainGenerator_AddTypes(t *testing.T) {
+// FakeMatcher implements both Matcher and Embedder interfaces for testing
+type FakeMatcher struct {
+	// Configured responses for testing
+	matchResponse   bool
+	matchScore      float64
+	matchError      error
+	embeddings      []float32
+	embeddingsError error
+}
+
+func NewFakeMatcher() *FakeMatcher {
+	return &FakeMatcher{
+		matchResponse: true,
+		matchScore:    0.9,
+		embeddings:    []float32{0.1, 0.2, 0.3},
+	}
+}
+
+func (f *FakeMatcher) MatchTexts(_ context.Context, _, _ string, _ float64) (bool, float64, error) {
+	return f.matchResponse, f.matchScore, f.matchError
+}
+
+func (f *FakeMatcher) CreateEmbeddings(_ context.Context, _ string) ([]float32, error) {
+	return f.embeddings, f.embeddingsError
+}
+
+func TestPddlDomainGenerator_ShouldGenerateDomain(t *testing.T) {
 	tests := []struct {
-		name      string
-		useCase   *GroundingUseCase
-		plan      *ExecutionPlan
-		expected  string
-		expectErr bool
+		name          string
+		groundingSpec *GroundingSpec
+		groundingID   string
+		want          bool
 	}{
 		{
-			name: "basic_service_types",
-			useCase: &GroundingUseCase{
-				Action: "Process order {orderId}",
-				Params: map[string]string{
-					"orderId": "ORD123",
-				},
-			},
-			plan: &ExecutionPlan{
-				Tasks: []*SubTask{
-					{
-						ID:      "task_1",
-						Service: "order_service",
-						ExpectedInput: Spec{
-							Properties: map[string]Spec{
-								"orderId": {
-									Type: "string",
-								},
-							},
-						},
-					},
-				},
-			},
-			expected: `  (:types
-    id - object
-    order-id - id
-  )
-
-`,
+			name:          "no grounding spec",
+			groundingSpec: nil,
+			groundingID:   "",
+			want:          false,
 		},
 		{
-			name: "multiple_service_types",
-			useCase: &GroundingUseCase{
-				Action: "Ship order {orderId} to {location}",
-				Params: map[string]string{
-					"orderId":  "ORD123",
-					"location": "STORE1",
-				},
+			name: "has grounding spec but no ID",
+			groundingSpec: &GroundingSpec{
+				Name: "test-grounding",
 			},
-			plan: &ExecutionPlan{
-				Tasks: []*SubTask{
-					{
-						ID:      "task_1",
-						Service: "shipping_service",
-						ExpectedInput: Spec{
-							Properties: map[string]Spec{
-								"orderId": {
-									Type: "string",
-								},
-								"storeLocation": {
-									Type: "string",
-								},
-							},
-						},
-					},
-				},
-			},
-			expected: `  (:types
-    id location - object
-    order-id - id
-    store-location - location
-  )
-
-`,
+			groundingID: "",
+			want:        false,
 		},
 		{
-			name: "monetary_and_status_types",
-			useCase: &GroundingUseCase{
-				Action: "Process payment {amount} for order {orderId}",
-				Params: map[string]string{
-					"amount":  "99.99",
-					"orderId": "ORD123",
-				},
+			name: "has both grounding spec and ID",
+			groundingSpec: &GroundingSpec{
+				Name: "test-grounding",
 			},
-			plan: &ExecutionPlan{
-				Tasks: []*SubTask{
-					{
-						ID:      "task_1",
-						Service: "payment_service",
-						ExpectedInput: Spec{
-							Properties: map[string]Spec{
-								"paymentAmount": {
-									Type: "number",
-								},
-								"orderId": {
-									Type: "string",
-								},
-								"orderStatus": {
-									Type: "string",
-								},
-							},
-						},
-					},
-				},
-			},
-			expected: `  (:types
-    id number status - object
-    monetary-value - number
-    order-id - id
-    order-status - status
-  )
-
-`,
-		},
-		{
-			name: "skip_task_zero",
-			useCase: &GroundingUseCase{
-				Action: "Process order",
-				Params: map[string]string{},
-			},
-			plan: &ExecutionPlan{
-				Tasks: []*SubTask{
-					{
-						ID:      "task_0",
-						Service: "",
-						Input: map[string]any{
-							"raw_input": "some value",
-						},
-					},
-					{
-						ID:      "task_1",
-						Service: "order_service",
-						ExpectedInput: Spec{
-							Properties: map[string]Spec{
-								"orderId": {
-									Type: "string",
-								},
-							},
-						},
-					},
-				},
-			},
-			expected: `  (:types
-    id - object
-    order-id - id
-  )
-
-`,
-		},
-		{
-			name: "mixed_property_types",
-			useCase: &GroundingUseCase{
-				Action: "Update inventory",
-				Params: map[string]string{},
-			},
-			plan: &ExecutionPlan{
-				Tasks: []*SubTask{
-					{
-						ID:      "task_1",
-						Service: "inventory_service",
-						ExpectedInput: Spec{
-							Properties: map[string]Spec{
-								"productId": {
-									Type: "string",
-								},
-								"inStock": {
-									Type: "boolean",
-								},
-								"unitPrice": {
-									Type: "number",
-								},
-								"items": {
-									Type: "array",
-								},
-							},
-						},
-					},
-				},
-			},
-			expected: `  (:types
-    boolean collection id number - object
-    monetary-value - number
-    product-id - id
-  )
-
-`,
+			groundingID: "test-grounding",
+			want:        true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var domain strings.Builder
-			logger := zerolog.Nop()
-
-			generator := &PddlDomainGenerator{
-				executionPlan: tt.plan,
-				logger:        logger,
+			plan := &ExecutionPlan{
+				GroundingID: tt.groundingID,
 			}
+			generator := NewPddlDomainGenerator(
+				"test-action",
+				plan,
+				tt.groundingSpec,
+				NewFakeMatcher(),
+				zerolog.Nop(),
+			)
 
-			generator.addTypes(&domain, tt.useCase)
-
-			if tt.expectErr {
-				// Add error checking when we add error cases
-				return
-			}
-
-			assert.Equal(t, tt.expected, domain.String())
+			got := generator.ShouldGenerateDomain()
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
 
-func TestPddlDomainGenerator_AddPredicates(t *testing.T) {
+func TestPddlDomainGenerator_GenerateDomain(t *testing.T) {
+	// Test case: e-commerce customer support
+	useCase := GroundingUseCase{
+		Action: "Process refund for order {orderId}",
+		Params: map[string]string{
+			"orderId": "ORD123", // Only include params that match service requirements
+		},
+		Capabilities: []string{
+			"Verify refund eligibility",
+			"Process payment refund",
+		},
+	}
+
+	groundingSpec := &GroundingSpec{
+		Name:     "customer-support",
+		Domain:   "e-commerce-customer-support",
+		Version:  "1.0",
+		UseCases: []GroundingUseCase{useCase},
+	}
+
+	executionPlan := &ExecutionPlan{
+		GroundingID: "customer-support",
+		Tasks: []*SubTask{
+			{
+				ID:      "task1",
+				Service: "refund-service",
+				Capabilities: []string{
+					"A service that handles refund processing including eligibility checks and payment refunds",
+				},
+				ExpectedInput: Spec{
+					Properties: map[string]Spec{
+						"orderId": {Type: "string"},
+					},
+				},
+				ExpectedOutput: Spec{
+					Properties: map[string]Spec{
+						"refundStatus": {Type: "string"},
+					},
+				},
+			},
+		},
+	}
+
+	matcher := NewFakeMatcher()
+	matcher.matchResponse = true
+	matcher.matchScore = 0.9
+
+	generator := NewPddlDomainGenerator(
+		"Process refund for order ORD123",
+		executionPlan,
+		groundingSpec,
+		matcher,
+		zerolog.Nop(),
+	)
+
+	domain, err := generator.GenerateDomain(context.Background())
+	assert.NoError(t, err)
+	assert.NotEmpty(t, domain)
+
+	// Verify domain contains expected elements
+	assert.Contains(t, domain, "(define (domain e-commerce-customer-support)")
+	assert.Contains(t, domain, "(:requirements :strips :typing)")
+
+	// Verify types - should only include types for service inputs
+	assert.Contains(t, domain, "order-id - object")
+	assert.NotContains(t, domain, "customer-id - object", "Should not include types for unused params")
+
+	// Verify predicates - should only include predicates for service inputs
+	assert.Contains(t, domain, "(service-validated ?s - service)")
+	assert.Contains(t, domain, "(valid-orderId ?orderId - order-id)")
+	assert.NotContains(t, domain, "valid-customerId", "Should not include predicates for unused params")
+
+	// Verify action
+	assert.Contains(t, domain, "(:action execute-service")
+}
+
+func TestPddlDomainGenerator_ValidateServiceCapabilities(t *testing.T) {
+	useCase := GroundingUseCase{
+		Capabilities: []string{
+			"Verify refund eligibility",
+			"Process payment refund",
+		},
+	}
+
 	tests := []struct {
-		name     string
-		useCase  *GroundingUseCase
-		plan     *ExecutionPlan
-		expected string
+		name        string
+		matchResult bool
+		tasks       []*SubTask
+		wantErr     bool
 	}{
 		{
-			name: "order_processing_predicates",
-			useCase: &GroundingUseCase{
-				Action: "Process order {orderId}",
-				Capabilities: []string{
-					"Check order status",
-					"Verify order location",
-				},
-				Params: map[string]string{
-					"orderId": "ORD123",
-				},
-			},
-			plan: &ExecutionPlan{
-				Tasks: []*SubTask{
-					{
-						ID:      "task_1",
-						Service: "order_service",
-						ExpectedInput: Spec{
-							Properties: map[string]Spec{
-								"orderId": {
-									Type: "string",
-								},
-								"isRush": {
-									Type: "boolean",
-								},
-							},
-						},
-						ExpectedOutput: Spec{
-							Properties: map[string]Spec{
-								"orderStatus": {
-									Type: "string",
-								},
-							},
-						},
+			name:        "matching capabilities",
+			matchResult: true,
+			tasks: []*SubTask{
+				{
+					ID:      "task1",
+					Service: "refund-service",
+					Capabilities: []string{
+						"A service that handles refund processing and verification",
 					},
 				},
 			},
-			expected: `  (:predicates
-    (at-location ?obj - object ?location - location)
-    (exists-order ?id - order-id)
-    (has-status ?obj - order-id ?status - order-status)
-    (is-rush ?obj - order)
-  )
-
-`,
+			wantErr: false,
 		},
 		{
-			name: "payment_processing_predicates",
-			useCase: &GroundingUseCase{
-				Action: "Process payment for order",
-				Capabilities: []string{
-					"Check payment status",
-				},
-			},
-			plan: &ExecutionPlan{
-				Tasks: []*SubTask{
-					{
-						ID:      "task_1",
-						Service: "payment_service",
-						ExpectedInput: Spec{
-							Properties: map[string]Spec{
-								"paymentId": {
-									Type: "string",
-								},
-								"isRefund": {
-									Type: "boolean",
-								},
-							},
-						},
+			name:        "missing capability",
+			matchResult: false,
+			tasks: []*SubTask{
+				{
+					ID:      "task1",
+					Service: "refund-service",
+					Capabilities: []string{
+						"A service that only processes payments",
 					},
 				},
 			},
-			expected: `  (:predicates
-    (exists-payment ?id - payment-id)
-    (has-status ?obj - payment-id ?status - payment-status)
-    (is-refund ?obj - payment)
-  )
-
-`,
+			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var domain strings.Builder
-			logger := zerolog.Nop()
+			matcher := NewFakeMatcher()
+			matcher.matchResponse = tt.matchResult
 
-			generator := &PddlDomainGenerator{
-				executionPlan: tt.plan,
-				logger:        logger,
+			generator := NewPddlDomainGenerator(
+				"test-action",
+				&ExecutionPlan{Tasks: tt.tasks},
+				&GroundingSpec{},
+				matcher,
+				zerolog.Nop(),
+			)
+
+			err := generator.validateServiceCapabilities(context.Background(), &useCase)
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "missing required capability")
+			} else {
+				assert.NoError(t, err)
 			}
-
-			generator.addPredicates(&domain, tt.useCase)
-			assert.Equal(t, tt.expected, domain.String())
 		})
 	}
 }
 
-func TestPddlDomainGenerator_AddActions(t *testing.T) {
-	tests := []struct {
-		name     string
-		useCase  *GroundingUseCase
-		plan     *ExecutionPlan
-		expected string
-	}{
-		{
-			name: "order_processing_action",
-			useCase: &GroundingUseCase{
-				Action: "Process order {orderId}",
-				Capabilities: []string{
-					"Check order status",
-					"Verify order location",
+func TestGeneratedPddlSyntax(t *testing.T) {
+	useCase := GroundingUseCase{
+		Action: "Process refund for order {orderId}",
+		Params: map[string]string{
+			"orderId":    "ORD123",
+			"customerId": "CUST456",
+		},
+		Capabilities: []string{"Process refund"},
+	}
+
+	groundingSpec := &GroundingSpec{
+		Name:     "test-grounding",
+		Domain:   "test-domain",
+		UseCases: []GroundingUseCase{useCase},
+	}
+
+	executionPlan := &ExecutionPlan{
+		GroundingID: "test-grounding",
+		Tasks: []*SubTask{
+			{
+				ID:           "task1",
+				Service:      "refund-service",
+				Capabilities: []string{"A refund processing service"},
+				ExpectedInput: Spec{
+					Properties: map[string]Spec{
+						"orderId": {Type: "string"},
+					},
 				},
-				Params: map[string]string{
-					"orderId": "ORD123",
-				},
-			},
-			plan: &ExecutionPlan{
-				Tasks: []*SubTask{
-					{
-						ID:      "task_1",
-						Service: "order_service",
-						ExpectedInput: Spec{
-							Properties: map[string]Spec{
-								"orderId": {
-									Type: "string",
-								},
-							},
-						},
-						ExpectedOutput: Spec{
-							Properties: map[string]Spec{
-								"orderStatus": {
-									Type: "string",
-								},
-							},
-						},
+				ExpectedOutput: Spec{
+					Properties: map[string]Spec{
+						"refundStatus": {Type: "string"},
 					},
 				},
 			},
-			expected: `  (:action process-order
-   :parameters (?order-id - order-id ?new-status - order-status ?loc - location)
-   :precondition (and
-    (exists-order ?order-id)
-   )
-   :effect (and
-    (has-status ?order-id ?new-status)
-    (at-location ?order-id ?loc)
-   )
-  )
-
-`,
-		},
-		{
-			name: "payment_processing_action",
-			useCase: &GroundingUseCase{
-				Action: "Process payment",
-				Capabilities: []string{
-					"Check payment status",
-				},
-			},
-			plan: &ExecutionPlan{
-				Tasks: []*SubTask{
-					{
-						ID:      "task_1",
-						Service: "payment_service",
-						ExpectedInput: Spec{
-							Properties: map[string]Spec{
-								"paymentId": {
-									Type: "string",
-								},
-								"amount": {
-									Type: "number",
-								},
-							},
-						},
-						ExpectedOutput: Spec{
-							Properties: map[string]Spec{
-								"paymentStatus": {
-									Type: "string",
-								},
-							},
-						},
-					},
-				},
-			},
-			expected: `  (:action process-payment
-   :parameters (?payment-id - payment-id ?amount - monetary-value ?new-status - payment-status)
-   :precondition (and
-    (exists-payment ?payment-id)
-   )
-   :effect (and
-    (has-status ?payment-id ?new-status)
-   )
-  )
-
-`,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var domain strings.Builder
-			logger := zerolog.Nop()
+	matcher := NewFakeMatcher()
+	matcher.matchResponse = true
+	matcher.matchScore = 0.9
 
-			generator := &PddlDomainGenerator{
-				executionPlan: tt.plan,
-				logger:        logger,
-			}
+	generator := NewPddlDomainGenerator(
+		"Process refund for order ORD123",
+		executionPlan,
+		groundingSpec,
+		matcher,
+		zerolog.Nop(),
+	)
 
-			generator.addActions(&domain, tt.useCase)
-			assert.Equal(t, tt.expected, domain.String())
-		})
-	}
-}
+	domain, err := generator.GenerateDomain(context.Background())
+	assert.NoError(t, err)
 
-func TestPddlDomainGenerator_InferDetailedType(t *testing.T) {
-	tests := []struct {
-		name     string
-		jsonType string
-		propName string
-		expected string
-	}{
-		{
-			name:     "camel_case_id",
-			jsonType: "string",
-			propName: "orderId",
-			expected: "order-id",
-		},
-		{
-			name:     "underscore_id",
-			jsonType: "string",
-			propName: "order_id",
-			expected: "order-id",
-		},
-		{
-			name:     "uppercase_id",
-			jsonType: "string",
-			propName: "OrderID",
-			expected: "order-id",
-		},
-		{
-			name:     "simple_id",
-			jsonType: "string",
-			propName: "id",
-			expected: "id",
-		},
-		// Add more cases for other types...
+	t.Logf("Generated PDDL:\n%s", domain)
+
+	// Split lines and filter out empty ones
+	var nonEmptyLines []string
+	for _, line := range strings.Split(domain, "\n") {
+		if strings.TrimSpace(line) != "" {
+			nonEmptyLines = append(nonEmptyLines, line)
+		}
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			generator := &PddlDomainGenerator{
-				logger: zerolog.Nop(),
-			}
-
-			actual := generator.inferDetailedType(tt.jsonType, tt.propName)
-			assert.Equal(t, tt.expected, actual)
-		})
+	// Check domain definition exists
+	hasDomainDef := false
+	for _, line := range nonEmptyLines {
+		if strings.Contains(line, "(define (domain") {
+			hasDomainDef = true
+			break
+		}
 	}
-}
+	assert.True(t, hasDomainDef, "Domain definition should exist")
 
-func TestPddlDomainGenerator_NormalizeParamName(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "simple_camel_case_id",
-			input:    "orderId",
-			expected: "order-id",
-		},
-		{
-			name:     "underscore_id",
-			input:    "order_id",
-			expected: "order-id",
-		},
-		{
-			name:     "pascal_case_id",
-			input:    "OrderId",
-			expected: "order-id",
-		},
-		{
-			name:     "uppercase_id",
-			input:    "OrderID",
-			expected: "order-id",
-		},
-		{
-			name:     "camel_case_non_id",
-			input:    "storeLocation",
-			expected: "store-location",
-		},
-		{
-			name:     "pascal_case_non_id",
-			input:    "StoreLocation",
-			expected: "store-location",
-		},
-		{
-			name:     "with_acronym",
-			input:    "userAPIKey",
-			expected: "user-api-key",
-		},
-		{
-			name:     "simple_word",
-			input:    "name",
-			expected: "name",
-		},
+	// Check required sections exist
+	hasTypes := false
+	hasPredicates := false
+	hasActions := false
+
+	for _, line := range nonEmptyLines {
+		trimmedLine := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(trimmedLine, "(:types"):
+			hasTypes = true
+		case strings.HasPrefix(trimmedLine, "(:predicates"):
+			hasPredicates = true
+		case strings.HasPrefix(trimmedLine, "(:action"):
+			hasActions = true
+		}
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			generator := &PddlDomainGenerator{
-				logger: zerolog.Nop(),
-			}
+	assert.True(t, hasTypes, "Domain should contain types section")
+	assert.True(t, hasPredicates, "Domain should contain predicates section")
+	assert.True(t, hasActions, "Domain should contain at least one action")
 
-			actual := generator.normalizeParamName(tt.input)
-			assert.Equal(t, tt.expected, actual,
-				"Input: %s, Expected: %s, Got: %s",
-				tt.input, tt.expected, actual)
-		})
+	// Validate entire structure
+	assert.True(t, strings.HasPrefix(strings.TrimSpace(nonEmptyLines[0]), "(define"), "Should start with define")
+	lastLine := strings.TrimSpace(nonEmptyLines[len(nonEmptyLines)-1])
+	assert.True(t, lastLine == ")", "Should end with closing parenthesis")
+
+	// Count parentheses
+	openCount := strings.Count(domain, "(")
+	closeCount := strings.Count(domain, ")")
+	assert.Equal(t, openCount, closeCount, "Parentheses should be balanced")
+
+	// Additional structure checks
+	var foundActionParams, foundPrecondition, foundEffect bool
+	for _, line := range nonEmptyLines {
+		trimmedLine := strings.TrimSpace(line)
+		switch {
+		case strings.Contains(trimmedLine, ":parameters"):
+			foundActionParams = true
+		case strings.Contains(trimmedLine, ":precondition"):
+			foundPrecondition = true
+		case strings.Contains(trimmedLine, ":effect"):
+			foundEffect = true
+		}
 	}
+
+	assert.True(t, foundActionParams, "Action should have parameters")
+	assert.True(t, foundPrecondition, "Action should have preconditions")
+	assert.True(t, foundEffect, "Action should have effects")
 }
