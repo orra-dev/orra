@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/rs/zerolog"
@@ -121,7 +122,189 @@ func (g *PDDLDomainGenerator) normalizeActionPattern(pattern string) string {
 	return vars.ReplaceAllString(pattern, "")
 }
 
-func (g *PDDLDomainGenerator) addTypes(_ *strings.Builder, _ *GroundingUseCase) {}
+func (g *PDDLDomainGenerator) addTypes(domain *strings.Builder, useCase *GroundingUseCase) {
+	typeHierarchy := make(map[string][]string)
+	seenTypes := make(map[string]bool)
+
+	// Helper to add a type and its parent to the hierarchy
+	addToHierarchy := func(typeName string) {
+		if !seenTypes[typeName] {
+			seenTypes[typeName] = true
+			parentType := g.inferParentType(typeName)
+			if parentType != "" {
+				typeHierarchy[typeName] = []string{parentType}
+				// Ensure parent type is also added as a base type
+				if !seenTypes[parentType] {
+					seenTypes[parentType] = true
+					typeHierarchy[parentType] = nil
+				}
+			} else {
+				typeHierarchy[typeName] = nil
+			}
+		}
+	}
+
+	// Process use case params
+	for _, paramValue := range useCase.Params {
+		paramType := g.inferTypeFromParam(paramValue, g.executionPlan.Tasks)
+		if paramType != "" {
+			addToHierarchy(paramType)
+		}
+	}
+
+	// Process service schemas
+	for _, task := range g.executionPlan.Tasks {
+		if strings.EqualFold(task.ID, TaskZero) {
+			continue
+		}
+
+		// Process input properties
+		if task.ExpectedInput.Properties != nil {
+			for propName, propSpec := range task.ExpectedInput.Properties {
+				pddlType := g.inferDetailedType(propSpec.Type, propName)
+				addToHierarchy(pddlType)
+			}
+		}
+
+		// Process output properties
+		if task.ExpectedOutput.Properties != nil {
+			for propName, propSpec := range task.ExpectedOutput.Properties {
+				pddlType := g.inferDetailedType(propSpec.Type, propName)
+				addToHierarchy(pddlType)
+			}
+		}
+	}
+
+	// Only write types section if we have types to write
+	if len(typeHierarchy) > 0 {
+		domain.WriteString("  (:types\n")
+
+		// Write base types first
+		baseTypes := make([]string, 0)
+		for typeName, parents := range typeHierarchy {
+			if len(parents) == 0 && typeName != "object" { // Exclude 'object' from base types
+				baseTypes = append(baseTypes, typeName)
+			}
+		}
+		sort.Strings(baseTypes)
+		if len(baseTypes) > 0 {
+			domain.WriteString(fmt.Sprintf("    %s - object\n", strings.Join(baseTypes, " ")))
+		}
+
+		// Write derived types
+		derivedTypes := make([]string, 0)
+		for typeName, parents := range typeHierarchy {
+			if len(parents) > 0 {
+				for _, parent := range parents {
+					derivedTypes = append(derivedTypes, fmt.Sprintf("    %s - %s", typeName, parent))
+				}
+			}
+		}
+		sort.Strings(derivedTypes)
+		for _, line := range derivedTypes {
+			domain.WriteString(line + "\n")
+		}
+
+		domain.WriteString("  )\n\n")
+	}
+}
+
+// inferDetailedType provides more specific type inference based on property name and context
+func (g *PDDLDomainGenerator) inferDetailedType(jsonType, propName string) string {
+	propNameLower := strings.ToLower(propName)
+
+	switch jsonType {
+	case "string":
+		// Infer semantic types based on property name patterns
+		switch {
+		case strings.HasSuffix(propNameLower, "id"):
+			prefix := strings.TrimSuffix(propNameLower, "id")
+			if prefix != "" {
+				return prefix + "-id"
+			}
+			return "id"
+		case strings.HasSuffix(propNameLower, "location"):
+			prefix := strings.TrimSuffix(propNameLower, "location")
+			if prefix != "" {
+				return prefix + "-location"
+			}
+			return "location"
+		case strings.HasSuffix(propNameLower, "status"):
+			prefix := strings.TrimSuffix(propNameLower, "status")
+			if prefix != "" {
+				return prefix + "-status"
+			}
+			return "status"
+		default:
+			return "object"
+		}
+	case "number", "integer":
+		if strings.Contains(propNameLower, "amount") ||
+			strings.Contains(propNameLower, "price") ||
+			strings.Contains(propNameLower, "cost") {
+			return "monetary-value"
+		}
+		return "number"
+	case "boolean":
+		return "boolean"
+	case "array":
+		return "collection"
+	default:
+		return "object"
+	}
+}
+
+// inferParentType determines the parent type based on the type name
+func (g *PDDLDomainGenerator) inferParentType(typeName string) string {
+	switch {
+	case strings.HasSuffix(typeName, "-id"):
+		return "id"
+	case strings.HasSuffix(typeName, "-location"):
+		return "location"
+	case strings.HasSuffix(typeName, "-status"):
+		return "status"
+	case strings.HasSuffix(typeName, "-value"):
+		return "number"
+	default:
+		return "" // No parent type
+	}
+}
+
+func (g *PDDLDomainGenerator) inferTypeFromParam(param interface{}, subtasks []*SubTask) string {
+	// First check service schemas for type information
+	for _, task := range subtasks {
+		if task.ExpectedInput.Properties != nil {
+			for propName, propSpec := range task.ExpectedInput.Properties {
+				// Check if this parameter is used in the input
+				if inputVal, ok := task.Input[propName]; ok {
+					if fmt.Sprintf("%v", inputVal) == fmt.Sprintf("%v", param) {
+						// Use our new inferDetailedType method
+						return g.inferDetailedType(propSpec.Type, propName)
+					}
+				}
+			}
+		}
+	}
+
+	// Fallback to type inference based on the parameter value
+	switch v := param.(type) {
+	case float64, int, int64:
+		return g.inferDetailedType("number", "")
+	case bool:
+		return g.inferDetailedType("boolean", "")
+	case string:
+		// Try to infer type from the string value itself
+		strValue := v
+		switch {
+		case strings.Contains(strings.ToLower(strValue), "id"):
+			return g.inferDetailedType("string", strValue)
+		default:
+			return g.inferDetailedType("string", "")
+		}
+	default:
+		return g.inferDetailedType("", "")
+	}
+}
 
 func (g *PDDLDomainGenerator) addPredicates(_ *strings.Builder, _ *GroundingUseCase) {}
 
