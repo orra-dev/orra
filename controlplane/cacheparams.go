@@ -82,7 +82,7 @@ func substituteTask0Params(content string, originalInput, newParams json.RawMess
 	// Parse the calling plan
 	var plan ServiceCallingPlan
 	if err := json.Unmarshal([]byte(content), &plan); err != nil {
-		return "", fmt.Errorf("failed to parse calling plan: %w", err)
+		return "", fmt.Errorf("failed to parse calling plan for task0 param substitution: %w", err)
 	}
 
 	// Parse original Task0 input

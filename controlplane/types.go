@@ -334,6 +334,13 @@ type VectorCache struct {
 	logger        zerolog.Logger
 }
 
+type CacheQuery struct {
+	actionWithFields string
+	actionParams     ActionParams
+	actionVector     *mat.VecDense
+	servicesHash     string
+}
+
 // CompensationResult stores the outcome of a compensation attempt
 type CompensationResult struct {
 	Status  CompensationStatus   `json:"status"`

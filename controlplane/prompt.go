@@ -67,7 +67,27 @@ func generateDomainContext(useCases []GroundingUseCase, constraints []string) st
 	return sb.String()
 }
 
-func generatePlannerPrompt(action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec) string {
+func buildPromptExtras(domainContext, backPromptContext string) string {
+	dc := strings.TrimSpace(domainContext)
+	bc := strings.TrimSpace(backPromptContext)
+
+	var parts []string
+	if dc != "" {
+		parts = append(parts, dc)
+	}
+	if bc != "" {
+		parts = append(parts, fmt.Sprintf("Context from previous attempt:\n%s", bc))
+	}
+
+	result := strings.Join(parts, "\n\n")
+	if result != "" {
+		result += "\n"
+	}
+
+	return result
+}
+
+func buildPlannerPrompt(action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, backPromptContext string) string {
 	var (
 		useCases    []GroundingUseCase
 		constraints []string
@@ -78,6 +98,7 @@ func generatePlannerPrompt(action string, actionParams json.RawMessage, serviceD
 		constraints = grounding.Constraints
 	}
 
+	promptExtras := buildPromptExtras(generateDomainContext(useCases, constraints), backPromptContext)
 	prompt := fmt.Sprintf(`You are an AI orchestrator tasked with planning the execution of services based on a user's action. A user's action contains PARAMS for the action to be executed, USE THEM. Your goal is to create an efficient, parallel execution plan that fulfills the user's request.
 
 Available Services:
@@ -95,15 +116,16 @@ Guidelines:
 3. Each task MUST have a unique ID, which is strictly increasing.
 4. With the excpetion of Task 0, whose inputs are constants derived from the User Action, inputs for other tasks have to be outputs from preceding tasks. In the latter case, use the format $taskId to denote the ID of the previous task whose output will be the input.
 5. There can only be a single Task 0, other tasks HAVE TO CORRESPOND TO AVAILABLE SERVICES.
-6. Ensure the plan maximizes parallelizability.
-7. Only use the provided services.
+6. Task 0 should not be assigned a service, as it is a placeholder for inputs that are constants derived from the User Action params.
+7. When assigning service IDs to tasks, PLEASE PRESERVE THE EXACT ORIGINAL CASING of the IDs because they are case sensitive.
+8. Ensure the plan maximizes parallelizability.
+9. Only use the provided services, NEVER introduce new services other than the ones provided.
 	- If a query cannot be addressed using these, USE A "final" TASK TO SUGGEST THE NEXT STEPS.
-		- The final task MUST have "final" as the task ID.
+		- The final task MUST have "final" as the task ID: { "id": "final".
 		- The final task DOES NOT require a service.
 		- The final task input PARAM key should be "error" and the value should explain why the query cannot be addressed.   
-		- NO OTHER TASKS ARE REQUIRED. 
-8. Never explain the plan with comments.
-9. Never introduce new services other than the ones provided.
+		- EXCEPT FOR TASK 0, NO OTHER TASKS ARE REQUIRED AND SHOULD BE REMOVED. 
+10. NEVER explain the plan with comments.
 
 Please generate a plan in the following JSON format:
 
@@ -142,7 +164,7 @@ Generate the execution plan:`,
 		serviceDescriptions,
 		action,
 		string(actionParams),
-		generateDomainContext(useCases, constraints),
+		promptExtras,
 	)
 
 	return prompt
