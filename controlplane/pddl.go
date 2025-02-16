@@ -7,9 +7,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/rs/zerolog"
 )
 
 // PDDLDomainGenerator handles converting grounding specs to PDDL
@@ -17,13 +20,17 @@ type PDDLDomainGenerator struct {
 	planAction    string
 	executionPlan *ExecutionPlan
 	groundingSpec *GroundingSpec
+	matcher       *Matcher
+	logger        zerolog.Logger
 }
 
-func NewPDDLDomainGenerator(action string, plan *ExecutionPlan, spec *GroundingSpec) *PDDLDomainGenerator {
+func NewPDDLDomainGenerator(action string, plan *ExecutionPlan, spec *GroundingSpec, matcher *Matcher, logger zerolog.Logger) *PDDLDomainGenerator {
 	return &PDDLDomainGenerator{
 		planAction:    action,
 		executionPlan: plan,
 		groundingSpec: spec,
+		matcher:       matcher,
+		logger:        logger,
 	}
 }
 
@@ -43,14 +50,14 @@ func (g *PDDLDomainGenerator) ShouldGenerateDomain() bool {
 }
 
 // GenerateDomain creates PDDL domain file content from matching use-case
-func (g *PDDLDomainGenerator) GenerateDomain() (string, error) {
+func (g *PDDLDomainGenerator) GenerateDomain(ctx context.Context) (string, error) {
 	if !g.ShouldGenerateDomain() {
 		return "", fmt.Errorf("no domain grounding available for PDDL generation")
 	}
 
 	// Find matching use-case based on execution plan
-	useCase := g.findMatchingUseCase()
-	if useCase == nil {
+	useCase, err := g.findMatchingUseCaseAgainstAction(ctx)
+	if err != nil {
 		return "", fmt.Errorf("no matching use-case found for execution plan")
 	}
 
@@ -75,29 +82,43 @@ func (g *PDDLDomainGenerator) GenerateDomain() (string, error) {
 	return domain.String(), nil
 }
 
-func (g *PDDLDomainGenerator) findMatchingUseCase() *GroundingUseCase {
+func (g *PDDLDomainGenerator) findMatchingUseCaseAgainstAction(ctx context.Context) (*GroundingUseCase, error) {
 	for _, useCase := range g.groundingSpec.UseCases {
-		if g.planActionMatches(useCase.Action) {
-			return &useCase
+		match, err := g.planActionMatches(ctx, useCase.Action)
+		if err != nil {
+			return nil, err
+		}
+		if match {
+			return &useCase, nil
 		}
 	}
 
-	return nil
+	return nil, fmt.Errorf("no matching use-case found for execution plan")
 }
 
-func (g *PDDLDomainGenerator) planActionMatches(useCaseAction string) bool {
-	// Convert use-case action pattern to regex
-	// e.g. "Handle customer inquiry about {orderId}"
-	// -> "Handle customer inquiry about .*"
-	pattern := regexp.QuoteMeta(useCaseAction)
-	pattern = strings.ReplaceAll(pattern, `\{[^}]+\}`, ".*")
+func (g *PDDLDomainGenerator) planActionMatches(ctx context.Context, useCaseAction string) (bool, error) {
+	normalizedPlanAction := g.normalizeActionPattern(g.planAction)
+	normalizedUseCase := g.normalizeActionPattern(useCaseAction)
 
-	re, err := regexp.Compile(pattern)
+	matches, score, err := g.matcher.MatchTexts(ctx, normalizedPlanAction, normalizedUseCase, 0.85)
 	if err != nil {
-		return false
+		return false, fmt.Errorf("failed to match actions: %w", err)
 	}
 
-	return re.MatchString(g.planAction)
+	g.logger.Debug().
+		Str("planAction", g.planAction).
+		Str("useCaseAction", normalizedUseCase).
+		Float64("score", score).
+		Bool("matches", matches).
+		Msg("Action similarity check")
+
+	return matches, nil
+}
+
+func (g *PDDLDomainGenerator) normalizeActionPattern(pattern string) string {
+	// Remove variable placeholders
+	vars := regexp.MustCompile(`\{[^}]+\}`)
+	return vars.ReplaceAllString(pattern, "")
 }
 
 func (g *PDDLDomainGenerator) addTypes(_ *strings.Builder, _ *GroundingUseCase) {}

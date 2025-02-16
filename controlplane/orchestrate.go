@@ -191,8 +191,9 @@ func (p *ControlPlane) attemptRetryablePreparation(
 ) error {
 	p.Logger.Trace().Str("retryCauseIfAny", retryCauseIfAny).Msg("")
 
-	// Decompose action with explicit retry context
+	ctx := context.Background()
 	callingPlan, cachedEntryID, err := p.decomposeAction(
+		ctx,
 		orchestration,
 		orchestration.Action.Content,
 		actionParams,
@@ -238,7 +239,7 @@ func (p *ControlPlane) attemptRetryablePreparation(
 		return PreparationError{Status: Failed, Err: fmt.Errorf("error enhancing execution plan with service details: %w", err)}
 	}
 
-	if err := p.validateExecPlanAgainstDomain(orchestration.ProjectID, orchestration.Action.Content, callingPlan); err != nil {
+	if err := p.validateExecPlanAgainstDomain(ctx, orchestration.ProjectID, orchestration.Action.Content, callingPlan); err != nil {
 		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
 		return PreparationError{Status: Failed, Err: fmt.Errorf("execution plan is invalid against domain: %w", err)}
 	}
@@ -341,9 +342,9 @@ func (p *ControlPlane) discoverProjectServices(projectID string) ([]*ServiceInfo
 	return out, nil
 }
 
-func (p *ControlPlane) decomposeAction(orchestration *Orchestration, action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, retryCauseIfAny string) (*ExecutionPlan, string, error) {
+func (p *ControlPlane) decomposeAction(ctx context.Context, orchestration *Orchestration, action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, retryCauseIfAny string) (*ExecutionPlan, string, error) {
 	planJson, cachedEntryID, _, err := p.VectorCache.Get(
-		context.Background(),
+		ctx,
 		orchestration.ProjectID,
 		action,
 		actionParams,
@@ -442,7 +443,7 @@ func (p *ControlPlane) validateSubTaskInputs(services []*ServiceInfo, subTasks [
 	return nil
 }
 
-func (p *ControlPlane) validateExecPlanAgainstDomain(projectID string, action string, plan *ExecutionPlan) error {
+func (p *ControlPlane) validateExecPlanAgainstDomain(ctx context.Context, projectID string, action string, plan *ExecutionPlan) error {
 	// Skip validation if no grounding was used
 	if plan.GroundingID == "" {
 		return nil
@@ -455,8 +456,9 @@ func (p *ControlPlane) validateExecPlanAgainstDomain(projectID string, action st
 	}
 
 	// Generate PDDL domain
-	generator := NewPDDLDomainGenerator(action, plan, spec)
-	_, err = generator.GenerateDomain()
+	matcher := NewMatcher(p.VectorCache.llmClient, p.Logger)
+	generator := NewPDDLDomainGenerator(action, plan, spec, matcher, p.Logger)
+	_, err = generator.GenerateDomain(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to generate PDDL domain: %w", err)
 	}
