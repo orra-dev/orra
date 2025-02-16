@@ -336,7 +336,7 @@ func (p *ControlPlane) discoverProjectServices(projectID string) ([]*ServiceInfo
 	return out, nil
 }
 
-func (p *ControlPlane) decomposeAction(orchestration *Orchestration, action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, retryCauseIfAny string) (*ServiceCallingPlan, string, error) {
+func (p *ControlPlane) decomposeAction(orchestration *Orchestration, action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, retryCauseIfAny string) (*ExecutionPlan, string, error) {
 	planJson, cachedEntryID, _, err := p.VectorCache.Get(
 		context.Background(),
 		orchestration.ProjectID,
@@ -350,7 +350,7 @@ func (p *ControlPlane) decomposeAction(orchestration *Orchestration, action stri
 		return nil, cachedEntryID, err
 	}
 
-	var result *ServiceCallingPlan
+	var result *ExecutionPlan
 	if err = json.Unmarshal([]byte(planJson), &result); err != nil {
 		return nil, cachedEntryID, fmt.Errorf("error parsing LLM response as JSON: %w", err)
 	}
@@ -360,6 +360,10 @@ func (p *ControlPlane) decomposeAction(orchestration *Orchestration, action stri
 	}
 
 	result.ProjectID = orchestration.ProjectID
+	if grounding != nil {
+		result.GroundingID = grounding.Name
+		result.GroundingVersion = grounding.Version
+	}
 
 	return result, cachedEntryID, nil
 }
@@ -463,7 +467,7 @@ func (p *ControlPlane) enhanceWithServiceDetails(services []*ServiceInfo, subTas
 
 func (p *ControlPlane) createAndStartWorkers(
 	orchestrationID string,
-	plan *ServiceCallingPlan,
+	plan *ExecutionPlan,
 	taskTimeout,
 	healthCheckGracePeriod time.Duration,
 ) {
@@ -570,7 +574,7 @@ func (p *ControlPlane) cleanupLogWorkers(orchestrationID string) {
 	}
 }
 
-func (p *ControlPlane) callingPlanMinusTaskZero(callingPlan *ServiceCallingPlan) (*SubTask, *ServiceCallingPlan) {
+func (p *ControlPlane) callingPlanMinusTaskZero(callingPlan *ExecutionPlan) (*SubTask, *ExecutionPlan) {
 	var taskZero *SubTask
 	var serviceTasks []*SubTask
 
@@ -582,7 +586,7 @@ func (p *ControlPlane) callingPlanMinusTaskZero(callingPlan *ServiceCallingPlan)
 		serviceTasks = append(serviceTasks, subTask)
 	}
 
-	return taskZero, &ServiceCallingPlan{
+	return taskZero, &ExecutionPlan{
 		ProjectID:      callingPlan.ProjectID,
 		Tasks:          serviceTasks,
 		ParallelGroups: callingPlan.ParallelGroups,

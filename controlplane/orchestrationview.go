@@ -132,7 +132,7 @@ func (p *ControlPlane) GetOrchestrationList(projectID string) OrchestrationListV
 	}
 }
 
-func (p *ControlPlane) processCompensationSummary(entries []LogEntry, plan *ServiceCallingPlan) *CompensationSummary {
+func (p *ControlPlane) processCompensationSummary(entries []LogEntry, plan *ExecutionPlan) *CompensationSummary {
 	if plan == nil {
 		return nil
 	}

@@ -65,7 +65,7 @@ type Project struct {
 type OrchestrationState struct {
 	ID            string
 	ProjectID     string
-	Plan          *ServiceCallingPlan
+	Plan          *ExecutionPlan
 	TasksStatuses map[string]Status
 	Status        Status
 	CreatedAt     time.Time
@@ -209,18 +209,18 @@ type ServiceInfo struct {
 }
 
 type Orchestration struct {
-	ID                     string              `json:"id"`
-	ProjectID              string              `json:"-"`
-	Action                 Action              `json:"action"`
-	Params                 ActionParams        `json:"data"`
-	Plan                   *ServiceCallingPlan `json:"plan"`
-	Results                []json.RawMessage   `json:"results"`
-	Status                 Status              `json:"status"`
-	Error                  json.RawMessage     `json:"error,omitempty"`
-	Timestamp              time.Time           `json:"timestamp"`
-	Timeout                *Duration           `json:"timeout,omitempty"`
-	HealthCheckGracePeriod *Duration           `json:"healthCheckGracePeriod,omitempty"`
-	Webhook                string              `json:"webhook"`
+	ID                     string            `json:"id"`
+	ProjectID              string            `json:"-"`
+	Action                 Action            `json:"action"`
+	Params                 ActionParams      `json:"data"`
+	Plan                   *ExecutionPlan    `json:"plan"`
+	Results                []json.RawMessage `json:"results"`
+	Status                 Status            `json:"status"`
+	Error                  json.RawMessage   `json:"error,omitempty"`
+	Timestamp              time.Time         `json:"timestamp"`
+	Timeout                *Duration         `json:"timeout,omitempty"`
+	HealthCheckGracePeriod *Duration         `json:"healthCheckGracePeriod,omitempty"`
+	Webhook                string            `json:"webhook"`
 	taskZero               json.RawMessage
 }
 
@@ -262,11 +262,13 @@ type ActionParam struct {
 	Value string `json:"value"`
 }
 
-// ServiceCallingPlan represents the execution plan for services and agents
-type ServiceCallingPlan struct {
-	ProjectID      string          `json:"-"`
-	Tasks          []*SubTask      `json:"tasks"`
-	ParallelGroups []ParallelGroup `json:"parallel_groups"`
+// ExecutionPlan represents the execution plan for services and agents
+type ExecutionPlan struct {
+	ProjectID        string          `json:"-"`
+	Tasks            []*SubTask      `json:"tasks"`
+	ParallelGroups   []ParallelGroup `json:"parallel_groups"`
+	GroundingID      string          `json:"-"`
+	GroundingVersion string          `json:"-"`
 }
 
 type ParallelGroup []string
@@ -274,7 +276,7 @@ type ParallelGroup []string
 type DependencyKeySet map[string]struct{}
 type TaskDependenciesWithKeys map[string][]TaskDependencyMapping
 
-// SubTask represents a single task in the ServiceCallingPlan
+// SubTask represents a single task in the ExecutionPlan
 type SubTask struct {
 	ID             string         `json:"id"`
 	Service        string         `json:"service"`

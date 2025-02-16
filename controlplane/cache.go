@@ -182,7 +182,7 @@ func (c *VectorCache) getWithRetry(ctx context.Context, projectID, action string
 		Str("actionWithFields", actionWithFields).
 		Msg("CACHE MISS")
 
-	planJson, err := c.genExecutionPlan(ctx, action, rawActionParams, serviceDescriptions, grounding, backPromptContext)
+	planJson, err := c.genExecutionPlanJson(ctx, action, rawActionParams, serviceDescriptions, grounding, backPromptContext)
 	if err != nil {
 		return nil, err
 	}
@@ -240,8 +240,8 @@ func (c *VectorCache) lookupProjectCache(projectID string, query CacheQuery) (*C
 	return nil, false
 }
 
-// genExecutionPlan queries the LLM and extracts the execution plan.
-func (c *VectorCache) genExecutionPlan(ctx context.Context, action string, rawActionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, backPromptContext string) (string, error) {
+// genExecutionPlanJson queries the LLM and extracts the execution plan.
+func (c *VectorCache) genExecutionPlanJson(ctx context.Context, action string, rawActionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, backPromptContext string) (string, error) {
 	prompt := buildPlannerPrompt(action, rawActionParams, serviceDescriptions, grounding, backPromptContext)
 	llmResp, err := c.llmClient.Generate(ctx, prompt)
 	if err != nil {
@@ -438,7 +438,7 @@ func (c *CacheEntry) MatchesActionParams(actionParams ActionParams) bool {
 
 // extractTaskZeroInput extracts the input parameters from task0 in the calling plan
 func extractTaskZeroInput(content string) (json.RawMessage, error) {
-	var plan ServiceCallingPlan
+	var plan ExecutionPlan
 	if err := json.Unmarshal([]byte(content), &plan); err != nil {
 		return nil, fmt.Errorf("failed to parse execution plan: %w", err)
 	}
