@@ -150,6 +150,31 @@ func (p *ControlPlane) GetService(projectID string, serviceID string) (*ServiceI
 	return svc, nil
 }
 
+func (p *ControlPlane) GetGroundingSpec(projectID string, name, version string) (*GroundingSpec, error) {
+	p.groundingsMu.RLock()
+	defer p.groundingsMu.RUnlock()
+
+	groundings, exists := p.groundings[projectID]
+	if !exists {
+		return nil, fmt.Errorf("project %s has no applied domain groudings", projectID)
+	}
+
+	spec, exists := groundings[name]
+	if !exists {
+		return nil, fmt.Errorf("domain grounding %s not found for project %s", name, projectID)
+	}
+
+	if spec.Version != version {
+		return nil,
+			fmt.Errorf(
+				"domain grounding %s project %s mismatches required version %s",
+				name,
+				projectID,
+				version)
+	}
+	return spec, nil
+}
+
 func (p *ControlPlane) GetServiceName(projectID string, serviceID string) (string, error) {
 	service, err := p.GetService(projectID, serviceID)
 	if err != nil {

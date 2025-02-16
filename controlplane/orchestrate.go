@@ -233,9 +233,14 @@ func (p *ControlPlane) attemptRetryablePreparation(
 	}
 
 	// Enhance with service details
-	if err := p.enhanceWithServiceDetails(services, onlyServicesCallingPlan.Tasks); err != nil {
+	if err := p.enhanceWithServiceDetails(services, callingPlan.Tasks); err != nil {
 		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
 		return PreparationError{Status: Failed, Err: fmt.Errorf("error enhancing execution plan with service details: %w", err)}
+	}
+
+	if err := p.validateExecPlanAgainstDomain(orchestration.ProjectID, orchestration.Action.Content, callingPlan); err != nil {
+		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
+		return PreparationError{Status: Failed, Err: fmt.Errorf("execution plan is invalid against domain: %w", err)}
 	}
 
 	// Store the final plan
@@ -437,6 +442,33 @@ func (p *ControlPlane) validateSubTaskInputs(services []*ServiceInfo, subTasks [
 	return nil
 }
 
+func (p *ControlPlane) validateExecPlanAgainstDomain(projectID string, action string, plan *ExecutionPlan) error {
+	// Skip validation if no grounding was used
+	if plan.GroundingID == "" {
+		return nil
+	}
+
+	// Get grounding spec
+	spec, err := p.GetGroundingSpec(projectID, plan.GroundingID, plan.GroundingVersion)
+	if err != nil {
+		return err
+	}
+
+	// Generate PDDL domain
+	generator := NewPDDLDomainGenerator(action, plan, spec)
+	_, err = generator.GenerateDomain()
+	if err != nil {
+		return fmt.Errorf("failed to generate PDDL domain: %w", err)
+	}
+
+	// Next steps would be:
+	// 1. Generate PDDL problem file from execution plan
+	// 2. Validate using VAL
+	// ...
+
+	return nil
+}
+
 func (s *SubTask) InputKeys() []string {
 	var out []string
 	for k := range s.Input {
@@ -452,6 +484,10 @@ func (p *ControlPlane) enhanceWithServiceDetails(services []*ServiceInfo, subTas
 	}
 
 	for _, subTask := range subTasks {
+		if strings.EqualFold(subTask.ID, TaskZero) {
+			continue
+		}
+
 		service, ok := serviceMap[subTask.Service]
 		if !ok {
 			return fmt.Errorf("service %s not found for subtask %s", subTask.Service, subTask.ID)
