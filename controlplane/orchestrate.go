@@ -458,10 +458,15 @@ func (p *ControlPlane) validateExecPlanAgainstDomain(ctx context.Context, projec
 	// Generate PDDL domain
 	matcher := NewMatcher(p.VectorCache.llmClient, p.Logger)
 	generator := NewPDDLDomainGenerator(action, plan, spec, matcher, p.Logger)
-	_, err = generator.GenerateDomain(ctx)
+	domain, err := generator.GenerateDomain(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to generate PDDL domain: %w", err)
 	}
+
+	p.Logger.Trace().
+		Str("Action", action).
+		Str("Domain", domain).
+		Msg("Generate PDDL domain")
 
 	// Next steps would be:
 	// 1. Generate PDDL problem file from execution plan
