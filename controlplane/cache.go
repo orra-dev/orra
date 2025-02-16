@@ -25,6 +25,7 @@ func NewVectorCache(llmClient *LLMClient, maxSize int, ttl time.Duration, logger
 	return &VectorCache{
 		projectCaches: make(map[string]*ProjectCache),
 		llmClient:     llmClient,
+		matcher:       NewMatcher(llmClient, logger),
 		ttl:           ttl,
 		maxSize:       maxSize,
 		logger:        logger,
@@ -58,7 +59,7 @@ func (pc *ProjectCache) findBestMatch(query CacheQuery) (*CacheEntry, float64) {
 			continue
 		}
 
-		score := cosineSimilarity(query.actionVector, entry.ActionVector)
+		score := CosineSimilarity(query.actionVector, entry.ActionVector)
 
 		pc.logger.Debug().
 			Str("ActionWithFields", query.actionWithFields).
@@ -78,29 +79,6 @@ func (pc *ProjectCache) findBestMatch(query CacheQuery) (*CacheEntry, float64) {
 	}
 
 	return bestEntry, bestScore
-}
-
-func cosineSimilarity(a, b *mat.VecDense) float64 {
-	if a.Len() != b.Len() {
-		return -1
-	}
-
-	dotProduct := mat.Dot(a, b)
-	normA := mat.Norm(a, 2)
-	normB := mat.Norm(b, 2)
-
-	if normA == 0 || normB == 0 {
-		return 0
-	}
-
-	return dotProduct / (normA * normB)
-}
-
-func normalizeVector(v *mat.VecDense) {
-	norm := mat.Norm(v, 2)
-	if norm != 0 {
-		v.ScaleVec(1/norm, v)
-	}
 }
 
 func (c *VectorCache) getProjectCache(projectID string) *ProjectCache {
@@ -161,11 +139,11 @@ func (c *VectorCache) getWithRetry(ctx context.Context, projectID, action string
 		Msg("Hashed serviceDescriptions for cache evaluation")
 
 	actionWithFields := fmt.Sprintf("%s:::%s", action, actionParams.String())
-	actionVector, err := c.generateEmbeddingVector(ctx, actionWithFields)
+	actionVector, err := c.matcher.GenerateEmbeddingVector(ctx, actionWithFields)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate embedding for action with param fields: %w", err)
 	}
-	normalizeVector(actionVector)
+	NormalizeVector(actionVector)
 
 	query := CacheQuery{
 		actionWithFields: actionWithFields,
@@ -385,22 +363,6 @@ func (c *VectorCache) cleanup() {
 			Int("remainingEntries", validIdx).
 			Msg("Cleaned project cache")
 	}
-}
-
-func (c *VectorCache) generateEmbeddingVector(ctx context.Context, text string) (*mat.VecDense, error) {
-	c.logger.Debug().Str("Text", text).Msg("generate embedding vector")
-	embeddings, err := c.llmClient.CreateEmbeddings(ctx, text)
-	if err != nil {
-		return nil, err
-	}
-
-	// Convert to dense vector
-	embeddingVector := mat.NewVecDense(len(embeddings), nil)
-	for i, v := range embeddings {
-		embeddingVector.SetVec(i, float64(v))
-	}
-
-	return embeddingVector, nil
 }
 
 func (p ActionParams) String() string {

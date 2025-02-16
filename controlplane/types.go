@@ -330,6 +330,7 @@ type VectorCache struct {
 	mu            sync.RWMutex
 	projectCaches map[string]*ProjectCache
 	llmClient     *LLMClient
+	matcher       *Matcher
 	ttl           time.Duration
 	maxSize       int // Per project
 	group         singleflight.Group
