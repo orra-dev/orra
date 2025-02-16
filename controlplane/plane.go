@@ -335,7 +335,7 @@ func (p *ControlPlane) GenerateAPIKey() string {
 }
 
 func (p *ControlPlane) GenerateServiceKey() string {
-	return fmt.Sprintf("s_%s", short.New())
+	return fmt.Sprintf("s_%s", short.NewWithAlphabet("abcdefghijklmnopqrstuvwxyz"))
 }
 
 func (p *ControlPlane) GetProjectIDForService(serviceID string) (string, error) {

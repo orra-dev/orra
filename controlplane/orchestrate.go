@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,9 +18,35 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	back "github.com/cenkalti/backoff/v4"
 )
 
-func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orchestration, specs []GroundingSpec) {
+const (
+	maxPreparationRetries = 2
+)
+
+type PreparationError struct {
+	Status Status
+	Err    error
+}
+
+func (e PreparationError) Error() string {
+	return fmt.Sprintf("preparation failed with status %s: %v", e.Status, e.Err)
+}
+
+func (p *ControlPlane) prepForError(orchestration *Orchestration, err error, status Status) {
+	p.Logger.Error().
+		Str("OrchestrationID", orchestration.ID).
+		Err(err)
+	orchestration.Status = status
+	orchestration.Timestamp = time.Now().UTC()
+	marshaledErr, _ := json.Marshal(err.Error())
+	orchestration.Error = marshaledErr
+}
+
+func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orchestration, specs []GroundingSpec) error {
+	// Initial setup and validation that shouldn't be retried
 	orchestration.ID = p.GenerateOrchestrationKey()
 	orchestration.Status = Pending
 	orchestration.Timestamp = time.Now().UTC()
@@ -29,95 +56,192 @@ func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orc
 	p.orchestrationStore[orchestration.ID] = orchestration
 	p.orchestrationStoreMu.Unlock()
 
-	prepForError := func(orchestration *Orchestration, err error) {
-		p.Logger.Error().
-			Str("OrchestrationID", orchestration.ID).
-			Err(err)
-		orchestration.Status = Failed
-		orchestration.Timestamp = time.Now().UTC()
-		marshaledErr, _ := json.Marshal(err.Error())
-		orchestration.Error = marshaledErr
-	}
-
+	// Non-retryable validations
 	if err := p.validateWebhook(orchestration.ProjectID, orchestration.Webhook); err != nil {
-		prepForError(orchestration, fmt.Errorf("invalid orchestration: %w", err))
-		return
+		err = fmt.Errorf("invalid orchestration: %w", err)
+		p.prepForError(orchestration, err, Failed)
+		return err
 	}
 
 	services, err := p.discoverProjectServices(orchestration.ProjectID)
 	if err != nil {
-		prepForError(orchestration, fmt.Errorf("error discovering services: %w", err))
-		return
+		err = fmt.Errorf("error discovering services: %w", err)
+		p.prepForError(orchestration, err, Failed)
+		return err
 	}
 
 	serviceDescriptions, err := p.serviceDescriptions(services)
 	if err != nil {
-		prepForError(orchestration, fmt.Errorf("failed to create service descriptions required for prompting: %w", err))
-		return
+		err = fmt.Errorf("failed to create service descriptions: %w", err)
+		p.prepForError(orchestration, err, Failed)
+		return err
 	}
 
 	actionParams, err := orchestration.Params.Json()
 	if err != nil {
-		prepForError(orchestration, fmt.Errorf("failed to convert action parameters to prompt friendly format: %w", err))
-		return
+		err = fmt.Errorf("failed to convert action parameters: %w", err)
+		p.prepForError(orchestration, err, Failed)
+		return err
 	}
 
-	var targetGrounding *GroundingSpec
-	if len(specs) > 0 {
-		targetGrounding = &specs[0]
+	// Configure exponential backoff for retryable operations
+	expBackoff := back.NewExponentialBackOff()
+	expBackoff.InitialInterval = 2 * time.Second
+	expBackoff.MaxInterval = 10 * time.Second
+	expBackoff.Multiplier = 2.0
+	expBackoff.RandomizationFactor = 0.1
+	expBackoff.MaxElapsedTime = 30 * time.Second
+	expBackoff.Reset()
+
+	var consecutiveRetries int
+	var errorFeedback string
+
+	// Setup retry operation
+	operation := func() error {
+		var targetGrounding *GroundingSpec
+		if len(specs) > 0 {
+			targetGrounding = &specs[0]
+		}
+
+		// Attempt the retryable portion of execution plan preparation
+		err := p.attemptRetryablePreparation(
+			orchestration,
+			services,
+			actionParams,
+			serviceDescriptions,
+			targetGrounding,
+			errorFeedback,
+		)
+		if err == nil {
+			return nil
+		}
+
+		// Handle different error types
+		var prepErr PreparationError
+		if errors.As(err, &prepErr) {
+			switch prepErr.Status {
+			case NotActionable:
+				// NotActionable errors are permanent
+				return back.Permanent(prepErr)
+
+			case Failed:
+				if consecutiveRetries > 0 {
+					type multiError interface {
+						Unwrap() []error
+					}
+					var mErr multiError
+					if errors.As(prepErr.Err, &mErr) {
+						errorFeedback = "Validation Errors:\n"
+						for _, vErr := range mErr.Unwrap() {
+							errorFeedback += fmt.Sprintf("- %s\n", vErr)
+						}
+						p.Logger.Trace().Str("errorFeedback", errorFeedback).Msg("multiError")
+					} else {
+						errorFeedback = prepErr.Err.Error()
+						p.Logger.Trace().Str("errorFeedback", errorFeedback).Msg("singleError")
+					}
+				}
+
+				// Check retry count
+				if consecutiveRetries < maxPreparationRetries {
+					consecutiveRetries++
+					return prepErr
+				}
+				return back.Permanent(fmt.Errorf("exceeded maximum retries (%d): %w", maxPreparationRetries, prepErr.Err))
+
+			default:
+				return back.Permanent(prepErr)
+			}
+		}
+
+		// Non-PreparationError errors are permanent
+		return back.Permanent(err)
 	}
 
-	callingPlan, err := p.decomposeAction(
+	// Execute the retry operation with notifications
+	err = back.RetryNotify(operation, expBackoff, func(err error, duration time.Duration) {
+		p.Logger.Info().
+			Err(err).
+			Str("orchestrationID", orchestration.ID).
+			Dur("retryAfter", duration).
+			Int("retryAttempt", consecutiveRetries).
+			Msg("Retrying orchestration preparation")
+	})
+
+	if err != nil {
+		var prepErr PreparationError
+		if errors.As(err, &prepErr) {
+			p.prepForError(orchestration, prepErr.Err, prepErr.Status)
+		} else {
+			p.prepForError(orchestration, err, Failed)
+		}
+		return err
+	}
+
+	return nil
+}
+
+func (p *ControlPlane) attemptRetryablePreparation(
+	orchestration *Orchestration,
+	services []*ServiceInfo,
+	actionParams json.RawMessage,
+	serviceDescriptions string,
+	grounding *GroundingSpec,
+	retryCauseIfAny string,
+) error {
+	p.Logger.Trace().Str("retryCauseIfAny", retryCauseIfAny).Msg("")
+
+	// Decompose action with explicit retry context
+	callingPlan, cachedEntryID, err := p.decomposeAction(
 		orchestration,
 		orchestration.Action.Content,
 		actionParams,
 		serviceDescriptions,
-		targetGrounding,
+		grounding,
+		retryCauseIfAny,
 	)
 	if err != nil {
-		prepForError(orchestration, fmt.Errorf("error decomposing action: %w", err))
-		return
+		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
+		return PreparationError{Status: Failed, Err: fmt.Errorf("failed to generate execution plan: %w", err)}
 	}
 
+	// Validate actionable - NotActionable is a permanent error
 	if err := p.validateActionable(callingPlan.Tasks); err != nil {
-		orchestration.Plan = callingPlan
-		orchestration.Status = NotActionable
-		orchestration.Timestamp = time.Now().UTC()
-		marshaledErr, _ := json.Marshal(err.Error())
-		orchestration.Error = marshaledErr
-		return
+		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
+		return PreparationError{Status: NotActionable, Err: err}
 	}
 
+	// Process and validate the rest of the plan
 	taskZero, onlyServicesCallingPlan := p.callingPlanMinusTaskZero(callingPlan)
 	if taskZero == nil {
-		orchestration.Plan = callingPlan
-		prepForError(orchestration, fmt.Errorf("error locating task zero in calling plan"))
-		return
+		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
+		return PreparationError{Status: Failed, Err: fmt.Errorf("task zero should be in execution plan but was not located")}
 	}
 
 	taskZeroInput, err := json.Marshal(taskZero.Input)
 	if err != nil {
-		prepForError(orchestration, fmt.Errorf("failed to convert task zero into valid params: %w", err))
-		return
+		err := fmt.Errorf("failed to convert task zero to raw JSON so it can be used as the initial log entry in audit logs: %w", err)
+		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
+		return PreparationError{Status: Failed, Err: err}
 	}
 
-	if err = p.validateInput(services, onlyServicesCallingPlan.Tasks); err != nil {
-		prepForError(orchestration, fmt.Errorf("error validating plan input/output: %w", err))
-		return
+	// Validate subtask inputs
+	if err = p.validateSubTaskInputs(services, onlyServicesCallingPlan.Tasks); err != nil {
+		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
+		// This error might contain multiple validation errors joined together
+		return PreparationError{Status: Failed, Err: fmt.Errorf("execution plan input/output failed validation: %w", err)}
 	}
 
+	// Enhance with service details
 	if err := p.enhanceWithServiceDetails(services, onlyServicesCallingPlan.Tasks); err != nil {
-		prepForError(orchestration, fmt.Errorf("error enhancing calling plan with service details: %w", err))
-		return
+		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
+		return PreparationError{Status: Failed, Err: fmt.Errorf("error enhancing execution plan with service details: %w", err)}
 	}
 
-	p.Logger.Trace().
-		Str("OrchestrationID", orchestration.ID).
-		Interface("ServiceCallingPlan", onlyServicesCallingPlan).
-		Msg("enhanced service calling plan")
-
+	// Store the final plan
 	orchestration.Plan = onlyServicesCallingPlan
 	orchestration.taskZero = taskZeroInput
+	return nil
 }
 
 func (p *ControlPlane) ExecuteOrchestration(orchestration *Orchestration) {
@@ -136,9 +260,12 @@ func (p *ControlPlane) ExecuteOrchestration(orchestration *Orchestration) {
 	)
 
 	initialEntry := NewLogEntry("task_output", TaskZero, orchestration.taskZero, "control-panel", 0)
-
-	p.Logger.Debug().Msgf("About to append initial entry to Log for orchestration %s", orchestration.ID)
 	log.Append(initialEntry)
+	p.Logger.
+		Trace().
+		Str("OrchestrationID", orchestration.ID).
+		Interface("InitialEntry", initialEntry).
+		Msg("Appended initial entry to Log")
 }
 
 func (p *ControlPlane) FinalizeOrchestration(
@@ -209,40 +336,32 @@ func (p *ControlPlane) discoverProjectServices(projectID string) ([]*ServiceInfo
 	return out, nil
 }
 
-func (p *ControlPlane) decomposeAction(
-	orchestration *Orchestration,
-	action string,
-	actionParams json.RawMessage,
-	serviceDescriptions string,
-	grounding *GroundingSpec,
-) (*ServiceCallingPlan, error) {
-	resp, cachedEntryID, _, err := p.VectorCache.Get(
+func (p *ControlPlane) decomposeAction(orchestration *Orchestration, action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, retryCauseIfAny string) (*ServiceCallingPlan, string, error) {
+	planJson, cachedEntryID, _, err := p.VectorCache.Get(
 		context.Background(),
 		orchestration.ProjectID,
 		action,
 		actionParams,
 		serviceDescriptions,
 		grounding,
+		retryCauseIfAny,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("error calling OpenAI API: %v", err)
+		return nil, cachedEntryID, err
 	}
 
 	var result *ServiceCallingPlan
-	sanitisedJSON := sanitizeJSONOutput(resp)
-	p.Logger.Debug().
-		Str("Sanitized JSON", sanitisedJSON).
-		Msg("Service calling plan")
+	if err = json.Unmarshal([]byte(planJson), &result); err != nil {
+		return nil, cachedEntryID, fmt.Errorf("error parsing LLM response as JSON: %w", err)
+	}
 
-	err = json.Unmarshal([]byte(sanitisedJSON), &result)
-	if err != nil {
-		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
-		return nil, fmt.Errorf("error parsing LLM response as JSON: %w", err)
+	for i := 0; i < len(result.Tasks); i++ {
+		result.Tasks[i].Service = strings.ToLower(result.Tasks[i].Service)
 	}
 
 	result.ProjectID = orchestration.ProjectID
 
-	return result, nil
+	return result, cachedEntryID, nil
 }
 
 func (p *ControlPlane) validateWebhook(projectID string, webhookUrl string) error {
@@ -262,26 +381,64 @@ func (p *ControlPlane) validateWebhook(projectID string, webhookUrl string) erro
 	return nil
 }
 
-func (p *ControlPlane) validateInput(services []*ServiceInfo, subTasks []*SubTask) error {
-	serviceMap := make(map[string]*ServiceInfo)
+// validateSubTaskInputs checks that each subTask's input keys are valid for its service
+// and that every required key provided by the service is present in the subTask.
+func (p *ControlPlane) validateSubTaskInputs(services []*ServiceInfo, subTasks []*SubTask) error {
+	// Build a lookup map for services.
+	serviceMap := make(map[string]*ServiceInfo, len(services))
 	for _, service := range services {
 		serviceMap[service.ID] = service
 	}
 
+	var validationErrors []error
+
+	// Process each subTask independently.
 	for _, subTask := range subTasks {
-		service, ok := serviceMap[subTask.Service]
+		svc, ok := serviceMap[subTask.Service]
 		if !ok {
-			return fmt.Errorf("service %s not found for subtask %s", subTask.Service, subTask.ID)
+			validationErrors = append(validationErrors,
+				fmt.Errorf("service %s not found for subtask %s", subTask.Service, subTask.ID))
+			continue
 		}
 
+		// Create a set of expected keys.
+		expectedKeys := svc.InputPropKeys()
+		expectedSet := make(map[string]struct{}, len(expectedKeys))
+		for _, key := range expectedKeys {
+			expectedSet[key] = struct{}{}
+		}
+
+		// Check that every input provided is allowed.
 		for inputKey := range subTask.Input {
-			if !service.Schema.InputIncludes(inputKey) {
-				return fmt.Errorf("input %s not supported by service %s for subtask %s", inputKey, subTask.Service, subTask.ID)
+			if _, ok := expectedSet[inputKey]; !ok {
+				validationErrors = append(validationErrors,
+					fmt.Errorf("input %s not supported by service %s for subtask %s", inputKey, svc.ID, subTask.ID))
+			}
+		}
+
+		// Check that every expected key is present.
+		for _, key := range expectedKeys {
+			if _, present := subTask.Input[key]; !present {
+				validationErrors = append(validationErrors,
+					fmt.Errorf("service %s is missing required input %s in subtask %s", svc.ID, key, subTask.ID))
 			}
 		}
 	}
 
+	if len(validationErrors) > 0 {
+		// Use errors.Join to compose a single error that wraps all the individual errors.
+		return fmt.Errorf("input validation errors: %w", errors.Join(validationErrors...))
+	}
+
 	return nil
+}
+
+func (s *SubTask) InputKeys() []string {
+	var out []string
+	for k := range s.Input {
+		out = append(out, k)
+	}
+	return out
 }
 
 func (p *ControlPlane) enhanceWithServiceDetails(services []*ServiceInfo, subTasks []*SubTask) error {
@@ -503,15 +660,6 @@ func (p *ControlPlane) triggerWebhook(orchestration *Orchestration) error {
 	return nil
 }
 
-func (s ServiceSchema) InputIncludes(src string) bool {
-	return s.Input.IncludesProp(src)
-}
-
-func (s Spec) IncludesProp(src string) bool {
-	_, ok := s.Properties[src]
-	return ok
-}
-
 func (s Spec) String() (string, error) {
 	data, err := json.Marshal(s)
 	if err != nil {
@@ -532,14 +680,41 @@ func (si *ServiceInfo) String() string {
 	return fmt.Sprintf("[%s] %s - %s", si.Type.String(), si.Name, si.Description)
 }
 
-func sanitizeJSONOutput(input string) string {
-	trimmed := strings.TrimSpace(input)
+func (si *ServiceInfo) InputPropKeys() []string {
+	var out []string
+	for k := range si.Schema.Input.Properties {
+		out = append(out, k)
+	}
+	return out
+}
 
-	if strings.HasPrefix(trimmed, "```json") && strings.HasSuffix(trimmed, "```") {
-		withoutStart := strings.TrimPrefix(trimmed, "```json")
-		withoutEnd := strings.TrimSuffix(withoutStart, "```")
-		return strings.TrimSpace(withoutEnd)
+func extractValidJSONOutput(input string) (string, error) {
+	// Define the markers to locate the JSON block.
+	startMarker := "```json"
+	endMarker := "```"
+
+	// Find the start of the JSON block.
+	startIdx := strings.Index(input, startMarker)
+	if startIdx == -1 {
+		// Return full input if the JSON start marker is not found.
+		return "", fmt.Errorf("cannot find opening JSON marker in %s", input)
 	}
 
-	return input
+	// Start after the marker.
+	startIdx += len(startMarker)
+
+	// Find the closing marker after the start.
+	endIdx := strings.Index(input[startIdx:], endMarker)
+	if endIdx == -1 {
+		// Return full input if no closing marker is found.
+		return "", fmt.Errorf("cannot find closing JSON marker in %s", input)
+	}
+
+	var temp map[string]any
+	jsonContent := strings.TrimSpace(input[startIdx : startIdx+endIdx])
+	if err := json.Unmarshal([]byte(jsonContent), &temp); err != nil {
+		return "", fmt.Errorf("cannot parse invalid JSON: %s", input)
+	}
+
+	return jsonContent, nil
 }

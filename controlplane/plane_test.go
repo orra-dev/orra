@@ -8,7 +8,11 @@ package main
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // Test cases to verify the implementation
@@ -39,5 +43,35 @@ func TestExtractDependencyID(t *testing.T) {
 					tc.expectedDepKey))
 			}
 		})
+	}
+}
+
+// TestGenerateServiceKeyFormat repeatedly calls GenerateServiceKey (100 times)
+// and verifies that each key starts with "s_" and contains only lowercase letters.
+func TestGenerateServiceKeyFormat(t *testing.T) {
+	cp := &ControlPlane{}
+	pattern := `^s_[a-z]+$`
+	regex, err := regexp.Compile(pattern)
+	assert.NoError(t, err, "failed to compile regex pattern")
+
+	for i := 0; i < 100; i++ {
+		key := cp.GenerateServiceKey()
+		assert.True(t, strings.HasPrefix(key, "s_"), "key %q should start with 's_'", key)
+		assert.True(t, regex.MatchString(key), "key %q does not match required pattern %q", key, pattern)
+	}
+}
+
+// TestGenerateServiceKeyUniqueness ensures that multiple generated keys are unique.
+func TestGenerateServiceKeyUniqueness(t *testing.T) {
+	cp := &ControlPlane{}
+	keyCount := 1000
+	keys := make(map[string]struct{}, keyCount)
+
+	for i := 0; i < keyCount; i++ {
+		key := cp.GenerateServiceKey()
+		if _, exists := keys[key]; exists {
+			t.Fatalf("duplicate key found: %s", key)
+		}
+		keys[key] = struct{}{}
 	}
 }

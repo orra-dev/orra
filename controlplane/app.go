@@ -25,6 +25,8 @@ import (
 
 const JSONMarshalingFail = "Orra:JSONMarshalingFail"
 const UnknownOrchestration = "Orra:UnknownOrchestration"
+const ActionNotActionable = "Orra:ActionNotActionable"
+const ActionCannotExecute = "Orra:ActionCannotExecute"
 
 type App struct {
 	Plane  *ControlPlane
@@ -215,20 +217,26 @@ func (app *App) OrchestrationsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app.Plane.PrepareOrchestration(project.ID, &orchestration, app.Plane.GetGroundingSpecs(project.ID))
-
-	if !orchestration.Executable() {
+	if err := app.Plane.PrepareOrchestration(project.ID, &orchestration, app.Plane.GetGroundingSpecs(project.ID)); err != nil {
 		app.Logger.
-			Debug().
+			Error().
+			Err(err).
+			Str("AttemptedOrchestration", orchestration.ID).
 			Str("Status", orchestration.Status.String()).
-			Msgf("Orchestration %s cannot be executed: %s", orchestration.ID, orchestration.Error)
+			Str("Action", orchestration.Action.Content).
+			Msgf("Action cannot be executed")
 
-		w.WriteHeader(http.StatusUnprocessableEntity)
-	} else {
-		app.Logger.Debug().Msgf("About to execute orchestration %s", orchestration.ID)
-		go app.Plane.ExecuteOrchestration(&orchestration)
-		w.WriteHeader(http.StatusAccepted)
+		if orchestration.Status == NotActionable {
+			errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(ActionNotActionable), err))
+		} else {
+			errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(ActionCannotExecute), err))
+		}
+		return
 	}
+
+	app.Logger.Debug().Msgf("About to execute orchestration %s", orchestration.ID)
+	go app.Plane.ExecuteOrchestration(&orchestration)
+	w.WriteHeader(http.StatusAccepted)
 
 	data, err := json.Marshal(orchestration)
 	if err != nil {

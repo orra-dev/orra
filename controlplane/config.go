@@ -102,6 +102,7 @@ type Status int
 
 const (
 	Registered Status = iota
+	Preparing
 	Pending
 	Processing
 	Completed
@@ -114,6 +115,8 @@ func (s Status) String() string {
 	switch s {
 	case Registered:
 		return "registered"
+	case Preparing:
+		return "preparing"
 	case Pending:
 		return "pending"
 	case Processing:
@@ -143,6 +146,8 @@ func (s *Status) UnmarshalJSON(data []byte) error {
 	switch strings.ToLower(strings.TrimSpace(val)) {
 	case "registered":
 		*s = Registered
+	case "preparing":
+		*s = Preparing
 	case "pending":
 		*s = Pending
 	case "processing":

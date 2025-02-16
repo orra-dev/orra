@@ -28,5 +28,11 @@ go.work
 # Plandex
 .plandex
 
+# Goose
+.goosehints
+
 # dotenv
 .env
+
+# text files
+*.txt
