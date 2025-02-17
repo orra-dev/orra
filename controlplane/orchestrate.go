@@ -192,7 +192,7 @@ func (p *ControlPlane) attemptRetryablePreparation(
 	p.Logger.Trace().Str("retryCauseIfAny", retryCauseIfAny).Msg("")
 
 	ctx := context.Background()
-	callingPlan, cachedEntryID, err := p.decomposeAction(
+	callingPlan, cachedEntryID, isHit, err := p.decomposeAction(
 		ctx,
 		orchestration,
 		orchestration.Action.Content,
@@ -226,11 +226,13 @@ func (p *ControlPlane) attemptRetryablePreparation(
 		return PreparationError{Status: Failed, Err: err}
 	}
 
-	// Validate subtask inputs
-	if err = p.validateSubTaskInputs(services, onlyServicesCallingPlan.Tasks); err != nil {
-		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
-		// This error might contain multiple validation errors joined together
-		return PreparationError{Status: Failed, Err: fmt.Errorf("execution plan input/output failed validation: %w", err)}
+	if !isHit {
+		// Validate subtask inputs
+		if err = p.validateSubTaskInputs(services, onlyServicesCallingPlan.Tasks); err != nil {
+			p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
+			// This error might contain multiple validation errors joined together
+			return PreparationError{Status: Failed, Err: fmt.Errorf("execution plan input/output failed validation: %w", err)}
+		}
 	}
 
 	// Enhance with service details
@@ -239,9 +241,11 @@ func (p *ControlPlane) attemptRetryablePreparation(
 		return PreparationError{Status: Failed, Err: fmt.Errorf("error enhancing execution plan with service details: %w", err)}
 	}
 
-	if err := p.validateExecPlanAgainstDomain(ctx, orchestration.ProjectID, orchestration.Action.Content, callingPlan); err != nil {
-		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
-		return fmt.Errorf("execution plan is invalid against domain: %w", err)
+	if !isHit {
+		if err := p.validateExecPlanAgainstDomain(ctx, orchestration.ProjectID, orchestration.Action.Content, callingPlan); err != nil {
+			p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
+			return fmt.Errorf("execution plan is invalid against domain: %w", err)
+		}
 	}
 
 	// Store the final plan
@@ -342,8 +346,9 @@ func (p *ControlPlane) discoverProjectServices(projectID string) ([]*ServiceInfo
 	return out, nil
 }
 
-func (p *ControlPlane) decomposeAction(ctx context.Context, orchestration *Orchestration, action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, retryCauseIfAny string) (*ExecutionPlan, string, error) {
-	planJson, cachedEntryID, _, err := p.VectorCache.Get(
+func (p *ControlPlane) decomposeAction(ctx context.Context, orchestration *Orchestration, action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, retryCauseIfAny string) (*ExecutionPlan, string, bool, error) {
+	//planJson, cachedEntryID, _, err := p.VectorCache.Get(
+	cacheResult, _, err := p.VectorCache.Get(
 		ctx,
 		orchestration.ProjectID,
 		action,
@@ -353,12 +358,12 @@ func (p *ControlPlane) decomposeAction(ctx context.Context, orchestration *Orche
 		retryCauseIfAny,
 	)
 	if err != nil {
-		return nil, cachedEntryID, err
+		return nil, cacheResult.ID, false, err
 	}
 
 	var result *ExecutionPlan
-	if err = json.Unmarshal([]byte(planJson), &result); err != nil {
-		return nil, cachedEntryID, fmt.Errorf("error parsing LLM response as JSON: %w", err)
+	if err = json.Unmarshal([]byte(cacheResult.Response), &result); err != nil {
+		return nil, cacheResult.ID, false, fmt.Errorf("error parsing LLM response as JSON: %w", err)
 	}
 
 	for i := 0; i < len(result.Tasks); i++ {
@@ -371,7 +376,7 @@ func (p *ControlPlane) decomposeAction(ctx context.Context, orchestration *Orche
 		result.GroundingVersion = grounding.Version
 	}
 
-	return result, cachedEntryID, nil
+	return result, cacheResult.ID, cacheResult.Hit, nil
 }
 
 func (p *ControlPlane) validateWebhook(projectID string, webhookUrl string) error {

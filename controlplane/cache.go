@@ -97,13 +97,13 @@ func (c *VectorCache) getProjectCache(projectID string) *ProjectCache {
 	return pc
 }
 
-func (c *VectorCache) Get(ctx context.Context, projectID, action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, backPromptContext string) (string, string, json.RawMessage, error) {
+func (c *VectorCache) Get(ctx context.Context, projectID, action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, backPromptContext string) (*CacheResult, json.RawMessage, error) {
 	result, err, _ := c.group.Do(fmt.Sprintf("%s:%s", projectID, action), func() (interface{}, error) {
 		return c.getWithRetry(ctx, projectID, action, actionParams, serviceDescriptions, grounding, backPromptContext)
 	})
 
 	if err != nil {
-		return "", "", nil, err
+		return nil, nil, err
 	}
 
 	cacheResult := result.(*CacheResult)
@@ -117,13 +117,13 @@ func (c *VectorCache) Get(ctx context.Context, projectID, action string, actionP
 			cacheResult.CacheMappings,
 		)
 		if err != nil {
-			return "", "", nil, err
+			return nil, nil, err
 		}
-		modifiedResponse = newContent
-		return modifiedResponse, cacheResult.ID, actionParams, nil
+		cacheResult.Response = newContent
+		return cacheResult, actionParams, nil
 	}
 
-	return cacheResult.Response, cacheResult.ID, actionParams, nil
+	return cacheResult, actionParams, nil
 }
 
 func (c *VectorCache) getWithRetry(ctx context.Context, projectID, action string, rawActionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, backPromptContext string) (*CacheResult, error) {
