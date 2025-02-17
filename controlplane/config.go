@@ -62,9 +62,11 @@ type PlanCache struct {
 }
 
 type Config struct {
-	Port      int `envconfig:"default=8005"`
-	Reasoning Reasoning
-	PlanCache PlanCache
+	Port                  int `envconfig:"default=8005"`
+	Reasoning             Reasoning
+	PlanCache             PlanCache
+	PddlValidatorPath     string        `envconfig:"default=/usr/local/bin/Validate"`
+	PddlValidationTimeout time.Duration `envconfig:"default=30s"`
 }
 
 func Load() (Config, error) {
@@ -254,6 +256,53 @@ func (s *CompensationStatus) UnmarshalJSON(data []byte) error {
 		*s = CompensationPartial
 	case "expired":
 		*s = CompensationExpired
+	default:
+		return fmt.Errorf("invalid Compensation Status: %s", s)
+	}
+	return nil
+}
+
+type PddlValidationErrorType int
+
+const (
+	PddlSyntax PddlValidationErrorType = iota
+	PddlSemantic
+	PddlProcess
+	PddlTimeout
+)
+
+func (s PddlValidationErrorType) String() string {
+	switch s {
+	case PddlSyntax:
+		return "syntax"
+	case PddlSemantic:
+		return "semantic"
+	case PddlProcess:
+		return "process"
+	case PddlTimeout:
+		return "timeout"
+	default:
+		return "unknown"
+	}
+}
+
+func (s PddlValidationErrorType) MarshalJSON() ([]byte, error) { return json.Marshal(s.String()) }
+
+func (s *PddlValidationErrorType) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+
+	switch str {
+	case "syntax":
+		*s = PddlSyntax
+	case "semantic":
+		*s = PddlSemantic
+	case "process":
+		*s = PddlProcess
+	case "timeout":
+		*s = PddlTimeout
 	default:
 		return fmt.Errorf("invalid Compensation Status: %s", s)
 	}

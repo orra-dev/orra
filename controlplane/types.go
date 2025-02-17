@@ -38,6 +38,7 @@ type ControlPlane struct {
 	workerMu             sync.RWMutex
 	WebSocketManager     *WebSocketManager
 	VectorCache          *VectorCache
+	pddlValidator        PddlValidator
 	Logger               zerolog.Logger
 }
 
@@ -401,4 +402,25 @@ func (e *GroundingUseCase) GetEmbeddingText() string {
 		e.Action,
 		e.Intent,
 		strings.Join(e.Capabilities, " "))
+}
+
+// PddlValidator interface allows different validation implementations
+type PddlValidator interface {
+	Validate(context.Context, string, string, string) error
+	HealthCheck(context.Context) error
+}
+
+// PddlValidationError provides structured error responses
+type PddlValidationError struct {
+	Type    PddlValidationErrorType // Syntax, Semantic, Process, Timeout
+	Message string
+	Line    int    // Line number in PDDL where error occurred
+	File    string // Which file: domain or problem
+}
+
+// PddlValidationService handles PDDL validation workflow
+type PddlValidationService struct {
+	valPath string
+	timeout time.Duration
+	logger  zerolog.Logger
 }

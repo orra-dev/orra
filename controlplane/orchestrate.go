@@ -347,7 +347,6 @@ func (p *ControlPlane) discoverProjectServices(projectID string) ([]*ServiceInfo
 }
 
 func (p *ControlPlane) decomposeAction(ctx context.Context, orchestration *Orchestration, action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, retryCauseIfAny string) (*ExecutionPlan, string, bool, error) {
-	//planJson, cachedEntryID, _, err := p.VectorCache.Get(
 	cacheResult, _, err := p.VectorCache.Get(
 		ctx,
 		orchestration.ProjectID,
@@ -482,9 +481,14 @@ func (p *ControlPlane) validateExecPlanAgainstDomain(ctx context.Context, projec
 		Str("Domain", problem).
 		Msg("Generate PDDL problem")
 
-	// Next steps would be:
-	// 2. Validate using VAL
-	// ...
+	// Validate using VAL
+	if err := p.pddlValidator.Validate(ctx, projectID, domain, problem); err != nil {
+		var valErr *PddlValidationError
+		if errors.As(err, &valErr) {
+			return fmt.Errorf("PDDL validation failed: %w", valErr)
+		}
+		return fmt.Errorf("PDDL validation failed: %w", err)
+	}
 
 	return nil
 }
