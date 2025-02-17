@@ -19,6 +19,13 @@ import (
 	"github.com/rs/zerolog"
 )
 
+type fakePddlValidator struct{}
+
+func (f *fakePddlValidator) Validate(_ context.Context, _, _, _ string) error {
+	return nil
+}
+func (f *fakePddlValidator) HealthCheck(_ context.Context) error { return nil }
+
 // setupTestApp creates a new App instance with a test project for testing
 func setupTestApp(t *testing.T) (*App, *Project) {
 	t.Helper()
@@ -29,13 +36,7 @@ func setupTestApp(t *testing.T) (*App, *Project) {
 		Logger: zerolog.New(zerolog.NewTestWriter(t)),
 	}
 
-	app.Plane.Initialise(
-		context.Background(),
-		nil,
-		nil,
-		nil,
-		app.Logger,
-	)
+	app.Plane.Initialise(context.Background(), nil, nil, nil, &fakePddlValidator{}, app.Logger)
 
 	app.configureRoutes()
 

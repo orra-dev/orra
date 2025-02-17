@@ -25,6 +25,7 @@ func NewVectorCache(llmClient *LLMClient, maxSize int, ttl time.Duration, logger
 	return &VectorCache{
 		projectCaches: make(map[string]*ProjectCache),
 		llmClient:     llmClient,
+		matcher:       NewMatcher(llmClient, logger),
 		ttl:           ttl,
 		maxSize:       maxSize,
 		logger:        logger,
@@ -58,7 +59,7 @@ func (pc *ProjectCache) findBestMatch(query CacheQuery) (*CacheEntry, float64) {
 			continue
 		}
 
-		score := cosineSimilarity(query.actionVector, entry.ActionVector)
+		score := CosineSimilarity(query.actionVector, entry.ActionVector)
 
 		pc.logger.Debug().
 			Str("ActionWithFields", query.actionWithFields).
@@ -80,29 +81,6 @@ func (pc *ProjectCache) findBestMatch(query CacheQuery) (*CacheEntry, float64) {
 	return bestEntry, bestScore
 }
 
-func cosineSimilarity(a, b *mat.VecDense) float64 {
-	if a.Len() != b.Len() {
-		return -1
-	}
-
-	dotProduct := mat.Dot(a, b)
-	normA := mat.Norm(a, 2)
-	normB := mat.Norm(b, 2)
-
-	if normA == 0 || normB == 0 {
-		return 0
-	}
-
-	return dotProduct / (normA * normB)
-}
-
-func normalizeVector(v *mat.VecDense) {
-	norm := mat.Norm(v, 2)
-	if norm != 0 {
-		v.ScaleVec(1/norm, v)
-	}
-}
-
 func (c *VectorCache) getProjectCache(projectID string) *ProjectCache {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -119,13 +97,13 @@ func (c *VectorCache) getProjectCache(projectID string) *ProjectCache {
 	return pc
 }
 
-func (c *VectorCache) Get(ctx context.Context, projectID, action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, backPromptContext string) (string, string, json.RawMessage, error) {
+func (c *VectorCache) Get(ctx context.Context, projectID, action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, backPromptContext string) (*CacheResult, json.RawMessage, error) {
 	result, err, _ := c.group.Do(fmt.Sprintf("%s:%s", projectID, action), func() (interface{}, error) {
 		return c.getWithRetry(ctx, projectID, action, actionParams, serviceDescriptions, grounding, backPromptContext)
 	})
 
 	if err != nil {
-		return "", "", nil, err
+		return nil, nil, err
 	}
 
 	cacheResult := result.(*CacheResult)
@@ -139,13 +117,13 @@ func (c *VectorCache) Get(ctx context.Context, projectID, action string, actionP
 			cacheResult.CacheMappings,
 		)
 		if err != nil {
-			return "", "", nil, err
+			return nil, nil, err
 		}
-		modifiedResponse = newContent
-		return modifiedResponse, cacheResult.ID, actionParams, nil
+		cacheResult.Response = newContent
+		return cacheResult, actionParams, nil
 	}
 
-	return cacheResult.Response, cacheResult.ID, actionParams, nil
+	return cacheResult, actionParams, nil
 }
 
 func (c *VectorCache) getWithRetry(ctx context.Context, projectID, action string, rawActionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, backPromptContext string) (*CacheResult, error) {
@@ -161,11 +139,11 @@ func (c *VectorCache) getWithRetry(ctx context.Context, projectID, action string
 		Msg("Hashed serviceDescriptions for cache evaluation")
 
 	actionWithFields := fmt.Sprintf("%s:::%s", action, actionParams.String())
-	actionVector, err := c.generateEmbeddingVector(ctx, actionWithFields)
+	actionVector, err := c.matcher.GenerateEmbeddingVector(ctx, actionWithFields)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate embedding for action with param fields: %w", err)
 	}
-	normalizeVector(actionVector)
+	NormalizeVector(actionVector)
 
 	query := CacheQuery{
 		actionWithFields: actionWithFields,
@@ -182,7 +160,7 @@ func (c *VectorCache) getWithRetry(ctx context.Context, projectID, action string
 		Str("actionWithFields", actionWithFields).
 		Msg("CACHE MISS")
 
-	planJson, err := c.genExecutionPlan(ctx, action, rawActionParams, serviceDescriptions, grounding, backPromptContext)
+	planJson, err := c.genExecutionPlanJson(ctx, action, rawActionParams, serviceDescriptions, grounding, backPromptContext)
 	if err != nil {
 		return nil, err
 	}
@@ -240,8 +218,8 @@ func (c *VectorCache) lookupProjectCache(projectID string, query CacheQuery) (*C
 	return nil, false
 }
 
-// genExecutionPlan queries the LLM and extracts the execution plan.
-func (c *VectorCache) genExecutionPlan(ctx context.Context, action string, rawActionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, backPromptContext string) (string, error) {
+// genExecutionPlanJson queries the LLM and extracts the execution plan.
+func (c *VectorCache) genExecutionPlanJson(ctx context.Context, action string, rawActionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, backPromptContext string) (string, error) {
 	prompt := buildPlannerPrompt(action, rawActionParams, serviceDescriptions, grounding, backPromptContext)
 	llmResp, err := c.llmClient.Generate(ctx, prompt)
 	if err != nil {
@@ -387,22 +365,6 @@ func (c *VectorCache) cleanup() {
 	}
 }
 
-func (c *VectorCache) generateEmbeddingVector(ctx context.Context, text string) (*mat.VecDense, error) {
-	c.logger.Debug().Str("Text", text).Msg("generate embedding vector")
-	embeddings, err := c.llmClient.CreateEmbeddings(ctx, text)
-	if err != nil {
-		return nil, err
-	}
-
-	// Convert to dense vector
-	embeddingVector := mat.NewVecDense(len(embeddings), nil)
-	for i, v := range embeddings {
-		embeddingVector.SetVec(i, float64(v))
-	}
-
-	return embeddingVector, nil
-}
-
 func (p ActionParams) String() string {
 	var builder strings.Builder
 	for i, param := range p {
@@ -438,7 +400,7 @@ func (c *CacheEntry) MatchesActionParams(actionParams ActionParams) bool {
 
 // extractTaskZeroInput extracts the input parameters from task0 in the calling plan
 func extractTaskZeroInput(content string) (json.RawMessage, error) {
-	var plan ServiceCallingPlan
+	var plan ExecutionPlan
 	if err := json.Unmarshal([]byte(content), &plan); err != nil {
 		return nil, fmt.Errorf("failed to parse execution plan: %w", err)
 	}

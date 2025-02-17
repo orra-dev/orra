@@ -80,7 +80,7 @@ func applyParamMappings(
 // substituteTask0Params creates a new plan with updated Task0 parameters
 func substituteTask0Params(content string, originalInput, newParams json.RawMessage, mappings []TaskZeroCacheMapping) (string, error) {
 	// Parse the calling plan
-	var plan ServiceCallingPlan
+	var plan ExecutionPlan
 	if err := json.Unmarshal([]byte(content), &plan); err != nil {
 		return "", fmt.Errorf("failed to parse calling plan for task0 param substitution: %w", err)
 	}

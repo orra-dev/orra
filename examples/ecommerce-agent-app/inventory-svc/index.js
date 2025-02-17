@@ -32,7 +32,7 @@ async function startService() {
 	try {
 		// Register the inventory service with Orra
 		await invSvc.register({
-			description: 'An inventory service that manages and tracks the availability of ecommerce products. ' +
+			description: 'An inventory service that looks up and manages ecommerce products availability. ' +
 				'Including, updating inventory in real-time as orders are placed',
 			revertible: true,
 			schema

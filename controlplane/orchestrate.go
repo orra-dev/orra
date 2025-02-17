@@ -191,8 +191,9 @@ func (p *ControlPlane) attemptRetryablePreparation(
 ) error {
 	p.Logger.Trace().Str("retryCauseIfAny", retryCauseIfAny).Msg("")
 
-	// Decompose action with explicit retry context
-	callingPlan, cachedEntryID, err := p.decomposeAction(
+	ctx := context.Background()
+	callingPlan, cachedEntryID, isHit, err := p.decomposeAction(
+		ctx,
 		orchestration,
 		orchestration.Action.Content,
 		actionParams,
@@ -225,17 +226,26 @@ func (p *ControlPlane) attemptRetryablePreparation(
 		return PreparationError{Status: Failed, Err: err}
 	}
 
-	// Validate subtask inputs
-	if err = p.validateSubTaskInputs(services, onlyServicesCallingPlan.Tasks); err != nil {
-		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
-		// This error might contain multiple validation errors joined together
-		return PreparationError{Status: Failed, Err: fmt.Errorf("execution plan input/output failed validation: %w", err)}
+	if !isHit {
+		// Validate subtask inputs
+		if err = p.validateSubTaskInputs(services, onlyServicesCallingPlan.Tasks); err != nil {
+			p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
+			// This error might contain multiple validation errors joined together
+			return PreparationError{Status: Failed, Err: fmt.Errorf("execution plan input/output failed validation: %w", err)}
+		}
 	}
 
 	// Enhance with service details
-	if err := p.enhanceWithServiceDetails(services, onlyServicesCallingPlan.Tasks); err != nil {
+	if err := p.enhanceWithServiceDetails(services, callingPlan.Tasks); err != nil {
 		p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
 		return PreparationError{Status: Failed, Err: fmt.Errorf("error enhancing execution plan with service details: %w", err)}
+	}
+
+	if !isHit {
+		if err := p.validateExecPlanAgainstDomain(ctx, orchestration.ProjectID, orchestration.Action.Content, callingPlan); err != nil {
+			p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
+			return fmt.Errorf("execution plan is invalid against domain: %w", err)
+		}
 	}
 
 	// Store the final plan
@@ -336,9 +346,9 @@ func (p *ControlPlane) discoverProjectServices(projectID string) ([]*ServiceInfo
 	return out, nil
 }
 
-func (p *ControlPlane) decomposeAction(orchestration *Orchestration, action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, retryCauseIfAny string) (*ServiceCallingPlan, string, error) {
-	planJson, cachedEntryID, _, err := p.VectorCache.Get(
-		context.Background(),
+func (p *ControlPlane) decomposeAction(ctx context.Context, orchestration *Orchestration, action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, retryCauseIfAny string) (*ExecutionPlan, string, bool, error) {
+	cacheResult, _, err := p.VectorCache.Get(
+		ctx,
 		orchestration.ProjectID,
 		action,
 		actionParams,
@@ -347,12 +357,12 @@ func (p *ControlPlane) decomposeAction(orchestration *Orchestration, action stri
 		retryCauseIfAny,
 	)
 	if err != nil {
-		return nil, cachedEntryID, err
+		return nil, "", false, err
 	}
 
-	var result *ServiceCallingPlan
-	if err = json.Unmarshal([]byte(planJson), &result); err != nil {
-		return nil, cachedEntryID, fmt.Errorf("error parsing LLM response as JSON: %w", err)
+	var result *ExecutionPlan
+	if err = json.Unmarshal([]byte(cacheResult.Response), &result); err != nil {
+		return nil, cacheResult.ID, false, fmt.Errorf("error parsing LLM response as JSON: %w", err)
 	}
 
 	for i := 0; i < len(result.Tasks); i++ {
@@ -360,8 +370,12 @@ func (p *ControlPlane) decomposeAction(orchestration *Orchestration, action stri
 	}
 
 	result.ProjectID = orchestration.ProjectID
+	if grounding != nil {
+		result.GroundingID = grounding.Name
+		result.GroundingVersion = grounding.Version
+	}
 
-	return result, cachedEntryID, nil
+	return result, cacheResult.ID, cacheResult.Hit, nil
 }
 
 func (p *ControlPlane) validateWebhook(projectID string, webhookUrl string) error {
@@ -433,6 +447,52 @@ func (p *ControlPlane) validateSubTaskInputs(services []*ServiceInfo, subTasks [
 	return nil
 }
 
+func (p *ControlPlane) validateExecPlanAgainstDomain(ctx context.Context, projectID string, action string, plan *ExecutionPlan) error {
+	// Skip validation if no grounding was used
+	if plan.GroundingID == "" {
+		return nil
+	}
+
+	// Get grounding spec
+	spec, err := p.GetGroundingSpec(projectID, plan.GroundingID, plan.GroundingVersion)
+	if err != nil {
+		return err
+	}
+
+	// Generate PDDL domain
+	matcher := NewMatcher(p.VectorCache.llmClient, p.Logger)
+	generator := NewPddlGenerator(action, plan, spec, matcher, p.Logger)
+	domain, err := generator.GenerateDomain(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to generate PDDL domain: %w", err)
+	}
+	problem, err := generator.GenerateProblem(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to generate PDDL domain: %w", err)
+	}
+
+	p.Logger.Trace().
+		Str("Action", action).
+		Str("Domain", domain).
+		Msg("Generate PDDL domain")
+
+	p.Logger.Trace().
+		Str("Action", action).
+		Str("Domain", problem).
+		Msg("Generate PDDL problem")
+
+	// Validate using VAL
+	if err := p.pddlValidator.Validate(ctx, projectID, domain, problem); err != nil {
+		var valErr *PddlValidationError
+		if errors.As(err, &valErr) {
+			return fmt.Errorf("PDDL validation failed: %w", valErr)
+		}
+		return fmt.Errorf("PDDL validation failed: %w", err)
+	}
+
+	return nil
+}
+
 func (s *SubTask) InputKeys() []string {
 	var out []string
 	for k := range s.Input {
@@ -448,6 +508,10 @@ func (p *ControlPlane) enhanceWithServiceDetails(services []*ServiceInfo, subTas
 	}
 
 	for _, subTask := range subTasks {
+		if strings.EqualFold(subTask.ID, TaskZero) {
+			continue
+		}
+
 		service, ok := serviceMap[subTask.Service]
 		if !ok {
 			return fmt.Errorf("service %s not found for subtask %s", subTask.Service, subTask.ID)
@@ -463,7 +527,7 @@ func (p *ControlPlane) enhanceWithServiceDetails(services []*ServiceInfo, subTas
 
 func (p *ControlPlane) createAndStartWorkers(
 	orchestrationID string,
-	plan *ServiceCallingPlan,
+	plan *ExecutionPlan,
 	taskTimeout,
 	healthCheckGracePeriod time.Duration,
 ) {
@@ -570,7 +634,7 @@ func (p *ControlPlane) cleanupLogWorkers(orchestrationID string) {
 	}
 }
 
-func (p *ControlPlane) callingPlanMinusTaskZero(callingPlan *ServiceCallingPlan) (*SubTask, *ServiceCallingPlan) {
+func (p *ControlPlane) callingPlanMinusTaskZero(callingPlan *ExecutionPlan) (*SubTask, *ExecutionPlan) {
 	var taskZero *SubTask
 	var serviceTasks []*SubTask
 
@@ -582,7 +646,7 @@ func (p *ControlPlane) callingPlanMinusTaskZero(callingPlan *ServiceCallingPlan)
 		serviceTasks = append(serviceTasks, subTask)
 	}
 
-	return taskZero, &ServiceCallingPlan{
+	return taskZero, &ExecutionPlan{
 		ProjectID:      callingPlan.ProjectID,
 		Tasks:          serviceTasks,
 		ParallelGroups: callingPlan.ParallelGroups,
