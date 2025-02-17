@@ -25,6 +25,31 @@ RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=bind,target=. \
     CGO_ENABLED=0 GOARCH=$TARGETARCH go build -o /bin/control-plane .
 
+# Create a stage for building the VAL binary
+FROM alpine:latest AS val-builder
+RUN apk add --no-cache \
+    build-base \
+    cmake \
+    make \
+    g++ \
+    git \
+    flex \
+    bison \
+    bash
+
+# Clone specific commit for reproducibility
+# Clone VAL
+RUN git clone https://github.com/KCL-Planning/VAL.git /val
+
+# Set working directory
+WORKDIR /val
+
+# Build VAL with specific configuration
+RUN bash scripts/linux/build_linux64.sh all Release
+
+# Add VAL binaries to PATH
+ENV PATH="/val/build/linux64/Release/bin:${PATH}"
+
 ################################################################################
 # Create a new stage for running the application that contains the minimal
 # runtime dependencies for the application. This often uses a different base
@@ -45,8 +70,15 @@ RUN --mount=type=cache,target=/var/cache/apk \
     		curl \
         ca-certificates \
         tzdata \
-        && \
-        update-ca-certificates
+    		libstdc++ \
+        && update-ca-certificates
+
+# Copy VAL binary
+COPY --from=val-builder /val/build/linux64/Release/bin/Validate /usr/local/bin/
+COPY --from=val-builder /val/build/linux64/Release/bin/libVAL.so /usr/local/lib/
+
+# Update the dynamic linker cache
+RUN ldconfig /usr/local/lib || true
 
 # Docker build version
 ARG VERSION
