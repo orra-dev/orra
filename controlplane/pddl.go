@@ -33,7 +33,7 @@ func NewPddlGenerator(action string, plan *ExecutionPlan, spec *GroundingSpec, m
 	}
 }
 
-func (g *PddlGenerator) ShouldGenerateDomain() bool {
+func (g *PddlGenerator) ShouldGeneratePddl() bool {
 	// Skip if no grounding spec was used
 	if g.groundingSpec == nil {
 		return false
@@ -87,7 +87,7 @@ func (g *PddlGenerator) normalizeActionPattern(pattern string) string {
 }
 
 func (g *PddlGenerator) GenerateDomain(ctx context.Context) (string, error) {
-	if !g.ShouldGenerateDomain() {
+	if !g.ShouldGeneratePddl() {
 		return "", fmt.Errorf("no domain grounding available for PDDL generation")
 	}
 
@@ -255,6 +255,163 @@ func (g *PddlGenerator) validateServiceCapabilities(ctx context.Context, useCase
 	}
 
 	return nil
+}
+
+func (g *PddlGenerator) GenerateProblem(ctx context.Context) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
+	if !g.ShouldGeneratePddl() {
+		return "", fmt.Errorf("no domain grounding available for PDDL generation")
+	}
+
+	// Extract Task0 and service tasks
+	taskZero, servicePlan := g.callingPlanMinusTaskZero(g.executionPlan)
+	if taskZero == nil {
+		return "", fmt.Errorf("task zero not found in execution plan")
+	}
+
+	// Build PDDL problem content
+	var problem strings.Builder
+
+	// Add problem header - use domain name from spec
+	domainName := g.groundingSpec.Domain
+	problem.WriteString(fmt.Sprintf("(define (problem p-%s)\n", g.executionPlan.ProjectID))
+	problem.WriteString(fmt.Sprintf("  (:domain %s)\n\n", domainName))
+
+	// Add objects section
+	if err := g.addProblemObjects(&problem, taskZero, servicePlan.Tasks); err != nil {
+		return "", fmt.Errorf("failed to generate objects: %w", err)
+	}
+
+	// Add init section
+	if err := g.addProblemInit(&problem, taskZero, servicePlan.Tasks); err != nil {
+		return "", fmt.Errorf("failed to generate init state: %w", err)
+	}
+
+	// Add goal section
+	g.addProblemGoal(&problem, servicePlan.Tasks)
+
+	problem.WriteString(")\n")
+
+	return problem.String(), nil
+}
+
+func (g *PddlGenerator) callingPlanMinusTaskZero(plan *ExecutionPlan) (*SubTask, *ExecutionPlan) {
+	var taskZero *SubTask
+	var serviceTasks []*SubTask
+
+	for _, task := range plan.Tasks {
+		if strings.EqualFold(task.ID, TaskZero) {
+			taskZero = task
+			continue
+		}
+		serviceTasks = append(serviceTasks, task)
+	}
+
+	return taskZero, &ExecutionPlan{
+		ProjectID: plan.ProjectID,
+		Tasks:     serviceTasks,
+	}
+}
+
+func (g *PddlGenerator) addProblemObjects(problem *strings.Builder, taskZero *SubTask, tasks []*SubTask) error {
+	problem.WriteString("  (:objects\n")
+
+	// Add service objects
+	problem.WriteString("    ; Services\n")
+	for _, task := range tasks {
+		problem.WriteString(fmt.Sprintf("    %s - service\n", task.ID))
+	}
+
+	// Add parameter objects from Task0 input
+	problem.WriteString("\n    ; Parameters\n")
+	for paramName, paramValue := range taskZero.Input {
+		paramType := g.inferTypeFromParamName(paramName)
+
+		// Handle different value types
+		var objName string
+		switch v := paramValue.(type) {
+		case string:
+			objName = v
+		case float64:
+			objName = fmt.Sprintf("n%v", v)
+		default:
+			// Skip complex types
+			continue
+		}
+
+		// Clean object name for PDDL
+		objName = strings.ReplaceAll(objName, "-", "_")
+		objName = strings.ReplaceAll(objName, " ", "_")
+
+		problem.WriteString(fmt.Sprintf("    %s - %s\n", objName, paramType))
+	}
+
+	problem.WriteString("  )\n\n")
+	return nil
+}
+
+func (g *PddlGenerator) addProblemInit(problem *strings.Builder, taskZero *SubTask, tasks []*SubTask) error {
+	problem.WriteString("  (:init\n")
+
+	// Add service states
+	problem.WriteString("    ; Initial service states\n")
+	for _, task := range tasks {
+		problem.WriteString(fmt.Sprintf("    (service-validated %s)\n", task.ID))
+		problem.WriteString(fmt.Sprintf("    (service-active %s)\n", task.ID))
+	}
+
+	// Add parameter validations from Task0
+	problem.WriteString("\n    ; Parameter validations\n")
+	for paramName, paramValue := range taskZero.Input {
+		// Handle different value types
+		var objName string
+		switch v := paramValue.(type) {
+		case string:
+			objName = v
+		case float64:
+			objName = fmt.Sprintf("n%v", v)
+		default:
+			// Skip complex types
+			continue
+		}
+
+		// Clean object name for PDDL
+		objName = strings.ReplaceAll(objName, "-", "_")
+		objName = strings.ReplaceAll(objName, " ", "_")
+
+		problem.WriteString(fmt.Sprintf("    (valid-%s %s)\n", paramName, objName))
+	}
+
+	// Add dependencies based on data flow
+	problem.WriteString("\n    ; Task dependencies\n")
+	for _, task := range tasks {
+		deps := task.extractDependencies()
+		for depTaskID := range deps {
+			if strings.EqualFold(depTaskID, TaskZero) {
+				continue // Skip Task0 dependencies in PDDL
+			}
+			problem.WriteString(fmt.Sprintf("    (depends-on %s %s)\n", task.ID, depTaskID))
+		}
+	}
+
+	problem.WriteString("  )\n\n")
+	return nil
+}
+
+func (g *PddlGenerator) addProblemGoal(problem *strings.Builder, tasks []*SubTask) {
+	problem.WriteString("  (:goal\n")
+	problem.WriteString("    (and\n")
+
+	// Goal is to complete all services
+	for _, task := range tasks {
+		problem.WriteString(fmt.Sprintf("      (service-complete %s)\n", task.ID))
+	}
+
+	problem.WriteString("    )\n")
+	problem.WriteString("  )\n")
 }
 
 // inferTypeFromParamName infers PDDL type from parameter name

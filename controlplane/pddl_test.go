@@ -85,7 +85,7 @@ func TestPddlDomainGenerator_ShouldGenerateDomain(t *testing.T) {
 				zerolog.Nop(),
 			)
 
-			got := generator.ShouldGenerateDomain()
+			got := generator.ShouldGeneratePddl()
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -355,4 +355,287 @@ func TestGeneratedPddlSyntax(t *testing.T) {
 	assert.True(t, foundActionParams, "Action should have parameters")
 	assert.True(t, foundPrecondition, "Action should have preconditions")
 	assert.True(t, foundEffect, "Action should have effects")
+}
+
+// Add to pddl_test.go
+
+func TestPddlGenerator_GenerateProblem(t *testing.T) {
+	// Test case setup - use e-commerce scenario
+	useCase := GroundingUseCase{
+		Action: "Process refund for order {orderId}",
+		Params: map[string]string{
+			"orderId": "ORD123",
+		},
+		Capabilities: []string{
+			"Verify refund eligibility",
+			"Process payment refund",
+		},
+	}
+
+	groundingSpec := &GroundingSpec{
+		Name:     "customer-support",
+		Domain:   "e-commerce-customer-support",
+		Version:  "1.0",
+		UseCases: []GroundingUseCase{useCase},
+	}
+
+	executionPlan := &ExecutionPlan{
+		ProjectID:   "test-project",
+		GroundingID: "customer-support",
+		Tasks: []*SubTask{
+			{
+				ID: TaskZero,
+				Input: map[string]any{
+					"orderId":     "ORD123",
+					"amount":      100.50,
+					"customerId":  "CUST456",
+					"orderStatus": "shipped",
+				},
+			},
+			{
+				ID:      "task1",
+				Service: "eligibility-service",
+				Input: map[string]any{
+					"orderId":    "$task0.orderId",
+					"amount":     "$task0.amount",
+					"customerId": "$task0.customerId",
+					"orderState": "$task0.orderStatus",
+				},
+				Capabilities: []string{
+					"A service that verifies refund eligibility based on order status and amount",
+				},
+			},
+			{
+				ID:      "task2",
+				Service: "refund-service",
+				Input: map[string]any{
+					"orderId":           "$task0.orderId",
+					"amount":            "$task0.amount",
+					"eligibilityResult": "$task1.result",
+				},
+				Capabilities: []string{
+					"A service that processes payment refunds",
+				},
+			},
+		},
+	}
+
+	matcher := NewFakeMatcher()
+	matcher.matchResponse = true
+	matcher.matchScore = 0.9
+
+	generator := NewPddlGenerator(
+		"Process refund for order ORD123",
+		executionPlan,
+		groundingSpec,
+		matcher,
+		zerolog.Nop(),
+	)
+
+	problem, err := generator.GenerateProblem(context.Background())
+	assert.NoError(t, err)
+	assert.NotEmpty(t, problem)
+
+	// Verify problem contains expected elements
+	assert.Contains(t, problem, "(define (problem p-test-project)")
+	assert.Contains(t, problem, "(:domain e-commerce-customer-support)")
+
+	// Verify objects section
+	assert.Contains(t, problem, "(:objects")
+	// Check service objects
+	assert.Contains(t, problem, "task1 - service")
+	assert.Contains(t, problem, "task2 - service")
+	// Check parameter objects
+	assert.Contains(t, problem, "ORD123 - order-id")
+	assert.Contains(t, problem, "CUST456 - customer-id")
+	assert.Contains(t, problem, "n100.5 - number") // amount converted to number type
+	assert.Contains(t, problem, "shipped - order-status")
+
+	// Verify customerId validation is present
+	assert.Contains(t, problem, "(valid-customerId CUST456)")
+
+	// Verify Task0 dependencies are still NOT creating depends-on predicates
+	assert.NotContains(t, problem, "depends-on task1 task0")
+
+	// Verify init section
+	assert.Contains(t, problem, "(:init")
+	// Check service states
+	assert.Contains(t, problem, "(service-validated task1)")
+	assert.Contains(t, problem, "(service-active task1)")
+	assert.Contains(t, problem, "(service-validated task2)")
+	assert.Contains(t, problem, "(service-active task2)")
+	// Check parameter validations
+	assert.Contains(t, problem, "(valid-orderId ORD123)")
+	// Check dependencies
+	assert.Contains(t, problem, "(depends-on task2 task1)") // task2 depends on task1
+
+	// Verify goal section
+	assert.Contains(t, problem, "(:goal")
+	assert.Contains(t, problem, "(service-complete task1)")
+	assert.Contains(t, problem, "(service-complete task2)")
+
+	// Count parentheses to verify structure
+	openCount := strings.Count(problem, "(")
+	closeCount := strings.Count(problem, ")")
+	assert.Equal(t, openCount, closeCount, "Parentheses should be balanced")
+}
+
+func TestPddlGenerator_GenerateProblem_NoTaskZero(t *testing.T) {
+	executionPlan := &ExecutionPlan{
+		ProjectID:   "test-project",
+		GroundingID: "test-grounding",
+		Tasks: []*SubTask{
+			{
+				ID:      "task1",
+				Service: "test-service",
+			},
+		},
+	}
+
+	groundingSpec := &GroundingSpec{
+		Name:   "test-grounding",
+		Domain: "test-domain",
+	}
+
+	generator := NewPddlGenerator(
+		"test action",
+		executionPlan,
+		groundingSpec,
+		NewFakeMatcher(),
+		zerolog.Nop(),
+	)
+
+	problem, err := generator.GenerateProblem(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "task zero not found")
+	assert.Empty(t, problem)
+}
+
+func TestPddlGenerator_GenerateProblem_NoGrounding(t *testing.T) {
+	executionPlan := &ExecutionPlan{
+		ProjectID: "test-project",
+		Tasks: []*SubTask{
+			{
+				ID: TaskZero,
+				Input: map[string]any{
+					"param1": "value1",
+				},
+			},
+		},
+	}
+
+	generator := NewPddlGenerator(
+		"test action",
+		executionPlan,
+		nil, // No grounding spec
+		NewFakeMatcher(),
+		zerolog.Nop(),
+	)
+
+	problem, err := generator.GenerateProblem(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no domain grounding available")
+	assert.Empty(t, problem)
+}
+
+func TestPddlGenerator_GenerateProblem_ComplexTypes(t *testing.T) {
+	useCase := GroundingUseCase{
+		Action: "Test action",
+		Params: map[string]string{
+			"param1": "value1",
+		},
+	}
+
+	groundingSpec := &GroundingSpec{
+		Name:     "test-grounding",
+		Domain:   "test-domain",
+		UseCases: []GroundingUseCase{useCase},
+	}
+
+	executionPlan := &ExecutionPlan{
+		ProjectID:   "test-project",
+		GroundingID: "test-grounding",
+		Tasks: []*SubTask{
+			{
+				ID: TaskZero,
+				Input: map[string]any{
+					"simpleParam": "value1",
+					"complexParam": map[string]any{
+						"nested": "value",
+					},
+					"arrayParam": []string{"val1", "val2"},
+				},
+			},
+			{
+				ID:      "task1",
+				Service: "test-service",
+			},
+		},
+	}
+
+	generator := NewPddlGenerator(
+		"test action",
+		executionPlan,
+		groundingSpec,
+		NewFakeMatcher(),
+		zerolog.Nop(),
+	)
+
+	problem, err := generator.GenerateProblem(context.Background())
+	assert.NoError(t, err)
+	assert.NotEmpty(t, problem)
+
+	// Complex types should be skipped
+	assert.Contains(t, problem, "value1 - simpleparam-value")
+	assert.NotContains(t, problem, "complexParam")
+	assert.NotContains(t, problem, "arrayParam")
+}
+
+func TestPddlGenerator_GenerateProblem_SpecialCharacters(t *testing.T) {
+	useCase := GroundingUseCase{
+		Action: "Test action",
+		Params: map[string]string{
+			"param1": "value1",
+		},
+	}
+
+	groundingSpec := &GroundingSpec{
+		Name:     "test-grounding",
+		Domain:   "test-domain",
+		UseCases: []GroundingUseCase{useCase},
+	}
+
+	executionPlan := &ExecutionPlan{
+		ProjectID:   "test-project",
+		GroundingID: "test-grounding",
+		Tasks: []*SubTask{
+			{
+				ID: TaskZero,
+				Input: map[string]any{
+					"paramWithDash":  "value-with-dashes",
+					"paramWithSpace": "value with spaces",
+				},
+			},
+			{
+				ID:      "task1",
+				Service: "test-service",
+			},
+		},
+	}
+
+	generator := NewPddlGenerator(
+		"test action",
+		executionPlan,
+		groundingSpec,
+		NewFakeMatcher(),
+		zerolog.Nop(),
+	)
+
+	problem, err := generator.GenerateProblem(context.Background())
+	assert.NoError(t, err)
+	assert.NotEmpty(t, problem)
+
+	// Special characters should be replaced with underscores
+	assert.Contains(t, problem, "value_with_dashes")
+	assert.Contains(t, problem, "value_with_spaces")
 }
