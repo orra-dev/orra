@@ -50,15 +50,12 @@ func NewControlPlane() *ControlPlane {
 	return plane
 }
 
-func (p *ControlPlane) Initialise(ctx context.Context,
-	logMgr *LogManager,
-	wsManager *WebSocketManager,
-	vCache *VectorCache,
-	Logger zerolog.Logger) {
+func (p *ControlPlane) Initialise(ctx context.Context, logMgr *LogManager, wsManager *WebSocketManager, vCache *VectorCache, pddlValid PddlValidator, Logger zerolog.Logger) {
 	p.LogManager = logMgr
 	p.Logger = Logger
 	p.WebSocketManager = wsManager
 	p.VectorCache = vCache
+	p.pddlValidator = pddlValid
 	if p.VectorCache != nil {
 		p.VectorCache.StartCleanup(ctx)
 	}
@@ -150,6 +147,31 @@ func (p *ControlPlane) GetService(projectID string, serviceID string) (*ServiceI
 	return svc, nil
 }
 
+func (p *ControlPlane) GetGroundingSpec(projectID string, name, version string) (*GroundingSpec, error) {
+	p.groundingsMu.RLock()
+	defer p.groundingsMu.RUnlock()
+
+	groundings, exists := p.groundings[projectID]
+	if !exists {
+		return nil, fmt.Errorf("project %s has no applied domain groudings", projectID)
+	}
+
+	spec, exists := groundings[name]
+	if !exists {
+		return nil, fmt.Errorf("domain grounding %s not found for project %s", name, projectID)
+	}
+
+	if spec.Version != version {
+		return nil,
+			fmt.Errorf(
+				"domain grounding %s project %s mismatches required version %s",
+				name,
+				projectID,
+				version)
+	}
+	return spec, nil
+}
+
 func (p *ControlPlane) GetServiceName(projectID string, serviceID string) (string, error) {
 	service, err := p.GetService(projectID, serviceID)
 	if err != nil {
@@ -160,6 +182,21 @@ func (p *ControlPlane) GetServiceName(projectID string, serviceID string) (strin
 
 // ApplyGroundingSpec adds domain grounding to a project after validation
 func (p *ControlPlane) ApplyGroundingSpec(projectID string, spec *GroundingSpec) error {
+	start := time.Now()
+	err := p.pddlValidator.HealthCheck(context.Background())
+	duration := time.Since(start)
+
+	// Log metrics
+	p.Logger.Info().
+		Str("projectID", projectID).
+		Dur("validatorHealthcheckDuration", duration).
+		Err(err).
+		Msg("PDDL validator health check completed")
+
+	if err != nil {
+		return fmt.Errorf("PDDL validation system check failed: %w", err)
+	}
+
 	if err := spec.Validate(); err != nil {
 		return err
 	}

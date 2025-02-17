@@ -40,8 +40,9 @@ func main() {
 	wsManager := NewWebSocketManager(app.Logger)
 	vCache := NewVectorCache(llmClient, 1000, 24*time.Hour, app.Logger)
 	logManager := NewLogManager(ctx, LogsRetentionPeriod, plane)
+	pddlValidSvc := NewPddlValidationService(cfg.PddlValidatorPath, cfg.PddlValidationTimeout, app.Logger)
 	logManager.Logger = app.Logger
-	plane.Initialise(ctx, logManager, wsManager, vCache, app.Logger)
+	plane.Initialise(ctx, logManager, wsManager, vCache, pddlValidSvc, app.Logger)
 
 	app.Plane = plane
 	app.Router = mux.NewRouter()

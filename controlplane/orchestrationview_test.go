@@ -64,7 +64,7 @@ func (ts *TestState) setupBase() {
 		Status:    Processing,
 		Timestamp: ts.baseTime,
 		taskZero:  json.RawMessage(`{"message": "Hello World", "userId": "user123"}`),
-		Plan: &ServiceCallingPlan{
+		Plan: &ExecutionPlan{
 			Tasks: []*SubTask{
 				{
 					ID:      "task1",
@@ -239,7 +239,7 @@ func TestInspectOrchestration_NotActionable(t *testing.T) {
 	orchestration.Status = NotActionable
 	orchestration.Error = json.RawMessage(`"Cannot process order: No payment service available"`)
 	// Add a "final" task that explains why it's not actionable
-	orchestration.Plan = &ServiceCallingPlan{
+	orchestration.Plan = &ExecutionPlan{
 		Tasks: []*SubTask{
 			{
 				ID: "final",
@@ -270,7 +270,7 @@ func TestInspectOrchestration_NotActionableWithoutTasks(t *testing.T) {
 	orchestration := ts.plane.orchestrationStore[ts.orchestrationID]
 	orchestration.Status = NotActionable
 	orchestration.Error = json.RawMessage(`"Invalid action: unsupported operation"`)
-	orchestration.Plan = &ServiceCallingPlan{Tasks: []*SubTask{}}
+	orchestration.Plan = &ExecutionPlan{Tasks: []*SubTask{}}
 
 	resp, err := ts.plane.InspectOrchestration(ts.orchestrationID)
 	require.NoError(t, err)

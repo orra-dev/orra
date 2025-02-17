@@ -62,7 +62,7 @@ func (lm *LogManager) GetLog(orchestrationID string) *Log {
 	return lm.logs[orchestrationID]
 }
 
-func (lm *LogManager) PrepLogForOrchestration(projectID string, orchestrationID string, plan *ServiceCallingPlan) *Log {
+func (lm *LogManager) PrepLogForOrchestration(projectID string, orchestrationID string, plan *ExecutionPlan) *Log {
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 
