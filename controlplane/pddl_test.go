@@ -227,7 +227,7 @@ func TestPddlDomainGenerator_ValidateServiceCapabilities(t *testing.T) {
 			err := generator.validateServiceCapabilities(context.Background(), &useCase)
 			if tt.wantErr {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), "missing required capability")
+				assert.Contains(t, err.Error(), "no service found with required capability")
 			} else {
 				assert.NoError(t, err)
 			}

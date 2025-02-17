@@ -203,34 +203,57 @@ func (g *PddlDomainGenerator) addActions(domain *strings.Builder, useCase *Groun
 	domain.WriteString("  )\n")
 }
 
+// validateServiceCapabilities checks if any service in the plan can fulfill each required capability
 func (g *PddlDomainGenerator) validateServiceCapabilities(ctx context.Context, useCase *GroundingUseCase) error {
+	// Collect all service capabilities
+	var allServiceCapabilities []string
 	for _, task := range g.executionPlan.Tasks {
 		if strings.EqualFold(task.ID, TaskZero) {
 			continue
 		}
+		allServiceCapabilities = append(allServiceCapabilities, task.Capabilities...)
+	}
 
-		// For each required capability in use case
-		for _, requiredCap := range useCase.Capabilities {
-			capabilityMatched := false
+	// Track matched capabilities to ensure all are covered
+	matchedCapabilities := make(map[string]bool)
 
-			// Check if any service capability matches
-			for _, serviceCap := range task.Capabilities {
-				matches, _, err := g.matcher.MatchTexts(ctx, requiredCap, serviceCap, 0.85)
-				if err != nil {
-					return fmt.Errorf("capability matching failed: %w", err)
-				}
-				if matches {
-					capabilityMatched = true
-					break
-				}
+	// For each required capability, check if any service can fulfill it
+	for _, requiredCap := range useCase.Capabilities {
+		capabilityMatched := false
+
+		// Check against all service capabilities
+		for _, serviceCap := range allServiceCapabilities {
+			matches, score, err := g.matcher.MatchTexts(ctx, requiredCap, serviceCap, 0.75)
+			if err != nil {
+				return fmt.Errorf("capability matching failed: %w", err)
 			}
 
-			if !capabilityMatched {
-				return fmt.Errorf("service %s missing required capability: %s",
-					task.Service, requiredCap)
+			g.logger.Debug().
+				Str("requiredCapability", requiredCap).
+				Str("serviceCapability", serviceCap).
+				Float64("score", score).
+				Bool("matches", matches).
+				Msg("Matching capabilities")
+
+			if matches {
+				capabilityMatched = true
+				matchedCapabilities[requiredCap] = true
+				break
 			}
 		}
+
+		if !capabilityMatched {
+			return fmt.Errorf("no service found with required capability: %s", requiredCap)
+		}
 	}
+
+	// Ensure all required capabilities were matched
+	for _, requiredCap := range useCase.Capabilities {
+		if !matchedCapabilities[requiredCap] {
+			return fmt.Errorf("missing required capability: %s", requiredCap)
+		}
+	}
+
 	return nil
 }
 
