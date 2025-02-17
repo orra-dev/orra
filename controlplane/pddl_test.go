@@ -77,7 +77,7 @@ func TestPddlDomainGenerator_ShouldGenerateDomain(t *testing.T) {
 			plan := &ExecutionPlan{
 				GroundingID: tt.groundingID,
 			}
-			generator := NewPddlDomainGenerator(
+			generator := NewPddlGenerator(
 				"test-action",
 				plan,
 				tt.groundingSpec,
@@ -138,7 +138,7 @@ func TestPddlDomainGenerator_GenerateDomain(t *testing.T) {
 	matcher.matchResponse = true
 	matcher.matchScore = 0.9
 
-	generator := NewPddlDomainGenerator(
+	generator := NewPddlGenerator(
 		"Process refund for order ORD123",
 		executionPlan,
 		groundingSpec,
@@ -216,7 +216,7 @@ func TestPddlDomainGenerator_ValidateServiceCapabilities(t *testing.T) {
 			matcher := NewFakeMatcher()
 			matcher.matchResponse = tt.matchResult
 
-			generator := NewPddlDomainGenerator(
+			generator := NewPddlGenerator(
 				"test-action",
 				&ExecutionPlan{Tasks: tt.tasks},
 				&GroundingSpec{},
@@ -276,7 +276,7 @@ func TestGeneratedPddlSyntax(t *testing.T) {
 	matcher.matchResponse = true
 	matcher.matchScore = 0.9
 
-	generator := NewPddlDomainGenerator(
+	generator := NewPddlGenerator(
 		"Process refund for order ORD123",
 		executionPlan,
 		groundingSpec,

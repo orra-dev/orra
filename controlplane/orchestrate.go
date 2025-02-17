@@ -358,7 +358,7 @@ func (p *ControlPlane) decomposeAction(ctx context.Context, orchestration *Orche
 		retryCauseIfAny,
 	)
 	if err != nil {
-		return nil, cacheResult.ID, false, err
+		return nil, "", false, err
 	}
 
 	var result *ExecutionPlan
@@ -462,7 +462,7 @@ func (p *ControlPlane) validateExecPlanAgainstDomain(ctx context.Context, projec
 
 	// Generate PDDL domain
 	matcher := NewMatcher(p.VectorCache.llmClient, p.Logger)
-	generator := NewPddlDomainGenerator(action, plan, spec, matcher, p.Logger)
+	generator := NewPddlGenerator(action, plan, spec, matcher, p.Logger)
 	domain, err := generator.GenerateDomain(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to generate PDDL domain: %w", err)

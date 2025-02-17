@@ -15,7 +15,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-type PddlDomainGenerator struct {
+type PddlGenerator struct {
 	planAction    string
 	executionPlan *ExecutionPlan
 	groundingSpec *GroundingSpec
@@ -23,8 +23,8 @@ type PddlDomainGenerator struct {
 	logger        zerolog.Logger
 }
 
-func NewPddlDomainGenerator(action string, plan *ExecutionPlan, spec *GroundingSpec, matcher SimilarityMatcher, logger zerolog.Logger) *PddlDomainGenerator {
-	return &PddlDomainGenerator{
+func NewPddlGenerator(action string, plan *ExecutionPlan, spec *GroundingSpec, matcher SimilarityMatcher, logger zerolog.Logger) *PddlGenerator {
+	return &PddlGenerator{
 		planAction:    action,
 		executionPlan: plan,
 		groundingSpec: spec,
@@ -33,7 +33,7 @@ func NewPddlDomainGenerator(action string, plan *ExecutionPlan, spec *GroundingS
 	}
 }
 
-func (g *PddlDomainGenerator) ShouldGenerateDomain() bool {
+func (g *PddlGenerator) ShouldGenerateDomain() bool {
 	// Skip if no grounding spec was used
 	if g.groundingSpec == nil {
 		return false
@@ -47,7 +47,7 @@ func (g *PddlDomainGenerator) ShouldGenerateDomain() bool {
 	return true
 }
 
-func (g *PddlDomainGenerator) findMatchingUseCaseAgainstAction(ctx context.Context) (*GroundingUseCase, error) {
+func (g *PddlGenerator) findMatchingUseCaseAgainstAction(ctx context.Context) (*GroundingUseCase, error) {
 	for _, useCase := range g.groundingSpec.UseCases {
 		match, err := g.planActionMatches(ctx, useCase.Action)
 		if err != nil {
@@ -61,7 +61,7 @@ func (g *PddlDomainGenerator) findMatchingUseCaseAgainstAction(ctx context.Conte
 	return nil, fmt.Errorf("no matching use-case found for execution plan")
 }
 
-func (g *PddlDomainGenerator) planActionMatches(ctx context.Context, useCaseAction string) (bool, error) {
+func (g *PddlGenerator) planActionMatches(ctx context.Context, useCaseAction string) (bool, error) {
 	normalizedPlanAction := g.normalizeActionPattern(g.planAction)
 	normalizedUseCase := g.normalizeActionPattern(useCaseAction)
 
@@ -80,13 +80,13 @@ func (g *PddlDomainGenerator) planActionMatches(ctx context.Context, useCaseActi
 	return matches, nil
 }
 
-func (g *PddlDomainGenerator) normalizeActionPattern(pattern string) string {
+func (g *PddlGenerator) normalizeActionPattern(pattern string) string {
 	// Remove variable placeholders
 	vars := regexp.MustCompile(`\{[^}]+\}`)
 	return vars.ReplaceAllString(pattern, "")
 }
 
-func (g *PddlDomainGenerator) GenerateDomain(ctx context.Context) (string, error) {
+func (g *PddlGenerator) GenerateDomain(ctx context.Context) (string, error) {
 	if !g.ShouldGenerateDomain() {
 		return "", fmt.Errorf("no domain grounding available for PDDL generation")
 	}
@@ -123,7 +123,7 @@ func (g *PddlDomainGenerator) GenerateDomain(ctx context.Context) (string, error
 	return domain.String(), nil
 }
 
-func (g *PddlDomainGenerator) addTypes(domain *strings.Builder, useCase *GroundingUseCase) {
+func (g *PddlGenerator) addTypes(domain *strings.Builder, useCase *GroundingUseCase) {
 	domain.WriteString("  (:types\n")
 	// Base types
 	domain.WriteString("    service - object\n")
@@ -136,7 +136,7 @@ func (g *PddlDomainGenerator) addTypes(domain *strings.Builder, useCase *Groundi
 	domain.WriteString("  )\n\n")
 }
 
-func (g *PddlDomainGenerator) addPredicates(domain *strings.Builder, useCase *GroundingUseCase) {
+func (g *PddlGenerator) addPredicates(domain *strings.Builder, useCase *GroundingUseCase) {
 	domain.WriteString("  (:predicates\n")
 
 	// Service state predicates
@@ -176,7 +176,7 @@ func (g *PddlDomainGenerator) addPredicates(domain *strings.Builder, useCase *Gr
 	domain.WriteString("  )\n\n")
 }
 
-func (g *PddlDomainGenerator) addActions(domain *strings.Builder, useCase *GroundingUseCase) {
+func (g *PddlGenerator) addActions(domain *strings.Builder, useCase *GroundingUseCase) {
 	// Execute service action
 	domain.WriteString("  (:action execute-service\n")
 	domain.WriteString("   :parameters (?s - service)\n")
@@ -204,7 +204,7 @@ func (g *PddlDomainGenerator) addActions(domain *strings.Builder, useCase *Groun
 }
 
 // validateServiceCapabilities checks if any service in the plan can fulfill each required capability
-func (g *PddlDomainGenerator) validateServiceCapabilities(ctx context.Context, useCase *GroundingUseCase) error {
+func (g *PddlGenerator) validateServiceCapabilities(ctx context.Context, useCase *GroundingUseCase) error {
 	// Collect all service capabilities
 	var allServiceCapabilities []string
 	for _, task := range g.executionPlan.Tasks {
@@ -258,7 +258,7 @@ func (g *PddlDomainGenerator) validateServiceCapabilities(ctx context.Context, u
 }
 
 // inferTypeFromParamName infers PDDL type from parameter name
-func (g *PddlDomainGenerator) inferTypeFromParamName(paramName string) string {
+func (g *PddlGenerator) inferTypeFromParamName(paramName string) string {
 	// Clean the parameter name
 	paramName = strings.ToLower(paramName)
 
@@ -300,7 +300,7 @@ func (g *PddlDomainGenerator) inferTypeFromParamName(paramName string) string {
 }
 
 // normalizePropertyToParam converts a service property name to match grounding param style
-func (g *PddlDomainGenerator) normalizePropertyToParam(propName string) string {
+func (g *PddlGenerator) normalizePropertyToParam(propName string) string {
 	// Handle common conversions
 	switch strings.ToLower(propName) {
 	case "orderid":
