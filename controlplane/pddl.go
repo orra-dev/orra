@@ -19,6 +19,7 @@ type PddlGenerator struct {
 	planAction    string
 	executionPlan *ExecutionPlan
 	groundingSpec *GroundingSpec
+	task0Params   map[string]any
 	matcher       SimilarityMatcher
 	logger        zerolog.Logger
 }
@@ -87,6 +88,10 @@ func (g *PddlGenerator) normalizeActionPattern(pattern string) string {
 }
 
 func (g *PddlGenerator) GenerateDomain(ctx context.Context) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
 	if !g.ShouldGeneratePddl() {
 		return "", fmt.Errorf("no domain grounding available for PDDL generation")
 	}
@@ -109,34 +114,54 @@ func (g *PddlGenerator) GenerateDomain(ctx context.Context) (string, error) {
 	domain.WriteString(fmt.Sprintf("(define (domain %s)\n", g.groundingSpec.Domain))
 	domain.WriteString("  (:requirements :strips :typing)\n\n")
 
-	// Add types section
-	g.addTypes(&domain, useCase)
+	// Add sections with error handling
+	if err := g.addTypes(&domain); err != nil {
+		return "", fmt.Errorf("failed to generate types: %w", err)
+	}
 
-	// Add predicates section
-	g.addPredicates(&domain, useCase)
+	if err := g.addPredicates(&domain); err != nil {
+		return "", fmt.Errorf("failed to generate predicates: %w", err)
+	}
 
-	// Add actions section
-	g.addActions(&domain, useCase)
+	if err := g.addActions(&domain); err != nil {
+		return "", fmt.Errorf("failed to generate actions: %w", err)
+	}
 
 	domain.WriteString(")\n")
 
 	return domain.String(), nil
 }
 
-func (g *PddlGenerator) addTypes(domain *strings.Builder, useCase *GroundingUseCase) {
+func (g *PddlGenerator) addTypes(domain *strings.Builder) error {
+	params, err := g.extractTask0Parameters()
+	if err != nil {
+		return err
+	}
+
 	domain.WriteString("  (:types\n")
 	// Base types
 	domain.WriteString("    service - object\n")
 
-	// Parameter types from grounding
-	for paramName := range useCase.Params {
+	// Parameter types from Task0
+	addedTypes := make(map[string]bool)
+	for paramName := range params {
 		paramType := g.inferTypeFromParamName(paramName)
-		domain.WriteString(fmt.Sprintf("    %s - object\n", paramType))
+		if !addedTypes[paramType] {
+			domain.WriteString(fmt.Sprintf("    %s - object\n", paramType))
+			addedTypes[paramType] = true
+		}
 	}
 	domain.WriteString("  )\n\n")
+
+	return nil
 }
 
-func (g *PddlGenerator) addPredicates(domain *strings.Builder, useCase *GroundingUseCase) {
+func (g *PddlGenerator) addPredicates(domain *strings.Builder) error {
+	params, err := g.extractTask0Parameters()
+	if err != nil {
+		return err
+	}
+
 	domain.WriteString("  (:predicates\n")
 
 	// Service state predicates
@@ -144,48 +169,42 @@ func (g *PddlGenerator) addPredicates(domain *strings.Builder, useCase *Groundin
 	domain.WriteString("    (service-active ?s - service)\n")
 	domain.WriteString("    (service-complete ?s - service)\n")
 
-	// Track which parameters are actually used in service inputs
-	usedParams := make(map[string]bool)
-
-	// Collect all input parameters from services
-	for _, task := range g.executionPlan.Tasks {
-		if strings.EqualFold(task.ID, TaskZero) {
-			continue
-		}
-
-		// Check input properties
-		for propName := range task.ExpectedInput.Properties {
-			// Normalize the property name to match grounding param style
-			normalizedProp := g.normalizePropertyToParam(propName)
-			usedParams[normalizedProp] = true
-		}
-	}
-
-	// Only generate predicates for parameters that are used in services
-	for paramName := range useCase.Params {
-		if usedParams[paramName] {
-			paramType := g.inferTypeFromParamName(paramName)
-			domain.WriteString(fmt.Sprintf("    (valid-%s ?%s - %s)\n",
-				paramName, paramName, paramType))
-		}
+	// Parameter validity predicates from Task0
+	for paramName := range params {
+		paramType := g.inferTypeFromParamName(paramName)
+		domain.WriteString(fmt.Sprintf("    (valid-%s ?%s - %s)\n",
+			paramName, paramName, paramType))
 	}
 
 	// Task dependencies
 	domain.WriteString("    (depends-on ?s1 - service ?s2 - service)\n")
 
 	domain.WriteString("  )\n\n")
+	return nil
 }
 
-func (g *PddlGenerator) addActions(domain *strings.Builder, useCase *GroundingUseCase) {
-	// Execute service action
+func (g *PddlGenerator) addActions(domain *strings.Builder) error {
+	params, err := g.extractTask0Parameters()
+	if err != nil {
+		return err
+	}
+
 	domain.WriteString("  (:action execute-service\n")
-	domain.WriteString("   :parameters (?s - service)\n")
+
+	// Add parameters section with service and all Task0 parameters
+	domain.WriteString("   :parameters (?s - service")
+	for paramName := range params {
+		paramType := g.inferTypeFromParamName(paramName)
+		domain.WriteString(fmt.Sprintf(" ?%s - %s", paramName, paramType))
+	}
+	domain.WriteString(")\n")
+
 	domain.WriteString("   :precondition (and\n")
 	domain.WriteString("     (service-validated ?s)\n")
 	domain.WriteString("     (service-active ?s)\n")
 
-	// Parameter requirements
-	for paramName := range useCase.Params {
+	// Parameter requirements from Task0
+	for paramName := range params {
 		domain.WriteString(fmt.Sprintf("     (valid-%s ?%s)\n",
 			paramName, paramName))
 	}
@@ -201,6 +220,8 @@ func (g *PddlGenerator) addActions(domain *strings.Builder, useCase *GroundingUs
 	domain.WriteString("     (not (service-active ?s))\n")
 	domain.WriteString("   )\n")
 	domain.WriteString("  )\n")
+
+	return nil
 }
 
 // validateServiceCapabilities checks if any service in the plan can fulfill each required capability
@@ -255,6 +276,22 @@ func (g *PddlGenerator) validateServiceCapabilities(ctx context.Context, useCase
 	}
 
 	return nil
+}
+
+// New method to extract and validate Task0 parameters
+func (g *PddlGenerator) extractTask0Parameters() (map[string]any, error) {
+	if g.task0Params != nil {
+		return g.task0Params, nil
+	}
+
+	// Extract Task0 and verify it exists
+	taskZero, _ := g.callingPlanMinusTaskZero(g.executionPlan)
+	if taskZero == nil {
+		return nil, fmt.Errorf("task zero not found in execution plan")
+	}
+
+	g.task0Params = taskZero.Input
+	return g.task0Params, nil
 }
 
 func (g *PddlGenerator) GenerateProblem(ctx context.Context) (string, error) {
@@ -454,19 +491,4 @@ func (g *PddlGenerator) inferTypeFromParamName(paramName string) string {
 
 	// Fallback: use parameter name as type
 	return paramName + "-value"
-}
-
-// normalizePropertyToParam converts a service property name to match grounding param style
-func (g *PddlGenerator) normalizePropertyToParam(propName string) string {
-	// Handle common conversions
-	switch strings.ToLower(propName) {
-	case "orderid":
-		return "orderId"
-	case "customerid":
-		return "customerId"
-	case "productid":
-		return "productId"
-	default:
-		return propName
-	}
 }

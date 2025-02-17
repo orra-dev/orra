@@ -96,7 +96,7 @@ func TestPddlDomainGenerator_GenerateDomain(t *testing.T) {
 	useCase := GroundingUseCase{
 		Action: "Process refund for order {orderId}",
 		Params: map[string]string{
-			"orderId": "ORD123", // Only include params that match service requirements
+			"orderId": "ORD123",
 		},
 		Capabilities: []string{
 			"Verify refund eligibility",
@@ -115,6 +115,13 @@ func TestPddlDomainGenerator_GenerateDomain(t *testing.T) {
 		GroundingID: "customer-support",
 		Tasks: []*SubTask{
 			{
+				ID: TaskZero,
+				Input: map[string]any{
+					"orderId": "ORD123",
+					"amount":  100.50,
+				},
+			},
+			{
 				ID:      "task1",
 				Service: "refund-service",
 				Capabilities: []string{
@@ -123,6 +130,7 @@ func TestPddlDomainGenerator_GenerateDomain(t *testing.T) {
 				ExpectedInput: Spec{
 					Properties: map[string]Spec{
 						"orderId": {Type: "string"},
+						"amount":  {Type: "number"},
 					},
 				},
 				ExpectedOutput: Spec{
@@ -154,17 +162,20 @@ func TestPddlDomainGenerator_GenerateDomain(t *testing.T) {
 	assert.Contains(t, domain, "(define (domain e-commerce-customer-support)")
 	assert.Contains(t, domain, "(:requirements :strips :typing)")
 
-	// Verify types - should only include types for service inputs
+	// Verify types - should include types from Task0 input
 	assert.Contains(t, domain, "order-id - object")
+	assert.Contains(t, domain, "number - object") // For amount
 	assert.NotContains(t, domain, "customer-id - object", "Should not include types for unused params")
 
-	// Verify predicates - should only include predicates for service inputs
+	// Verify predicates
 	assert.Contains(t, domain, "(service-validated ?s - service)")
 	assert.Contains(t, domain, "(valid-orderId ?orderId - order-id)")
+	assert.Contains(t, domain, "(valid-amount ?amount - number)")
 	assert.NotContains(t, domain, "valid-customerId", "Should not include predicates for unused params")
 
 	// Verify action
 	assert.Contains(t, domain, "(:action execute-service")
+	assert.Contains(t, domain, ":parameters (?s - service ?orderId - order-id ?amount - number)")
 }
 
 func TestPddlDomainGenerator_ValidateServiceCapabilities(t *testing.T) {
@@ -255,12 +266,20 @@ func TestGeneratedPddlSyntax(t *testing.T) {
 		GroundingID: "test-grounding",
 		Tasks: []*SubTask{
 			{
+				ID: TaskZero,
+				Input: map[string]any{
+					"orderId":    "ORD123",
+					"customerId": "CUST456",
+				},
+			},
+			{
 				ID:           "task1",
 				Service:      "refund-service",
 				Capabilities: []string{"A refund processing service"},
 				ExpectedInput: Spec{
 					Properties: map[string]Spec{
-						"orderId": {Type: "string"},
+						"orderId":    {Type: "string"},
+						"customerId": {Type: "string"},
 					},
 				},
 				ExpectedOutput: Spec{
@@ -345,6 +364,9 @@ func TestGeneratedPddlSyntax(t *testing.T) {
 		switch {
 		case strings.Contains(trimmedLine, ":parameters"):
 			foundActionParams = true
+			// Verify action parameters include all Task0 params
+			assert.Contains(t, trimmedLine, "?orderId - order-id")
+			assert.Contains(t, trimmedLine, "?customerId - customer-id")
 		case strings.Contains(trimmedLine, ":precondition"):
 			foundPrecondition = true
 		case strings.Contains(trimmedLine, ":effect"):
@@ -356,8 +378,6 @@ func TestGeneratedPddlSyntax(t *testing.T) {
 	assert.True(t, foundPrecondition, "Action should have preconditions")
 	assert.True(t, foundEffect, "Action should have effects")
 }
-
-// Add to pddl_test.go
 
 func TestPddlGenerator_GenerateProblem(t *testing.T) {
 	// Test case setup - use e-commerce scenario
