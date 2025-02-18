@@ -59,6 +59,10 @@ func (pc *ProjectCache) findBestMatch(query CacheQuery) (*CacheEntry, float64) {
 			continue
 		}
 
+		if entry.Grounded != query.grounded {
+			continue
+		}
+
 		score := CosineSimilarity(query.actionVector, entry.ActionVector)
 
 		pc.logger.Debug().
@@ -150,10 +154,10 @@ func (c *VectorCache) getWithRetry(ctx context.Context, projectID, action string
 		actionParams:     actionParams,
 		actionVector:     actionVector,
 		servicesHash:     servicesHash,
+		grounded:         groundingHit != nil,
 	}
 
-	cached, cacheHit := c.lookupProjectCache(projectID, query)
-	if cacheHit && (groundingHit == nil || cached.Grounded) {
+	if cached, cacheHit := c.lookupProjectCache(projectID, query); cacheHit {
 		return cached, nil
 	}
 
@@ -174,15 +178,14 @@ func (c *VectorCache) getWithRetry(ctx context.Context, projectID, action string
 		return nil, err
 	}
 
-	grounded := groundingHit != nil
-	cachedEntry := c.cache(projectID, planJson, actionVector, servicesHash, task0Input, taskZeroCacheMappings, actionWithFields, grounded)
+	cachedEntry := c.cache(projectID, planJson, actionVector, servicesHash, task0Input, taskZeroCacheMappings, actionWithFields, groundingHit != nil)
 
 	return &CacheResult{
 		ID:         cachedEntry.ID,
 		Response:   planJson,
 		Task0Input: task0Input,
 		Hit:        false,
-		Grounded:   grounded,
+		Grounded:   cachedEntry.Grounded,
 	}, nil
 }
 
@@ -204,7 +207,8 @@ func (c *VectorCache) lookupProjectCache(projectID string, query CacheQuery) (*C
 				Str("projectID", projectID).
 				Str("actionWithFields", query.actionWithFields).
 				Str("CachedActionWithFields", bestEntry.CachedActionWithFields).
-				Float64("similarity", bestScore).
+				Float64("Similarity", bestScore).
+				Bool("Grounded", bestEntry.Grounded).
 				Msg("CACHE HIT")
 
 			return &CacheResult{

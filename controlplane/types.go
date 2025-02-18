@@ -348,6 +348,7 @@ type CacheQuery struct {
 	actionParams     ActionParams
 	actionVector     *mat.VecDense
 	servicesHash     string
+	grounded         bool
 }
 
 // CompensationResult stores the outcome of a compensation attempt
