@@ -13,6 +13,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+	"gonum.org/v1/gonum/mat"
 )
 
 // FakeMatcher implements both Matcher and Embedder interfaces for testing
@@ -37,53 +38,40 @@ func (f *FakeMatcher) MatchTexts(_ context.Context, _, _ string, _ float64) (boo
 	return f.matchResponse, f.matchScore, f.matchError
 }
 
+func (f *FakeMatcher) GenerateEmbeddingVector(_ context.Context, _ string) (*mat.VecDense, error) {
+	return nil, nil
+}
+
 func (f *FakeMatcher) CreateEmbeddings(_ context.Context, _ string) ([]float32, error) {
 	return f.embeddings, f.embeddingsError
 }
 
 func TestPddlDomainGenerator_ShouldGenerateDomain(t *testing.T) {
 	tests := []struct {
-		name          string
-		groundingSpec *GroundingSpec
-		groundingID   string
-		want          bool
+		name         string
+		groundingHit *GroundingHit
+		want         bool
 	}{
 		{
-			name:          "no grounding spec",
-			groundingSpec: nil,
-			groundingID:   "",
-			want:          false,
+			name:         "no grounding hit",
+			groundingHit: nil,
+			want:         false,
 		},
 		{
-			name: "has grounding spec but no ID",
-			groundingSpec: &GroundingSpec{
+			name: "has grounding hit",
+			groundingHit: &GroundingHit{
 				Name: "test-grounding",
 			},
-			groundingID: "",
-			want:        false,
-		},
-		{
-			name: "has both grounding spec and ID",
-			groundingSpec: &GroundingSpec{
-				Name: "test-grounding",
-			},
-			groundingID: "test-grounding",
-			want:        true,
+			want: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			plan := &ExecutionPlan{
-				GroundingID: tt.groundingID,
+				GroundingHit: tt.groundingHit,
 			}
-			generator := NewPddlGenerator(
-				"test-action",
-				plan,
-				tt.groundingSpec,
-				NewFakeMatcher(),
-				zerolog.Nop(),
-			)
+			generator := NewPddlGenerator("test-action", plan, NewFakeMatcher(), zerolog.Nop())
 
 			got := generator.ShouldGeneratePddl()
 			assert.Equal(t, tt.want, got)
@@ -104,15 +92,16 @@ func TestPddlDomainGenerator_GenerateDomain(t *testing.T) {
 		},
 	}
 
-	groundingSpec := &GroundingSpec{
-		Name:     "customer-support",
-		Domain:   "e-commerce-customer-support",
-		Version:  "1.0",
-		UseCases: []GroundingUseCase{useCase},
+	groundingHit := &GroundingHit{
+		Name:    "customer-support",
+		Domain:  "e-commerce-customer-support",
+		Version: "1.0",
+		UseCase: useCase,
 	}
 
 	executionPlan := &ExecutionPlan{
-		GroundingID: "customer-support",
+		GroundingHit: groundingHit,
+		GroundingID:  "customer-support",
 		Tasks: []*SubTask{
 			{
 				ID: TaskZero,
@@ -146,13 +135,7 @@ func TestPddlDomainGenerator_GenerateDomain(t *testing.T) {
 	matcher.matchResponse = true
 	matcher.matchScore = 0.9
 
-	generator := NewPddlGenerator(
-		"Process refund for order ORD123",
-		executionPlan,
-		groundingSpec,
-		matcher,
-		zerolog.Nop(),
-	)
+	generator := NewPddlGenerator("Process refund for order ORD123", executionPlan, matcher, zerolog.Nop())
 
 	domain, err := generator.GenerateDomain(context.Background())
 	assert.NoError(t, err)
@@ -227,15 +210,9 @@ func TestPddlDomainGenerator_ValidateServiceCapabilities(t *testing.T) {
 			matcher := NewFakeMatcher()
 			matcher.matchResponse = tt.matchResult
 
-			generator := NewPddlGenerator(
-				"test-action",
-				&ExecutionPlan{Tasks: tt.tasks},
-				&GroundingSpec{},
-				matcher,
-				zerolog.Nop(),
-			)
+			generator := NewPddlGenerator("test-action", &ExecutionPlan{Tasks: tt.tasks}, matcher, zerolog.Nop())
 
-			err := generator.validateServiceCapabilities(context.Background(), &useCase)
+			err := generator.validateServiceCapabilities(context.Background(), useCase)
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), "no service found with required capability")
@@ -256,14 +233,14 @@ func TestGeneratedPddlSyntax(t *testing.T) {
 		Capabilities: []string{"Process refund"},
 	}
 
-	groundingSpec := &GroundingSpec{
-		Name:     "test-grounding",
-		Domain:   "test-domain",
-		UseCases: []GroundingUseCase{useCase},
+	groundingHit := &GroundingHit{
+		Name:    "test-grounding",
+		Domain:  "test-domain",
+		UseCase: useCase,
 	}
 
 	executionPlan := &ExecutionPlan{
-		GroundingID: "test-grounding",
+		GroundingHit: groundingHit,
 		Tasks: []*SubTask{
 			{
 				ID: TaskZero,
@@ -295,13 +272,7 @@ func TestGeneratedPddlSyntax(t *testing.T) {
 	matcher.matchResponse = true
 	matcher.matchScore = 0.9
 
-	generator := NewPddlGenerator(
-		"Process refund for order ORD123",
-		executionPlan,
-		groundingSpec,
-		matcher,
-		zerolog.Nop(),
-	)
+	generator := NewPddlGenerator("Process refund for order ORD123", executionPlan, matcher, zerolog.Nop())
 
 	domain, err := generator.GenerateDomain(context.Background())
 	assert.NoError(t, err)
@@ -392,16 +363,16 @@ func TestPddlGenerator_GenerateProblem(t *testing.T) {
 		},
 	}
 
-	groundingSpec := &GroundingSpec{
-		Name:     "customer-support",
-		Domain:   "e-commerce-customer-support",
-		Version:  "1.0",
-		UseCases: []GroundingUseCase{useCase},
+	groundingHit := &GroundingHit{
+		Name:    "customer-support",
+		Domain:  "e-commerce-customer-support",
+		Version: "1.0",
+		UseCase: useCase,
 	}
 
 	executionPlan := &ExecutionPlan{
-		ProjectID:   "test-project",
-		GroundingID: "customer-support",
+		ProjectID:    "test-project",
+		GroundingHit: groundingHit,
 		Tasks: []*SubTask{
 			{
 				ID: TaskZero,
@@ -444,13 +415,7 @@ func TestPddlGenerator_GenerateProblem(t *testing.T) {
 	matcher.matchResponse = true
 	matcher.matchScore = 0.9
 
-	generator := NewPddlGenerator(
-		"Process refund for order ORD123",
-		executionPlan,
-		groundingSpec,
-		matcher,
-		zerolog.Nop(),
-	)
+	generator := NewPddlGenerator("Process refund for order ORD123", executionPlan, matcher, zerolog.Nop())
 
 	problem, err := generator.GenerateProblem(context.Background())
 	assert.NoError(t, err)
@@ -501,9 +466,13 @@ func TestPddlGenerator_GenerateProblem(t *testing.T) {
 }
 
 func TestPddlGenerator_GenerateProblem_NoTaskZero(t *testing.T) {
+	groundingHit := &GroundingHit{
+		Name:   "test-grounding",
+		Domain: "test-domain",
+	}
 	executionPlan := &ExecutionPlan{
-		ProjectID:   "test-project",
-		GroundingID: "test-grounding",
+		ProjectID:    "test-project",
+		GroundingHit: groundingHit,
 		Tasks: []*SubTask{
 			{
 				ID:      "task1",
@@ -512,18 +481,7 @@ func TestPddlGenerator_GenerateProblem_NoTaskZero(t *testing.T) {
 		},
 	}
 
-	groundingSpec := &GroundingSpec{
-		Name:   "test-grounding",
-		Domain: "test-domain",
-	}
-
-	generator := NewPddlGenerator(
-		"test action",
-		executionPlan,
-		groundingSpec,
-		NewFakeMatcher(),
-		zerolog.Nop(),
-	)
+	generator := NewPddlGenerator("test action", executionPlan, NewFakeMatcher(), zerolog.Nop())
 
 	problem, err := generator.GenerateProblem(context.Background())
 	assert.Error(t, err)
@@ -544,13 +502,7 @@ func TestPddlGenerator_GenerateProblem_NoGrounding(t *testing.T) {
 		},
 	}
 
-	generator := NewPddlGenerator(
-		"test action",
-		executionPlan,
-		nil, // No grounding spec
-		NewFakeMatcher(),
-		zerolog.Nop(),
-	)
+	generator := NewPddlGenerator("test action", executionPlan, NewFakeMatcher(), zerolog.Nop())
 
 	problem, err := generator.GenerateProblem(context.Background())
 	assert.Error(t, err)
@@ -566,15 +518,15 @@ func TestPddlGenerator_GenerateProblem_ComplexTypes(t *testing.T) {
 		},
 	}
 
-	groundingSpec := &GroundingSpec{
-		Name:     "test-grounding",
-		Domain:   "test-domain",
-		UseCases: []GroundingUseCase{useCase},
+	groundingHit := &GroundingHit{
+		Name:    "test-grounding",
+		Domain:  "test-domain",
+		UseCase: useCase,
 	}
 
 	executionPlan := &ExecutionPlan{
-		ProjectID:   "test-project",
-		GroundingID: "test-grounding",
+		ProjectID:    "test-project",
+		GroundingHit: groundingHit,
 		Tasks: []*SubTask{
 			{
 				ID: TaskZero,
@@ -593,13 +545,7 @@ func TestPddlGenerator_GenerateProblem_ComplexTypes(t *testing.T) {
 		},
 	}
 
-	generator := NewPddlGenerator(
-		"test action",
-		executionPlan,
-		groundingSpec,
-		NewFakeMatcher(),
-		zerolog.Nop(),
-	)
+	generator := NewPddlGenerator("test action", executionPlan, NewFakeMatcher(), zerolog.Nop())
 
 	problem, err := generator.GenerateProblem(context.Background())
 	assert.NoError(t, err)
@@ -619,15 +565,15 @@ func TestPddlGenerator_GenerateProblem_SpecialCharacters(t *testing.T) {
 		},
 	}
 
-	groundingSpec := &GroundingSpec{
-		Name:     "test-grounding",
-		Domain:   "test-domain",
-		UseCases: []GroundingUseCase{useCase},
+	groundingHit := &GroundingHit{
+		Name:    "test-grounding",
+		Domain:  "test-domain",
+		UseCase: useCase,
 	}
 
 	executionPlan := &ExecutionPlan{
-		ProjectID:   "test-project",
-		GroundingID: "test-grounding",
+		ProjectID:    "test-project",
+		GroundingHit: groundingHit,
 		Tasks: []*SubTask{
 			{
 				ID: TaskZero,
@@ -643,13 +589,7 @@ func TestPddlGenerator_GenerateProblem_SpecialCharacters(t *testing.T) {
 		},
 	}
 
-	generator := NewPddlGenerator(
-		"test action",
-		executionPlan,
-		groundingSpec,
-		NewFakeMatcher(),
-		zerolog.Nop(),
-	)
+	generator := NewPddlGenerator("test action", executionPlan, NewFakeMatcher(), zerolog.Nop())
 
 	problem, err := generator.GenerateProblem(context.Background())
 	assert.NoError(t, err)

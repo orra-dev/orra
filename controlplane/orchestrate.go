@@ -15,6 +15,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -45,7 +46,30 @@ func (p *ControlPlane) prepForError(orchestration *Orchestration, err error, sta
 	orchestration.Error = marshaledErr
 }
 
-func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orchestration, specs []GroundingSpec) error {
+func (p *ControlPlane) InjectGroundingMatchForAnyAppliedSpecs(ctx context.Context, orchestration *Orchestration, specs []GroundingSpec) error {
+	if len(specs) == 0 {
+		return nil
+	}
+
+	hit, matchScore, err := orchestration.MatchingGroundingAgainstAction(ctx, p.SimilarityMatcher, specs)
+	if err != nil {
+		return fmt.Errorf("cannot match grounding specs against orchestration action: %w", err)
+	}
+
+	orchestration.groundingHit = hit
+
+	p.Logger.Trace().
+		Str("ProjectID", orchestration.ProjectID).
+		Str("OrchestrationID", orchestration.ID).
+		Str("OrchestrationAction", normalizeActionPattern(orchestration.Action.Content)).
+		Str("MatchedGroundingUseCaseAction", normalizeActionPattern(orchestration.Action.Content)).
+		Float64("matchScore", matchScore).
+		Msg("Matched grounding to orchestration")
+
+	return nil
+}
+
+func (p *ControlPlane) PrepareOrchestration(ctx context.Context, projectID string, orchestration *Orchestration, specs []GroundingSpec) error {
 	// Initial setup and validation that shouldn't be retried
 	orchestration.ID = p.GenerateOrchestrationKey()
 	orchestration.Status = Pending
@@ -84,6 +108,11 @@ func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orc
 		return err
 	}
 
+	if err := p.InjectGroundingMatchForAnyAppliedSpecs(ctx, orchestration, specs); err != nil {
+		p.prepForError(orchestration, err, Failed)
+		return err
+	}
+
 	// Configure exponential backoff for retryable operations
 	expBackoff := back.NewExponentialBackOff()
 	expBackoff.InitialInterval = 2 * time.Second
@@ -98,18 +127,13 @@ func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orc
 
 	// Setup retry operation
 	operation := func() error {
-		var targetGrounding *GroundingSpec
-		if len(specs) > 0 {
-			targetGrounding = &specs[0]
-		}
-
 		// Attempt the retryable portion of execution plan preparation
 		err := p.attemptRetryablePreparation(
+			ctx,
 			orchestration,
 			services,
 			actionParams,
 			serviceDescriptions,
-			targetGrounding,
 			errorFeedback,
 		)
 		if err == nil {
@@ -181,24 +205,15 @@ func (p *ControlPlane) PrepareOrchestration(projectID string, orchestration *Orc
 	return nil
 }
 
-func (p *ControlPlane) attemptRetryablePreparation(
-	orchestration *Orchestration,
-	services []*ServiceInfo,
-	actionParams json.RawMessage,
-	serviceDescriptions string,
-	grounding *GroundingSpec,
-	retryCauseIfAny string,
-) error {
+func (p *ControlPlane) attemptRetryablePreparation(ctx context.Context, orchestration *Orchestration, services []*ServiceInfo, actionParams json.RawMessage, serviceDescriptions string, retryCauseIfAny string) error {
 	p.Logger.Trace().Str("retryCauseIfAny", retryCauseIfAny).Msg("")
 
-	ctx := context.Background()
-	callingPlan, cachedEntryID, isHit, err := p.decomposeAction(
+	callingPlan, cachedEntryID, isCacheHit, err := p.decomposeAction(
 		ctx,
 		orchestration,
 		orchestration.Action.Content,
 		actionParams,
 		serviceDescriptions,
-		grounding,
 		retryCauseIfAny,
 	)
 	if err != nil {
@@ -226,7 +241,7 @@ func (p *ControlPlane) attemptRetryablePreparation(
 		return PreparationError{Status: Failed, Err: err}
 	}
 
-	if !isHit {
+	if !isCacheHit {
 		// Validate subtask inputs
 		if err = p.validateSubTaskInputs(services, onlyServicesCallingPlan.Tasks); err != nil {
 			p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
@@ -241,8 +256,8 @@ func (p *ControlPlane) attemptRetryablePreparation(
 		return PreparationError{Status: Failed, Err: fmt.Errorf("error enhancing execution plan with service details: %w", err)}
 	}
 
-	if !isHit {
-		if err := p.validateExecPlanAgainstDomain(ctx, orchestration.ProjectID, orchestration.Action.Content, callingPlan); err != nil {
+	if !isCacheHit {
+		if err := p.validateExecPlanAgainstDomain(ctx, callingPlan, orchestration); err != nil {
 			p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
 			return fmt.Errorf("execution plan is invalid against domain: %w", err)
 		}
@@ -346,14 +361,14 @@ func (p *ControlPlane) discoverProjectServices(projectID string) ([]*ServiceInfo
 	return out, nil
 }
 
-func (p *ControlPlane) decomposeAction(ctx context.Context, orchestration *Orchestration, action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, retryCauseIfAny string) (*ExecutionPlan, string, bool, error) {
+func (p *ControlPlane) decomposeAction(ctx context.Context, orchestration *Orchestration, action string, actionParams json.RawMessage, serviceDescriptions string, retryCauseIfAny string) (*ExecutionPlan, string, bool, error) {
 	cacheResult, _, err := p.VectorCache.Get(
 		ctx,
 		orchestration.ProjectID,
 		action,
 		actionParams,
 		serviceDescriptions,
-		grounding,
+		orchestration.groundingHit,
 		retryCauseIfAny,
 	)
 	if err != nil {
@@ -370,10 +385,7 @@ func (p *ControlPlane) decomposeAction(ctx context.Context, orchestration *Orche
 	}
 
 	result.ProjectID = orchestration.ProjectID
-	if grounding != nil {
-		result.GroundingID = grounding.Name
-		result.GroundingVersion = grounding.Version
-	}
+	result.GroundingHit = orchestration.groundingHit
 
 	return result, cacheResult.ID, cacheResult.Hit, nil
 }
@@ -447,42 +459,41 @@ func (p *ControlPlane) validateSubTaskInputs(services []*ServiceInfo, subTasks [
 	return nil
 }
 
-func (p *ControlPlane) validateExecPlanAgainstDomain(ctx context.Context, projectID string, action string, plan *ExecutionPlan) error {
+func (p *ControlPlane) validateExecPlanAgainstDomain(ctx context.Context, plan *ExecutionPlan, orchestration *Orchestration) error {
 	// Skip validation if no grounding was used
-	if plan.GroundingID == "" {
+	if plan.GroundingHit == nil {
 		return nil
 	}
 
-	// Get grounding spec
-	spec, err := p.GetGroundingSpec(projectID, plan.GroundingID, plan.GroundingVersion)
-	if err != nil {
-		return err
-	}
+	orchestratedAction := orchestration.Action.Content
+	generator := NewPddlGenerator(orchestratedAction, plan, p.SimilarityMatcher, p.Logger)
 
-	// Generate PDDL domain
-	matcher := NewMatcher(p.VectorCache.llmClient, p.Logger)
-	generator := NewPddlGenerator(action, plan, spec, matcher, p.Logger)
 	domain, err := generator.GenerateDomain(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to generate PDDL domain: %w", err)
 	}
+
 	problem, err := generator.GenerateProblem(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to generate PDDL domain: %w", err)
 	}
 
 	p.Logger.Trace().
-		Str("Action", action).
+		Str("ProjectID", orchestration.ProjectID).
+		Str("OrchestrationID", orchestration.ID).
+		Str("Action", orchestratedAction).
 		Str("Domain", domain).
 		Msg("Generate PDDL domain")
 
 	p.Logger.Trace().
-		Str("Action", action).
+		Str("ProjectID", orchestration.ProjectID).
+		Str("OrchestrationID", orchestration.ID).
+		Str("Action", orchestratedAction).
 		Str("Domain", problem).
 		Msg("Generate PDDL problem")
 
 	// Validate using VAL
-	if err := p.pddlValidator.Validate(ctx, projectID, domain, problem); err != nil {
+	if err := p.PddlValidator.Validate(ctx, orchestration.ProjectID, domain, problem); err != nil {
 		var valErr *PddlValidationError
 		if errors.As(err, &valErr) {
 			return fmt.Errorf("PDDL validation failed: %w", valErr)
@@ -724,6 +735,33 @@ func (p *ControlPlane) triggerWebhook(orchestration *Orchestration) error {
 	return nil
 }
 
+func (o *Orchestration) MatchingGroundingAgainstAction(ctx context.Context, matcher SimilarityMatcher, specs []GroundingSpec) (*GroundingHit, float64, error) {
+	for _, spec := range specs {
+		for _, useCase := range spec.UseCases {
+			normalizedPlanAction := normalizeActionPattern(o.Action.Content)
+			normalizedUseCase := normalizeActionPattern(useCase.Action)
+
+			hasMatch, score, err := matcher.MatchTexts(ctx, normalizedPlanAction, normalizedUseCase, 0.85)
+			if err != nil {
+				return nil, 0, fmt.Errorf("failed to match action: %w", err)
+			}
+
+			if !hasMatch {
+				continue
+			}
+			return &GroundingHit{
+				Name:        spec.Name,
+				Domain:      spec.Domain,
+				Version:     spec.Version,
+				UseCase:     useCase,
+				Constraints: spec.Constraints,
+			}, score, nil
+		}
+	}
+
+	return nil, 0, fmt.Errorf("no matching use-case found")
+}
+
 func (s Spec) String() (string, error) {
 	data, err := json.Marshal(s)
 	if err != nil {
@@ -781,4 +819,10 @@ func extractValidJSONOutput(input string) (string, error) {
 	}
 
 	return jsonContent, nil
+}
+
+func normalizeActionPattern(pattern string) string {
+	// Remove variable placeholders
+	vars := regexp.MustCompile(`\{[^}]+\}`)
+	return vars.ReplaceAllString(pattern, "")
 }

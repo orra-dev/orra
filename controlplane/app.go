@@ -217,7 +217,8 @@ func (app *App) OrchestrationsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := app.Plane.PrepareOrchestration(project.ID, &orchestration, app.Plane.GetGroundingSpecs(project.ID)); err != nil {
+	ctx := context.Background()
+	if err := app.Plane.PrepareOrchestration(ctx, project.ID, &orchestration, app.Plane.GetGroundingSpecs(project.ID)); err != nil {
 		app.Logger.
 			Error().
 			Err(err).
