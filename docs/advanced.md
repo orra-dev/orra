@@ -51,6 +51,66 @@ Key features:
 - Services and agents reference data using `$task.field` syntax
 - `parallel_groups` maximizes performance by running independent tasks together
 
+### Grounding and Execution Plan Validation
+
+Orra's grounding system enforces strict production safety through comprehensive validation of execution plans. This isn't just type checking - it's a complete semantic validation of your application's runtime behavior:
+
+```yaml
+name: e-commerce-support
+domain: customer-service
+version: "1.0"
+use-cases:
+  - action: "Process refund for order {orderId}"
+    capabilities:
+      - "Verify refund eligibility"
+      - "Process payment refund"
+    intent: "Handle customer refund requests safely"
+constraints:
+  - "Must verify eligibility before processing"
+  - "Only one refund per order"
+```
+
+Key features:
+- Domain actions matched in latent space using cosine similarity
+- Language-agnostic capability matching through vector embeddings
+- Composition safety through complete capability validation
+- Zero-tolerance for capability mismatches in production
+
+Validation operates in two distinct modes:
+1. Without grounding:
+    - Basic syntax and schema validation
+    - No semantic safety guarantees
+    - Suitable for initial development
+2. With grounding (production mode):
+    - Full semantic validation in latent space
+    - Strict capability matching
+    - Complete task composition verification
+    - No partial validation - it's all or nothing
+
+Example validation flow:
+```
+[validate] Domain expert grounding loaded
+[validate] Embedding action "Issue a refund for ORD123"
+[validate] Cosine similarity match (0.92) to "Process refund"
+[validate] Validating service capabilities:
+  ✓ Refund eligibility verification (0.89 similarity)
+  ✓ Payment processing capability (0.95 similarity)
+[validate] Composition safety verified:
+  ✓ All required capabilities present
+  ✓ No unsafe task combinations
+  ✓ Task ordering preserves constraints
+[validate] Plan approved for execution
+```
+
+This ensures:
+- Zero drift between intended and actual behavior
+- No undefined states or partial failures
+- Complete validation of task compositions
+- Full preservation of domain safety rules
+- Clear, binary validation outcomes
+
+When grounding is applied, there's no middle ground - your execution plan either fully satisfies all safety requirements or it doesn't run. This hard boundary prevents the subtle failures that often plague distributed systems where partially incorrect behavior can be worse than complete failure.
+
 ### Exactly-Once Task Execution
 
 Orra uses an idempotency system inspired by Stripe and AWS Lambda to ensure tasks run exactly once, even if services crash or messages are duplicated:

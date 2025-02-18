@@ -193,4 +193,4 @@ A: List specific, atomic capabilities. They should match your actual service cap
 ## Next Steps
 
 - [Orchestrating Actions with Orra](actions.md)
-- [Advanced Topics & Internals](advanced.md)
+- [More on Grounding and execution plan validation](advanced.md#grounding-and-execution-plan-validation)
