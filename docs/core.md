@@ -1,4 +1,4 @@
-# Advanced Topics & Internals
+# Core Topics & Internals
 
 ## How Orra Makes Agent Apps Production-Ready
 

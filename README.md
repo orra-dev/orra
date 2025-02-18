@@ -302,7 +302,7 @@ orra verify run "Estimate delivery for customer order" \
 
 - [Rapid Multi-Agent App Development with Orra](docs/rapid-agent-app-devlopment.md)
 - [Orchestrating Actions with Orra](docs/actions.md)
-- [Advanced Topics & Internals](docs/advanced.md)
+- [Core Topics & Internals](docs/core)
 
 ## Alpha Features & Limitations
 
