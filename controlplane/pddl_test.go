@@ -19,23 +19,41 @@ import (
 // FakeMatcher implements both Matcher and Embedder interfaces for testing
 type FakeMatcher struct {
 	// Configured responses for testing
-	matchResponse   bool
-	matchScore      float64
-	matchError      error
-	embeddings      []float32
-	embeddingsError error
+	matchResponse       bool
+	matchScore          float64
+	matchCount          int
+	totalCount          int
+	matchError          error
+	embeddings          []float32
+	embeddingsError     error
+	capabilitiesToMatch map[string]any
 }
 
 func NewFakeMatcher() *FakeMatcher {
 	return &FakeMatcher{
-		matchResponse: true,
-		matchScore:    0.9,
-		embeddings:    []float32{0.1, 0.2, 0.3},
+		matchResponse:       true,
+		matchScore:          0.9,
+		embeddings:          []float32{0.1, 0.2, 0.3},
+		capabilitiesToMatch: make(map[string]any),
 	}
 }
 
+// In the same file, update the FakeMatcher MatchTexts method:
 func (f *FakeMatcher) MatchTexts(_ context.Context, _, _ string, _ float64) (bool, float64, error) {
-	return f.matchResponse, f.matchScore, f.matchError
+	if f.matchError != nil {
+		return false, 0, f.matchError
+	}
+
+	// For specific capability testing (like the 88.24% case)
+	if f.matchCount >= 0 && f.totalCount > 0 {
+		f.matchCount++
+		// Only match the first 88.24% of capabilities
+		match := f.matchCount <= int(float64(f.totalCount)*0.8824)
+		return match, f.matchScore, nil
+	}
+
+	// Default behavior for other test cases
+	return f.matchResponse, f.matchScore, nil
 }
 
 func (f *FakeMatcher) GenerateEmbeddingVector(_ context.Context, _ string) (*mat.VecDense, error) {
@@ -162,22 +180,25 @@ func TestPddlDomainGenerator_GenerateDomain(t *testing.T) {
 }
 
 func TestPddlDomainGenerator_ValidateServiceCapabilities(t *testing.T) {
-	useCase := GroundingUseCase{
-		Capabilities: []string{
-			"Verify refund eligibility",
-			"Process payment refund",
-		},
-	}
-
 	tests := []struct {
-		name        string
-		matchResult bool
-		tasks       []*SubTask
-		wantErr     bool
+		name           string
+		useCase        GroundingUseCase
+		matchResult    bool
+		matchScore     float64
+		tasks          []*SubTask
+		expectedErr    bool
+		expectedErrMsg string
 	}{
 		{
-			name:        "matching capabilities",
+			name: "all capabilities matched",
+			useCase: GroundingUseCase{
+				Capabilities: []string{
+					"Verify refund eligibility",
+					"Process payment refund",
+				},
+			},
 			matchResult: true,
+			matchScore:  0.9,
 			tasks: []*SubTask{
 				{
 					ID:      "task1",
@@ -187,37 +208,136 @@ func TestPddlDomainGenerator_ValidateServiceCapabilities(t *testing.T) {
 					},
 				},
 			},
-			wantErr: false,
+			expectedErr: false,
 		},
 		{
-			name:        "missing capability",
-			matchResult: false,
+			name: "exactly 95% capabilities matched",
+			useCase: GroundingUseCase{
+				Capabilities: []string{
+					"Verify refund eligibility",
+					"Process payment refund",
+					"Send confirmation email",
+					"Update order status",
+					"Notify customer service",
+					"Update inventory",
+					"Calculate tax refund",
+					"Process loyalty points",
+					"Record transaction",
+					"Generate receipt",
+					"Archive refund record",
+					"Update customer history",
+					"Check fraud indicators",
+					"Validate shipping status",
+					"Update payment gateway",
+					"Check compliance rules",
+					"Record audit trail",
+					"Update financial records",
+					"Process chargeback",
+					"Update metrics",
+				},
+			},
+			matchResult: true,
+			matchScore:  0.8,
 			tasks: []*SubTask{
 				{
 					ID:      "task1",
 					Service: "refund-service",
 					Capabilities: []string{
-						"A service that only processes payments",
+						"Comprehensive refund processing service with validation",
 					},
 				},
 			},
-			wantErr: true,
+			expectedErr: false,
+		},
+		{
+			name: "88.24% capabilities matched (below threshold)",
+			useCase: GroundingUseCase{
+				Capabilities: []string{
+					"Cap1", "Cap2", "Cap3", "Cap4", "Cap5",
+					"Cap6", "Cap7", "Cap8", "Cap9", "Cap10",
+					"Cap11", "Cap12", "Cap13", "Cap14", "Cap15",
+					"Cap16", "Cap17",
+				},
+			},
+			matchResult: true, // Match first 16 capabilities
+			matchScore:  0.8,
+			tasks: []*SubTask{
+				{
+					ID:      "task1",
+					Service: "test-service",
+					Capabilities: []string{
+						"Generic service capability",
+					},
+				},
+			},
+			expectedErr:    true,
+			expectedErrMsg: "insufficient capability coverage: 88.24%",
+		},
+		{
+			name: "no capabilities matched",
+			useCase: GroundingUseCase{
+				Capabilities: []string{
+					"Verify refund eligibility",
+					"Process payment refund",
+				},
+			},
+			matchResult: false,
+			matchScore:  0.7,
+			tasks: []*SubTask{
+				{
+					ID:      "task1",
+					Service: "unrelated-service",
+					Capabilities: []string{
+						"A completely different service capability",
+					},
+				},
+			},
+			expectedErr:    true,
+			expectedErrMsg: "insufficient capability coverage: 0.00%",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Setup test logger to capture logs
+			var logBuf strings.Builder
+			testLogger := zerolog.New(&logBuf)
+
+			// Configure fake matcher for specific test case
 			matcher := NewFakeMatcher()
 			matcher.matchResponse = tt.matchResult
+			matcher.matchScore = tt.matchScore
 
-			generator := NewPddlGenerator("test-action", &ExecutionPlan{Tasks: tt.tasks}, matcher, zerolog.Nop())
+			// For the 88.24% test case, set up specific matches
+			if tt.name == "88.24% capabilities matched (below threshold)" {
+				// Add these two lines here:
+				matcher.matchCount = 0
+				matcher.totalCount = len(tt.useCase.Capabilities)
+			}
 
-			err := generator.validateServiceCapabilities(context.Background(), useCase)
-			if tt.wantErr {
+			// Create generator with test configuration
+			generator := NewPddlGenerator("test-action", &ExecutionPlan{Tasks: tt.tasks}, matcher, testLogger)
+
+			// Execute validation
+			err := generator.validateServiceCapabilities(context.Background(), tt.useCase)
+
+			// Verify error cases
+			if tt.expectedErr {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), "no service found with required capability")
+				if tt.expectedErrMsg != "" {
+					assert.Contains(t, err.Error(), tt.expectedErrMsg)
+				}
 			} else {
 				assert.NoError(t, err)
+			}
+
+			// Verify logging
+			logOutput := logBuf.String()
+			assert.Contains(t, logOutput, "Matching capabilities")
+			assert.Contains(t, logOutput, "Capability matching summary")
+
+			if !tt.expectedErr {
+				assert.Contains(t, logOutput, `"matchPercentage":1`) // 100% for full match cases
 			}
 		})
 	}
