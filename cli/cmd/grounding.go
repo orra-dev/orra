@@ -121,7 +121,7 @@ func newGroundingListCmd(opts *CliOpts) *cobra.Command {
 				{"NAME", func(s api.GroundingSpec) string { return s.Name }, 30},
 				{"DOMAIN", func(s api.GroundingSpec) string { return s.Domain }, 30},
 				{"VERSION", func(s api.GroundingSpec) string { return s.Version }, 15},
-				{"EXAMPLES", func(s api.GroundingSpec) string { return fmt.Sprintf("%d", len(s.UseCases)) }, 10},
+				{"USE-CASES", func(s api.GroundingSpec) string { return fmt.Sprintf("%d", len(s.UseCases)) }, 10},
 			}
 
 			// Print table with styling
@@ -160,7 +160,7 @@ func newGroundingRemoveCmd(opts *CliOpts) *cobra.Command {
 or use --all to remove all grounding.
 
 Example:
-  orra grounding rm customer-support-examples
+  orra grounding rm customer-support
   orra grounding rm --all`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			proj, _, err := config.GetProject(opts.Config, opts.ProjectID)
