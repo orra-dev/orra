@@ -174,7 +174,7 @@ func (g *PddlGenerator) addActions(domain *strings.Builder) error {
 	return nil
 }
 
-// validateServiceCapabilities checks if any service in the plan can fulfill each required capability
+// validateServiceCapabilities checks if services in the plan fulfill at least 95% of required capabilities
 func (g *PddlGenerator) validateServiceCapabilities(ctx context.Context, useCase GroundingUseCase) error {
 	// Collect all service capabilities
 	var allServiceCapabilities []string
@@ -185,8 +185,9 @@ func (g *PddlGenerator) validateServiceCapabilities(ctx context.Context, useCase
 		allServiceCapabilities = append(allServiceCapabilities, task.Capabilities...)
 	}
 
-	// Track matched capabilities to ensure all are covered
+	// Track matched and unmatched capabilities
 	matchedCapabilities := make(map[string]bool)
+	unmatchedCapabilities := make([]string, 0)
 
 	// For each required capability, check if any service can fulfill it
 	for _, requiredCap := range useCase.Capabilities {
@@ -214,15 +215,31 @@ func (g *PddlGenerator) validateServiceCapabilities(ctx context.Context, useCase
 		}
 
 		if !capabilityMatched {
-			return fmt.Errorf("no service found with required capability: %s", requiredCap)
+			unmatchedCapabilities = append(unmatchedCapabilities, requiredCap)
 		}
 	}
 
-	// Ensure all required capabilities were matched
-	for _, requiredCap := range useCase.Capabilities {
-		if !matchedCapabilities[requiredCap] {
-			return fmt.Errorf("missing required capability: %s", requiredCap)
-		}
+	// Calculate match percentage
+	totalCapabilities := len(useCase.Capabilities)
+	matchedCount := len(matchedCapabilities)
+	matchPercentage := float64(matchedCount) / float64(totalCapabilities)
+
+	g.logger.Debug().
+		Int("totalCapabilities", totalCapabilities).
+		Int("matchedCount", matchedCount).
+		Float64("matchPercentage", matchPercentage).
+		Strs("unmatchedCapabilities", unmatchedCapabilities).
+		Msg("Capability matching summary")
+
+	// Require at least 95% of capabilities to be matched
+	if matchPercentage < 0.95 {
+		return fmt.Errorf(
+			"insufficient capability coverage: %.2f%% (%d/%d capabilities matched). Unmatched capabilities: %v",
+			matchPercentage*100,
+			matchedCount,
+			totalCapabilities,
+			unmatchedCapabilities,
+		)
 	}
 
 	return nil
