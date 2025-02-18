@@ -19,6 +19,10 @@ const (
 	APITypeGroq  = "GROQ"
 )
 
+type Embedder interface {
+	CreateEmbeddings(ctx context.Context, text string) ([]float32, error)
+}
+
 type LLMClient struct {
 	reasoningClient  *open.Client
 	reasoningModel   string

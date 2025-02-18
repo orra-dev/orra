@@ -50,12 +50,13 @@ func NewControlPlane() *ControlPlane {
 	return plane
 }
 
-func (p *ControlPlane) Initialise(ctx context.Context, logMgr *LogManager, wsManager *WebSocketManager, vCache *VectorCache, pddlValid PddlValidator, Logger zerolog.Logger) {
+func (p *ControlPlane) Initialise(ctx context.Context, logMgr *LogManager, wsManager *WebSocketManager, vCache *VectorCache, pddlValid PddlValidator, matcher SimilarityMatcher, Logger zerolog.Logger) {
 	p.LogManager = logMgr
 	p.Logger = Logger
 	p.WebSocketManager = wsManager
 	p.VectorCache = vCache
-	p.pddlValidator = pddlValid
+	p.PddlValidator = pddlValid
+	p.SimilarityMatcher = matcher
 	if p.VectorCache != nil {
 		p.VectorCache.StartCleanup(ctx)
 	}
@@ -183,7 +184,7 @@ func (p *ControlPlane) GetServiceName(projectID string, serviceID string) (strin
 // ApplyGroundingSpec adds domain grounding to a project after validation
 func (p *ControlPlane) ApplyGroundingSpec(projectID string, spec *GroundingSpec) error {
 	start := time.Now()
-	err := p.pddlValidator.HealthCheck(context.Background())
+	err := p.PddlValidator.HealthCheck(context.Background())
 	duration := time.Since(start)
 
 	// Log metrics

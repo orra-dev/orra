@@ -21,11 +21,11 @@ import (
 	"gonum.org/v1/gonum/mat"
 )
 
-func NewVectorCache(llmClient *LLMClient, maxSize int, ttl time.Duration, logger zerolog.Logger) *VectorCache {
+func NewVectorCache(llmClient *LLMClient, matcher SimilarityMatcher, maxSize int, ttl time.Duration, logger zerolog.Logger) *VectorCache {
 	return &VectorCache{
 		projectCaches: make(map[string]*ProjectCache),
 		llmClient:     llmClient,
-		matcher:       NewMatcher(llmClient, logger),
+		matcher:       matcher,
 		ttl:           ttl,
 		maxSize:       maxSize,
 		logger:        logger,
@@ -56,6 +56,10 @@ func (pc *ProjectCache) findBestMatch(query CacheQuery) (*CacheEntry, float64) {
 	// First pass: quick check on matching services
 	for _, entry := range pc.entries {
 		if entry.ServicesHash != query.servicesHash {
+			continue
+		}
+
+		if entry.Grounded != query.grounded {
 			continue
 		}
 
@@ -97,9 +101,9 @@ func (c *VectorCache) getProjectCache(projectID string) *ProjectCache {
 	return pc
 }
 
-func (c *VectorCache) Get(ctx context.Context, projectID, action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, backPromptContext string) (*CacheResult, json.RawMessage, error) {
+func (c *VectorCache) Get(ctx context.Context, projectID, action string, actionParams json.RawMessage, serviceDescriptions string, groundingHit *GroundingHit, backPromptContext string) (*CacheResult, json.RawMessage, error) {
 	result, err, _ := c.group.Do(fmt.Sprintf("%s:%s", projectID, action), func() (interface{}, error) {
-		return c.getWithRetry(ctx, projectID, action, actionParams, serviceDescriptions, grounding, backPromptContext)
+		return c.getWithRetry(ctx, projectID, action, actionParams, serviceDescriptions, groundingHit, backPromptContext)
 	})
 
 	if err != nil {
@@ -126,7 +130,7 @@ func (c *VectorCache) Get(ctx context.Context, projectID, action string, actionP
 	return cacheResult, actionParams, nil
 }
 
-func (c *VectorCache) getWithRetry(ctx context.Context, projectID, action string, rawActionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, backPromptContext string) (*CacheResult, error) {
+func (c *VectorCache) getWithRetry(ctx context.Context, projectID, action string, rawActionParams json.RawMessage, serviceDescriptions string, groundingHit *GroundingHit, backPromptContext string) (*CacheResult, error) {
 	var actionParams ActionParams
 	if err := json.Unmarshal(rawActionParams, &actionParams); err != nil {
 		return nil, fmt.Errorf("failed to parse action params: %w", err)
@@ -150,7 +154,9 @@ func (c *VectorCache) getWithRetry(ctx context.Context, projectID, action string
 		actionParams:     actionParams,
 		actionVector:     actionVector,
 		servicesHash:     servicesHash,
+		grounded:         groundingHit != nil,
 	}
+
 	if cached, cacheHit := c.lookupProjectCache(projectID, query); cacheHit {
 		return cached, nil
 	}
@@ -160,7 +166,7 @@ func (c *VectorCache) getWithRetry(ctx context.Context, projectID, action string
 		Str("actionWithFields", actionWithFields).
 		Msg("CACHE MISS")
 
-	planJson, err := c.genExecutionPlanJson(ctx, action, rawActionParams, serviceDescriptions, grounding, backPromptContext)
+	planJson, err := c.genExecutionPlanJson(ctx, action, rawActionParams, serviceDescriptions, groundingHit, backPromptContext)
 	if err != nil {
 		return nil, err
 	}
@@ -172,13 +178,14 @@ func (c *VectorCache) getWithRetry(ctx context.Context, projectID, action string
 		return nil, err
 	}
 
-	cachedEntry := c.cache(projectID, planJson, actionVector, servicesHash, task0Input, taskZeroCacheMappings, actionWithFields)
+	cachedEntry := c.cache(projectID, planJson, actionVector, servicesHash, task0Input, taskZeroCacheMappings, actionWithFields, groundingHit != nil)
 
 	return &CacheResult{
 		ID:         cachedEntry.ID,
 		Response:   planJson,
 		Task0Input: task0Input,
 		Hit:        false,
+		Grounded:   cachedEntry.Grounded,
 	}, nil
 }
 
@@ -200,7 +207,8 @@ func (c *VectorCache) lookupProjectCache(projectID string, query CacheQuery) (*C
 				Str("projectID", projectID).
 				Str("actionWithFields", query.actionWithFields).
 				Str("CachedActionWithFields", bestEntry.CachedActionWithFields).
-				Float64("similarity", bestScore).
+				Float64("Similarity", bestScore).
+				Bool("Grounded", bestEntry.Grounded).
 				Msg("CACHE HIT")
 
 			return &CacheResult{
@@ -208,6 +216,7 @@ func (c *VectorCache) lookupProjectCache(projectID string, query CacheQuery) (*C
 				Response:      bestEntry.Response,
 				Task0Input:    bestEntry.Task0Input,
 				CacheMappings: bestEntry.CacheMappings,
+				Grounded:      bestEntry.Grounded,
 				Hit:           true,
 			}, true
 		} else {
@@ -219,8 +228,8 @@ func (c *VectorCache) lookupProjectCache(projectID string, query CacheQuery) (*C
 }
 
 // genExecutionPlanJson queries the LLM and extracts the execution plan.
-func (c *VectorCache) genExecutionPlanJson(ctx context.Context, action string, rawActionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, backPromptContext string) (string, error) {
-	prompt := buildPlannerPrompt(action, rawActionParams, serviceDescriptions, grounding, backPromptContext)
+func (c *VectorCache) genExecutionPlanJson(ctx context.Context, action string, rawActionParams json.RawMessage, serviceDescriptions string, groundingHit *GroundingHit, backPromptContext string) (string, error) {
+	prompt := buildPlannerPrompt(action, rawActionParams, serviceDescriptions, groundingHit, backPromptContext)
 	llmResp, err := c.llmClient.Generate(ctx, prompt)
 	if err != nil {
 		return "", err
@@ -263,7 +272,7 @@ func (c *VectorCache) prepTaskZeroForCache(execPlanJson string, actionParams Act
 	return task0Input, mappings, nil
 }
 
-func (c *VectorCache) cache(projectID string, planJson string, actionVector *mat.VecDense, servicesHash string, task0Input json.RawMessage, taskZeroCacheMappings []TaskZeroCacheMapping, actionWithFields string) *CacheEntry {
+func (c *VectorCache) cache(projectID string, planJson string, actionVector *mat.VecDense, servicesHash string, task0Input json.RawMessage, taskZeroCacheMappings []TaskZeroCacheMapping, actionWithFields string, grounded bool) *CacheEntry {
 	pc := c.getProjectCache(projectID)
 
 	// Create new cache entry
@@ -276,6 +285,7 @@ func (c *VectorCache) cache(projectID string, planJson string, actionVector *mat
 		CacheMappings:          taskZeroCacheMappings,
 		Timestamp:              time.Now(),
 		CachedActionWithFields: actionWithFields,
+		Grounded:               grounded,
 	}
 
 	// Add to project cache

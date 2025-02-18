@@ -38,7 +38,8 @@ type ControlPlane struct {
 	workerMu             sync.RWMutex
 	WebSocketManager     *WebSocketManager
 	VectorCache          *VectorCache
-	pddlValidator        PddlValidator
+	PddlValidator        PddlValidator
+	SimilarityMatcher    SimilarityMatcher
 	Logger               zerolog.Logger
 }
 
@@ -223,6 +224,7 @@ type Orchestration struct {
 	HealthCheckGracePeriod *Duration         `json:"healthCheckGracePeriod,omitempty"`
 	Webhook                string            `json:"webhook"`
 	taskZero               json.RawMessage
+	groundingHit           *GroundingHit
 }
 
 type Duration struct {
@@ -268,6 +270,7 @@ type ExecutionPlan struct {
 	ProjectID        string          `json:"-"`
 	Tasks            []*SubTask      `json:"tasks"`
 	ParallelGroups   []ParallelGroup `json:"parallel_groups"`
+	GroundingHit     *GroundingHit   `json:"-"`
 	GroundingID      string          `json:"-"`
 	GroundingVersion string          `json:"-"`
 }
@@ -310,6 +313,7 @@ type CacheEntry struct {
 	CacheMappings          TaskZeroCacheMappings
 	Timestamp              time.Time
 	CachedActionWithFields string
+	Grounded               bool
 }
 
 type CacheResult struct {
@@ -317,6 +321,7 @@ type CacheResult struct {
 	ID            string
 	Task0Input    json.RawMessage
 	CacheMappings TaskZeroCacheMappings
+	Grounded      bool
 	Hit           bool
 }
 
@@ -331,7 +336,7 @@ type VectorCache struct {
 	mu            sync.RWMutex
 	projectCaches map[string]*ProjectCache
 	llmClient     *LLMClient
-	matcher       *Matcher
+	matcher       SimilarityMatcher
 	ttl           time.Duration
 	maxSize       int // Per project
 	group         singleflight.Group
@@ -343,6 +348,7 @@ type CacheQuery struct {
 	actionParams     ActionParams
 	actionVector     *mat.VecDense
 	servicesHash     string
+	grounded         bool
 }
 
 // CompensationResult stores the outcome of a compensation attempt
@@ -394,6 +400,15 @@ type GroundingSpec struct {
 	Version     string             `json:"version" yaml:"version"`
 	UseCases    []GroundingUseCase `json:"useCases" yaml:"use-cases"`
 	Constraints []string           `json:"constraints" yaml:"constraints"`
+}
+
+// GroundingHit represents an orchestration's grounding match
+type GroundingHit struct {
+	Name        string           `json:"name" yaml:"name"`
+	Domain      string           `json:"domain" yaml:"domain"`
+	Version     string           `json:"version" yaml:"version"`
+	UseCase     GroundingUseCase `json:"useCases" yaml:"use-cases"`
+	Constraints []string         `json:"constraints" yaml:"constraints"`
 }
 
 // GetEmbeddingText returns a string suitable for embedding that captures the example's semantic meaning

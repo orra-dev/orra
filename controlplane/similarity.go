@@ -13,12 +13,9 @@ import (
 	"gonum.org/v1/gonum/mat"
 )
 
-type Embedder interface {
-	CreateEmbeddings(ctx context.Context, text string) ([]float32, error)
-}
-
 type SimilarityMatcher interface {
 	MatchTexts(ctx context.Context, text1, text2 string, threshold float64) (bool, float64, error)
+	GenerateEmbeddingVector(ctx context.Context, text string) (*mat.VecDense, error)
 }
 
 type Matcher struct {
