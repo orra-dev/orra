@@ -108,16 +108,7 @@ app.post('/webhooks/orra', (req, res) => {
 ```
 
 Want more details?
-- [Advanced Topics & Internals →](../docs/advanced.md)
-
-This revision:
-1. Gets straight to the point about reliability
-2. Shows clear steps: submit → monitor → results
-3. Keeps focus on what AI Engineers care about most
-4. Defers complex details to advanced docs
-5. Uses minimal but meaningful examples
-
-How's this for a more focused approach?
+- [Core Topics & Internals →](../docs/core)
 
 ## Monitoring Actions
 

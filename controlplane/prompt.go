@@ -87,15 +87,15 @@ func buildPromptExtras(domainContext, backPromptContext string) string {
 	return result
 }
 
-func buildPlannerPrompt(action string, actionParams json.RawMessage, serviceDescriptions string, grounding *GroundingSpec, backPromptContext string) string {
+func buildPlannerPrompt(action string, actionParams json.RawMessage, serviceDescriptions string, groundingHit *GroundingHit, backPromptContext string) string {
 	var (
 		useCases    []GroundingUseCase
 		constraints []string
 	)
 
-	if grounding != nil {
-		useCases = grounding.UseCases
-		constraints = grounding.Constraints
+	if groundingHit != nil {
+		useCases = []GroundingUseCase{groundingHit.UseCase}
+		constraints = groundingHit.Constraints
 	}
 
 	promptExtras := buildPromptExtras(generateDomainContext(useCases, constraints), backPromptContext)

@@ -36,7 +36,7 @@ func setupTestApp(t *testing.T) (*App, *Project) {
 		Logger: zerolog.New(zerolog.NewTestWriter(t)),
 	}
 
-	app.Plane.Initialise(context.Background(), nil, nil, nil, &fakePddlValidator{}, app.Logger)
+	app.Plane.Initialise(context.Background(), nil, nil, nil, &fakePddlValidator{}, nil, app.Logger)
 
 	app.configureRoutes()
 
