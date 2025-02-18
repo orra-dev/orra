@@ -212,6 +212,7 @@ func (c *VectorCache) lookupProjectCache(projectID string, query CacheQuery) (*C
 				Response:      bestEntry.Response,
 				Task0Input:    bestEntry.Task0Input,
 				CacheMappings: bestEntry.CacheMappings,
+				Grounded:      bestEntry.Grounded,
 				Hit:           true,
 			}, true
 		} else {

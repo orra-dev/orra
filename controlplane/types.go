@@ -321,8 +321,8 @@ type CacheResult struct {
 	ID            string
 	Task0Input    json.RawMessage
 	CacheMappings TaskZeroCacheMappings
-	Hit           bool
 	Grounded      bool
+	Hit           bool
 }
 
 type ProjectCache struct {
