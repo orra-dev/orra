@@ -9,6 +9,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -18,6 +20,7 @@ import (
 )
 
 const (
+	DefaultConfigDir              = ".orra"
 	TaskZero                      = "task0"
 	ResultAggregatorID            = "result_aggregator"
 	FailureTrackerID              = "failure_tracker"
@@ -67,6 +70,7 @@ type Config struct {
 	PlanCache             PlanCache
 	PddlValidatorPath     string        `envconfig:"default=/usr/local/bin/Validate"`
 	PddlValidationTimeout time.Duration `envconfig:"default=30s"`
+	StoragePath           string        `envconfig:"-"`
 }
 
 func Load() (Config, error) {
@@ -78,6 +82,11 @@ func Load() (Config, error) {
 	if err := validateReasoningConfig(cfg.Reasoning); err != nil {
 		return Config{}, err
 	}
+	path, err := getStoragePath()
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.StoragePath = path
 	return cfg, err
 }
 
@@ -98,6 +107,14 @@ func validateReasoningConfig(reasoning Reasoning) error {
 		return fmt.Errorf("reasoning api key is required")
 	}
 	return nil
+}
+
+func getStoragePath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("could not determine home directory: %w", err)
+	}
+	return filepath.Join(home, DefaultConfigDir), nil
 }
 
 type Status int
