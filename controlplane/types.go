@@ -75,14 +75,25 @@ type OrchestrationState struct {
 	Error         string
 }
 
+type LogStorage interface {
+	Store(orchestrationID string, entry LogEntry) error
+	StoreState(state *OrchestrationState) error
+
+	LoadEntries(orchestrationID string) ([]LogEntry, error)
+	ListOrchestrationStates() ([]*OrchestrationState, error)
+	LoadState(orchestrationID string) (*OrchestrationState, error)
+
+	Close() error
+}
+
 type LogEntry struct {
-	offset     uint64
-	entryType  string
-	id         string
-	value      json.RawMessage
-	timestamp  time.Time
-	producerID string
-	attemptNum int
+	Offset     uint64          `json:"offset"`
+	EntryType  string          `json:"entryType"`
+	Id         string          `json:"id"`
+	Value      json.RawMessage `json:"logValue"`
+	Timestamp  time.Time       `json:"timestamp"`
+	ProducerID string          `json:"producerId"`
+	AttemptNum int             `json:"attemptNum"`
 }
 
 type LogManager struct {
