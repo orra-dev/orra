@@ -166,17 +166,17 @@ func (p *ControlPlane) processCompensationSummary(entries []LogEntry, plan *Exec
 	taskStates := make(map[string]string)
 
 	for _, entry := range entries {
-		switch entry.Type() {
+		switch entry.GetEntryType() {
 		case CompensationAttemptedLogType:
 			summary.Active = true
-			taskStates[entry.ProducerID()] = "processing"
+			taskStates[entry.GetProducerID()] = "processing"
 
 		case CompensationCompleteLogType, CompensationPartialLogType:
-			taskStates[entry.ProducerID()] = "completed"
+			taskStates[entry.GetProducerID()] = "completed"
 			summary.Completed++
 
 		case CompensationFailureLogType, CompensationExpiredLogType:
-			taskStates[entry.ProducerID()] = "failed"
+			taskStates[entry.GetProducerID()] = "failed"
 			summary.Failed++
 		}
 	}
@@ -331,9 +331,9 @@ func (p *ControlPlane) processLogEntries(log *Log) (map[string]json.RawMessage, 
 	entries := log.ReadFrom(0)
 	p.Logger.Trace().Interface("Log Entries", entries).Msg("processing log entries for orchestration inspection")
 	for _, entry := range entries {
-		switch entry.Type() {
+		switch entry.GetEntryType() {
 		case "task_output":
-			taskOutputs[entry.ID()] = entry.Value()
+			taskOutputs[entry.GetID()] = entry.GetValue()
 		case "task_status":
 			processStatusEntry(entry, taskStatuses, p.Logger)
 		}
@@ -345,8 +345,8 @@ func (p *ControlPlane) processLogEntries(log *Log) (map[string]json.RawMessage, 
 func processStatusEntry(entry LogEntry, taskStatuses map[string][]TaskStatusEvent, logger zerolog.Logger) {
 	var statusEvent TaskStatusEvent
 
-	logger.Trace().RawJSON("Status event value", entry.Value()).Msg("")
-	if err := json.Unmarshal(entry.Value(), &statusEvent); err != nil {
+	logger.Trace().RawJSON("Status event value", entry.GetValue()).Msg("")
+	if err := json.Unmarshal(entry.GetValue(), &statusEvent); err != nil {
 		logger.Trace().Err(err).Msg("failed to unmarshal status event value")
 		return
 	}
@@ -509,48 +509,48 @@ func (p *ControlPlane) processCompensationHistory(entries []LogEntry, taskID str
 
 	for _, entry := range entries {
 		// Only process entries for this task
-		if !strings.Contains(entry.ID(), strings.ToLower(taskID)) {
+		if !strings.Contains(entry.GetID(), strings.ToLower(taskID)) {
 			continue
 		}
 
 		var event CompensationStatusEvent
 		event.TaskID = taskID
-		event.Timestamp = entry.Timestamp()
+		event.Timestamp = entry.GetTimestamp()
 		event.MaxAttempts = MaxCompensationAttempts
 
-		switch entry.Type() {
+		switch entry.GetEntryType() {
 		case CompensationAttemptedLogType:
 			event.Status = CompensationProcessing
-			event.Attempt = entry.AttemptNum()
+			event.Attempt = entry.GetAttemptNum()
 			event.ID = fmt.Sprintf("comp_attempt_%s_%d", taskID, event.Attempt)
 			history = append(history, event)
 
 		case CompensationCompleteLogType:
 			event.Status = CompensationCompleted
-			event.Attempt = entry.AttemptNum()
+			event.Attempt = entry.GetAttemptNum()
 			event.ID = fmt.Sprintf("comp_completed_%s", taskID)
 			history = append(history, event)
 
 		case CompensationPartialLogType:
 			event.Status = CompensationPartial
-			event.Attempt = entry.AttemptNum()
+			event.Attempt = entry.GetAttemptNum()
 			event.ID = fmt.Sprintf("comp_completed_partially_%s", taskID)
 			history = append(history, event)
 
 		case CompensationExpiredLogType:
 			event.Status = CompensationExpired
-			event.Attempt = entry.AttemptNum()
+			event.Attempt = entry.GetAttemptNum()
 			event.ID = fmt.Sprintf("comp_expired_%s", taskID)
 			history = append(history, event)
 
 		case CompensationFailureLogType:
 			event.Status = CompensationFailed
-			event.Attempt = entry.AttemptNum()
+			event.Attempt = entry.GetAttemptNum()
 			event.ID = fmt.Sprintf("comp_fail_%s_%d", taskID, event.Attempt)
 
 			// Extract error message if present
 			var failure CompensationResult
-			if err := json.Unmarshal(entry.Value(), &failure); err == nil {
+			if err := json.Unmarshal(entry.GetValue(), &failure); err == nil {
 				event.Error = failure.Error
 			}
 

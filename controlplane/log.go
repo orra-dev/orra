@@ -347,11 +347,11 @@ func (lm *LogManager) FinalizeOrchestration(
 
 	var candidates []CompensationCandidate
 	for _, entry := range entries {
-		if entry.entryType != CompensationDataStoredLogType {
+		if entry.EntryType != CompensationDataStoredLogType {
 			continue
 		}
 
-		svc, err := lm.controlPlane.GetServiceByID(entry.producerID)
+		svc, err := lm.controlPlane.GetServiceByID(entry.ProducerID)
 		if err != nil {
 			return err
 		}
@@ -359,9 +359,9 @@ func (lm *LogManager) FinalizeOrchestration(
 			continue
 		}
 
-		taskID, _ := strings.CutPrefix(entry.id, "comp_data_")
+		taskID, _ := strings.CutPrefix(entry.Id, "comp_data_")
 		var compensation CompensationData
-		if err := json.Unmarshal(entry.Value(), &compensation); err != nil {
+		if err := json.Unmarshal(entry.GetValue(), &compensation); err != nil {
 			return err
 		}
 		candidates = append(candidates, CompensationCandidate{
@@ -414,11 +414,25 @@ func (l *Log) Append(entry LogEntry) {
 		return
 	}
 
-	entry.offset = l.CurrentOffset
+	entry.Offset = l.CurrentOffset
 	l.Entries = append(l.Entries, entry)
 	l.CurrentOffset += 1
 	l.lastAccessed = time.Now().UTC()
-	l.seenEntries[entry.ID()] = true
+	l.seenEntries[entry.GetID()] = true
+
+	// Persist after memory operations
+	if l.storage != nil {
+		if err := l.storage.Store(storageId, entry); err != nil {
+			// Log error and trigger shutdown
+			l.logger.Error().
+				Err(err).
+				Str("entryID", entry.GetID()).
+				Msg("Failed to persist log entry - initiating shutdown")
+
+			//go l.initiateGracefulShutdown()
+			panic(fmt.Sprintf("Log persistence failure: %v", err))
+		}
+	}
 }
 
 func (l *Log) ReadFrom(offset uint64) []LogEntry {
@@ -434,42 +448,22 @@ func (l *Log) ReadFrom(offset uint64) []LogEntry {
 
 func NewLogEntry(entryType, id string, value json.RawMessage, producerID string, attemptNum int) LogEntry {
 	return LogEntry{
-		entryType:  entryType,
-		id:         id,
-		value:      append(json.RawMessage(nil), value...), // Deep copy
-		timestamp:  time.Now().UTC(),
-		producerID: producerID,
-		attemptNum: attemptNum,
+		EntryType:  entryType,
+		Id:         id,
+		Value:      append(json.RawMessage(nil), value...), // Deep copy
+		Timestamp:  time.Now().UTC(),
+		ProducerID: producerID,
+		AttemptNum: attemptNum,
 	}
 }
 
-func (e LogEntry) Offset() uint64         { return e.offset }
-func (e LogEntry) Type() string           { return e.entryType }
-func (e LogEntry) ID() string             { return e.id }
-func (e LogEntry) Value() json.RawMessage { return append(json.RawMessage(nil), e.value...) }
-func (e LogEntry) Timestamp() time.Time   { return e.timestamp }
-func (e LogEntry) ProducerID() string     { return e.producerID }
-func (e LogEntry) AttemptNum() int        { return e.attemptNum }
-
-func (e LogEntry) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		Offset     uint64          `json:"offset"`
-		Type       string          `json:"type"`
-		ID         string          `json:"id"`
-		Value      json.RawMessage `json:"value"`
-		Timestamp  time.Time       `json:"timestamp"`
-		ProducerID string          `json:"producerId"`
-		AttemptNum int             `json:"attemptNum"`
-	}{
-		Offset:     e.offset,
-		Type:       e.entryType,
-		ID:         e.id,
-		Value:      e.value,
-		Timestamp:  e.timestamp,
-		ProducerID: e.producerID,
-		AttemptNum: e.attemptNum,
-	})
-}
+func (e LogEntry) GetOffset() uint64         { return e.Offset }
+func (e LogEntry) GetEntryType() string      { return e.EntryType }
+func (e LogEntry) GetID() string             { return e.Id }
+func (e LogEntry) GetValue() json.RawMessage { return append(json.RawMessage(nil), e.Value...) }
+func (e LogEntry) GetTimestamp() time.Time   { return e.Timestamp }
+func (e LogEntry) GetProducerID() string     { return e.ProducerID }
+func (e LogEntry) GetAttemptNum() int        { return e.AttemptNum }
 
 func (d DependencyState) SortedValues() []json.RawMessage {
 	var out []json.RawMessage
