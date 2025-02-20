@@ -50,13 +50,21 @@ func NewControlPlane() *ControlPlane {
 	return plane
 }
 
-func (p *ControlPlane) Initialise(ctx context.Context, logMgr *LogManager, wsManager *WebSocketManager, vCache *VectorCache, pddlValid PddlValidator, matcher SimilarityMatcher, Logger zerolog.Logger) {
+func (p *ControlPlane) Initialise(ctx context.Context, storage ProjectStorage, logMgr *LogManager, wsManager *WebSocketManager, vCache *VectorCache, pddlValid PddlValidator, matcher SimilarityMatcher, Logger zerolog.Logger) {
+	p.storage = storage
 	p.LogManager = logMgr
 	p.Logger = Logger
 	p.WebSocketManager = wsManager
 	p.VectorCache = vCache
 	p.PddlValidator = pddlValid
 	p.SimilarityMatcher = matcher
+
+	if projects, err := storage.ListProjects(); err == nil {
+		for _, project := range projects {
+			p.projects[project.ID] = project
+		}
+	}
+
 	if p.VectorCache != nil {
 		p.VectorCache.StartCleanup(ctx)
 	}
@@ -317,12 +325,54 @@ func (p *ControlPlane) RemoveProjectGrounding(projectID string) error {
 }
 
 func (p *ControlPlane) GetProjectByApiKey(key string) (*Project, error) {
+	// Try storage first
+	if project, err := p.storage.LoadProjectByAPIKey(key); err == nil {
+		return project, nil
+	}
+
+	// Fallback to in-memory (can be removed once storage is fully tested)
 	for _, project := range p.projects {
 		if project.APIKey == key || contains(project.AdditionalAPIKeys, key) {
 			return project, nil
 		}
 	}
+
 	return nil, fmt.Errorf("no project found with the given API key: %s", key)
+}
+
+func (p *ControlPlane) AddProject(project *Project) error {
+	if err := p.storage.StoreProject(project); err != nil {
+		return fmt.Errorf("failed to store project: %w", err)
+	}
+
+	p.projects[project.ID] = project
+	return nil
+}
+
+func (p *ControlPlane) AddProjectAPIKey(projectID string, apiKey string) error {
+	if err := p.storage.AddProjectAPIKey(projectID, apiKey); err != nil {
+		return fmt.Errorf("failed to add API key: %w", err)
+	}
+
+	// Update in-memory state
+	if project, exists := p.projects[projectID]; exists {
+		project.AdditionalAPIKeys = append(project.AdditionalAPIKeys, apiKey)
+	}
+
+	return nil
+}
+
+func (p *ControlPlane) AddProjectWebhook(projectID string, webhook string) error {
+	if err := p.storage.AddProjectWebhook(projectID, webhook); err != nil {
+		return fmt.Errorf("failed to add webhook: %w", err)
+	}
+
+	// Update in-memory state
+	if project, exists := p.projects[projectID]; exists {
+		project.Webhooks = append(project.Webhooks, webhook)
+	}
+
+	return nil
 }
 
 func contains(entries []string, v string) bool {

@@ -25,6 +25,9 @@ import (
 )
 
 const JSONMarshalingFail = "Orra:JSONMarshalingFail"
+const ProjectRegistrationFailed = "Orra:ProjectRegistrationFailed"
+const ProjectAPIKeyAdditionFailed = "Orra:ProjectAPIKeyAdditionFailed"
+const ProjectWebhookAdditionFailed = "Orra:ProjectWebhookAdditionFailed"
 const UnknownOrchestration = "Orra:UnknownOrchestration"
 const ActionNotActionable = "Orra:ActionNotActionable"
 const ActionCannotExecute = "Orra:ActionCannotExecute"
@@ -161,7 +164,10 @@ func (app *App) RegisterProject(w http.ResponseWriter, r *http.Request) {
 	project.ID = app.Plane.GenerateProjectKey()
 	project.APIKey = app.Plane.GenerateAPIKey()
 
-	app.Plane.projects[project.ID] = &project
+	if err := app.Plane.AddProject(&project); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(ProjectRegistrationFailed), err))
+		return
+	}
 
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(project); err != nil {
@@ -296,7 +302,10 @@ func (app *App) CreateAdditionalApiKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	newApiKey := app.Plane.GenerateAPIKey()
-	project.AdditionalAPIKeys = append(project.AdditionalAPIKeys, newApiKey)
+	if err := app.Plane.AddProjectAPIKey(project.ID, newApiKey); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(ProjectAPIKeyAdditionFailed), err))
+		return
+	}
 
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(map[string]string{
@@ -325,6 +334,11 @@ func (app *App) AddWebhook(w http.ResponseWriter, r *http.Request) {
 
 	if _, err := url.ParseRequestURI(webhook.Url); err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Validation, err))
+		return
+	}
+
+	if err := app.Plane.AddProjectWebhook(project.ID, webhook.Url); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(ProjectWebhookAdditionFailed), err))
 		return
 	}
 
@@ -407,6 +421,8 @@ func (app *App) ApplyGrounding(w http.ResponseWriter, r *http.Request) {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
 		return
 	}
+
+	app.Logger.Info().Interface("project", project).Msg("ApplyGrounding")
 
 	var grounding GroundingSpec
 	if err := json.NewDecoder(r.Body).Decode(&grounding); err != nil {

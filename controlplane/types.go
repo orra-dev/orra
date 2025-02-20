@@ -41,6 +41,7 @@ type ControlPlane struct {
 	PddlValidator        PddlValidator
 	SimilarityMatcher    SimilarityMatcher
 	Logger               zerolog.Logger
+	storage              ProjectStorage
 }
 
 type ServiceFinder func(serviceID string) (*ServiceInfo, error)

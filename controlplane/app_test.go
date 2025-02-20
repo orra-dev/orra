@@ -26,25 +26,52 @@ func (f *fakePddlValidator) Validate(_ context.Context, _, _, _ string) error {
 }
 func (f *fakePddlValidator) HealthCheck(_ context.Context) error { return nil }
 
+type fakeProjectStorage struct {
+	project *Project
+}
+
+func (f *fakeProjectStorage) StoreProject(_ *Project) error { return nil }
+
+func (f *fakeProjectStorage) LoadProject(_ string) (*Project, error) { return f.project, nil }
+
+func (f *fakeProjectStorage) LoadProjectByAPIKey(apiKey string) (*Project, error) {
+	if f.project.APIKey != apiKey {
+		return nil, fmt.Errorf("invalid API key")
+	}
+	return f.project, nil
+}
+
+func (f *fakeProjectStorage) ListProjects() ([]*Project, error) { return []*Project{f.project}, nil }
+
+func (f *fakeProjectStorage) AddProjectAPIKey(_ string, _ string) error { return nil }
+
+func (f *fakeProjectStorage) AddProjectWebhook(_ string, _ string) error { return nil }
+
+func (f *fakeProjectStorage) Close() error { return nil }
+
 // setupTestApp creates a new App instance with a test project for testing
 func setupTestApp(t *testing.T) (*App, *Project) {
 	t.Helper()
 
-	app := &App{
-		Router: mux.NewRouter(),
-		Plane:  NewControlPlane(),
-		Logger: zerolog.New(zerolog.NewTestWriter(t)),
-	}
-
-	app.Plane.Initialise(context.Background(), nil, nil, nil, &fakePddlValidator{}, nil, app.Logger)
-
-	app.configureRoutes()
+	logger := zerolog.New(zerolog.NewTestWriter(t))
+	projectStorage := &fakeProjectStorage{}
+	plane := NewControlPlane()
 
 	// Create a test project
 	project := &Project{
-		ID:     app.Plane.GenerateProjectKey(),
-		APIKey: app.Plane.GenerateAPIKey(),
+		ID:     "project-id",
+		APIKey: "project-api-key",
 	}
+	projectStorage.project = project
+	plane.Initialise(context.Background(), projectStorage, nil, nil, nil, &fakePddlValidator{}, nil, logger)
+
+	app := &App{
+		Router: mux.NewRouter(),
+		Plane:  plane,
+		Logger: logger,
+	}
+
+	app.configureRoutes()
 	app.Plane.projects[project.ID] = project
 
 	return app, project

@@ -54,7 +54,7 @@ func main() {
 	}
 	pddlValidSvc := NewPddlValidationService(cfg.PddlValidatorPath, cfg.PddlValidationTimeout, app.Logger)
 	logManager.Logger = app.Logger
-	plane.Initialise(ctx, logManager, wsManager, vCache, pddlValidSvc, matcher, app.Logger)
+	plane.Initialise(ctx, db, logManager, wsManager, vCache, pddlValidSvc, matcher, app.Logger)
 
 	app.Plane = plane
 	app.Router = mux.NewRouter()
