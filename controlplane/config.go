@@ -132,6 +132,7 @@ const (
 	Failed
 	NotActionable
 	Paused
+	Cancelled
 )
 
 func (s Status) String() string {
@@ -152,6 +153,8 @@ func (s Status) String() string {
 		return "not_actionable"
 	case Paused:
 		return "paused"
+	case Cancelled:
+		return "cancelled"
 	default:
 		return ""
 	}
@@ -183,6 +186,8 @@ func (s *Status) UnmarshalJSON(data []byte) error {
 		*s = NotActionable
 	case "paused":
 		*s = Paused
+	case "cancelled":
+		*s = Cancelled
 	default:
 		return fmt.Errorf("invalid Status: %s", s)
 	}
