@@ -40,8 +40,9 @@ type ControlPlane struct {
 	VectorCache          *VectorCache
 	PddlValidator        PddlValidator
 	SimilarityMatcher    SimilarityMatcher
+	pStorage             ProjectStorage
+	svcStorage           ServiceStorage
 	Logger               zerolog.Logger
-	storage              ProjectStorage
 }
 
 type ServiceFinder func(serviceID string) (*ServiceInfo, error)
@@ -77,9 +78,6 @@ type ProjectStorage interface {
 
 	// AddProjectWebhook adds a new webhook URL to a project
 	AddProjectWebhook(projectID string, webhook string) error
-
-	// Close releases any resources held by the storage
-	Close() error
 }
 
 type Project struct {
@@ -110,8 +108,6 @@ type LogStore interface {
 	LoadEntries(orchestrationID string) ([]LogEntry, error)
 	ListOrchestrationStates() ([]*OrchestrationState, error)
 	LoadState(orchestrationID string) (*OrchestrationState, error)
-
-	Close() error
 }
 
 type LogEntry struct {
@@ -240,6 +236,23 @@ type ServiceSchema struct {
 	Output Spec `json:"output"`
 }
 
+type ServiceStorage interface {
+	// StoreService stores or updates a service and its related data atomically
+	StoreService(service *ServiceInfo) error
+
+	// LoadService retrieves a service by its ID
+	//LoadService(serviceID string) (*ServiceInfo, error)
+
+	// LoadServiceByProjectID retrieves a service by a ProjectID and its ID
+	LoadServiceByProjectID(projectID, serviceID string) (*ServiceInfo, error)
+
+	// ListProjectServices lists all services for a given project
+	//ListProjectServices(projectID string) ([]*ServiceInfo, error)
+
+	// ListServices returns all services
+	ListServices() ([]*ServiceInfo, error)
+}
+
 type ServiceInfo struct {
 	Type             ServiceType       `json:"type"`
 	ID               string            `json:"id"`
@@ -247,7 +260,7 @@ type ServiceInfo struct {
 	Description      string            `json:"description"`
 	Schema           ServiceSchema     `json:"schema"`
 	Revertible       bool              `json:"revertible"`
-	ProjectID        string            `json:"-"`
+	ProjectID        string            `json:"projectID"`
 	Version          int64             `json:"version"`
 	IdempotencyStore *IdempotencyStore `json:"-"`
 }

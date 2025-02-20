@@ -49,6 +49,16 @@ func (f *fakeProjectStorage) AddProjectWebhook(_ string, _ string) error { retur
 
 func (f *fakeProjectStorage) Close() error { return nil }
 
+type fakeSvcStorage struct{}
+
+func (f *fakeSvcStorage) StoreService(_ *ServiceInfo) error { return nil }
+
+func (f *fakeSvcStorage) LoadServiceByProjectID(_, _ string) (*ServiceInfo, error) {
+	return nil, nil
+}
+
+func (f *fakeSvcStorage) ListServices() ([]*ServiceInfo, error) { return nil, nil }
+
 // setupTestApp creates a new App instance with a test project for testing
 func setupTestApp(t *testing.T) (*App, *Project) {
 	t.Helper()
@@ -63,7 +73,7 @@ func setupTestApp(t *testing.T) (*App, *Project) {
 		APIKey: "project-api-key",
 	}
 	projectStorage.project = project
-	plane.Initialise(context.Background(), projectStorage, nil, nil, nil, &fakePddlValidator{}, nil, logger)
+	plane.Initialise(context.Background(), projectStorage, &fakeSvcStorage{}, nil, nil, nil, &fakePddlValidator{}, nil, logger)
 
 	app := &App{
 		Router: mux.NewRouter(),

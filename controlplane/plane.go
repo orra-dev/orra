@@ -50,8 +50,19 @@ func NewControlPlane() *ControlPlane {
 	return plane
 }
 
-func (p *ControlPlane) Initialise(ctx context.Context, storage ProjectStorage, logMgr *LogManager, wsManager *WebSocketManager, vCache *VectorCache, pddlValid PddlValidator, matcher SimilarityMatcher, Logger zerolog.Logger) {
-	p.storage = storage
+func (p *ControlPlane) Initialise(
+	ctx context.Context,
+	pStorage ProjectStorage,
+	svcStorage ServiceStorage,
+	logMgr *LogManager,
+	wsManager *WebSocketManager,
+	vCache *VectorCache,
+	pddlValid PddlValidator,
+	matcher SimilarityMatcher,
+	Logger zerolog.Logger,
+) {
+	p.pStorage = pStorage
+	p.svcStorage = svcStorage
 	p.LogManager = logMgr
 	p.Logger = Logger
 	p.WebSocketManager = wsManager
@@ -59,9 +70,21 @@ func (p *ControlPlane) Initialise(ctx context.Context, storage ProjectStorage, l
 	p.PddlValidator = pddlValid
 	p.SimilarityMatcher = matcher
 
-	if projects, err := storage.ListProjects(); err == nil {
+	if projects, err := pStorage.ListProjects(); err == nil {
 		for _, project := range projects {
 			p.projects[project.ID] = project
+		}
+	}
+
+	// Load existing services
+	if services, err := svcStorage.ListServices(); err == nil {
+		for _, svc := range services {
+			projectServices, exists := p.services[svc.ProjectID]
+			if !exists {
+				projectServices = make(map[string]*ServiceInfo)
+				p.services[svc.ProjectID] = projectServices
+			}
+			projectServices[svc.ID] = svc
 		}
 	}
 
@@ -71,9 +94,6 @@ func (p *ControlPlane) Initialise(ctx context.Context, storage ProjectStorage, l
 }
 
 func (p *ControlPlane) RegisterOrUpdateService(service *ServiceInfo) error {
-	p.servicesMu.Lock()
-	defer p.servicesMu.Unlock()
-
 	if errs := v.Validate(service.Validation()); len(errs) > 0 {
 		err := fmt.Errorf("service validation error: %w", errs)
 		p.Logger.Error().
@@ -85,33 +105,20 @@ func (p *ControlPlane) RegisterOrUpdateService(service *ServiceInfo) error {
 		return err
 	}
 
-	projectServices, exists := p.services[service.ProjectID]
-	if !exists {
-		p.Logger.Debug().
-			Str("ProjectID", service.ProjectID).
-			Str("ServiceName", service.Name).
-			Msgf("Creating new project service")
-		projectServices = make(map[string]*ServiceInfo)
-		p.services[service.ProjectID] = projectServices
-	}
-
 	if len(strings.TrimSpace(service.ID)) == 0 {
 		service.ID = p.GenerateServiceKey()
 		service.Version = 1
-		service.IdempotencyStore = NewIdempotencyStore(0)
-
 		p.Logger.Debug().
 			Str("ProjectID", service.ProjectID).
 			Str("ServiceName", service.Name).
 			Msgf("Generating new service ID")
 	} else {
-		existingService, exists := projectServices[service.ID]
-		if !exists {
-			return fmt.Errorf("service with key %s not found in project %s", service.ID, service.ProjectID)
+		// Load existing service
+		existingService, err := p.svcStorage.LoadServiceByProjectID(service.ProjectID, service.ID)
+		if err != nil {
+			return fmt.Errorf("service with key %s not found: %w", service.ID, err)
 		}
-		service.ID = existingService.ID
 		service.Version = existingService.Version + 1
-		service.IdempotencyStore = existingService.IdempotencyStore
 
 		p.Logger.Debug().
 			Str("ProjectID", service.ProjectID).
@@ -120,6 +127,26 @@ func (p *ControlPlane) RegisterOrUpdateService(service *ServiceInfo) error {
 			Int64("ServiceVersion", service.Version).
 			Msgf("Updating existing service")
 	}
+
+	if err := p.svcStorage.StoreService(service); err != nil {
+		return fmt.Errorf("failed to store service: %w", err)
+	}
+
+	p.servicesMu.Lock()
+	defer p.servicesMu.Unlock()
+
+	projectServices, exists := p.services[service.ProjectID]
+	if !exists {
+		projectServices = make(map[string]*ServiceInfo)
+		p.services[service.ProjectID] = projectServices
+	}
+
+	if inMemoryService, found := projectServices[service.ID]; found {
+		service.IdempotencyStore = inMemoryService.IdempotencyStore
+	} else {
+		service.IdempotencyStore = NewIdempotencyStore(0)
+	}
+
 	projectServices[service.ID] = service
 
 	return nil
@@ -326,7 +353,7 @@ func (p *ControlPlane) RemoveProjectGrounding(projectID string) error {
 
 func (p *ControlPlane) GetProjectByApiKey(key string) (*Project, error) {
 	// Try storage first
-	if project, err := p.storage.LoadProjectByAPIKey(key); err == nil {
+	if project, err := p.pStorage.LoadProjectByAPIKey(key); err == nil {
 		return project, nil
 	}
 
@@ -341,7 +368,7 @@ func (p *ControlPlane) GetProjectByApiKey(key string) (*Project, error) {
 }
 
 func (p *ControlPlane) AddProject(project *Project) error {
-	if err := p.storage.StoreProject(project); err != nil {
+	if err := p.pStorage.StoreProject(project); err != nil {
 		return fmt.Errorf("failed to store project: %w", err)
 	}
 
@@ -350,7 +377,7 @@ func (p *ControlPlane) AddProject(project *Project) error {
 }
 
 func (p *ControlPlane) AddProjectAPIKey(projectID string, apiKey string) error {
-	if err := p.storage.AddProjectAPIKey(projectID, apiKey); err != nil {
+	if err := p.pStorage.AddProjectAPIKey(projectID, apiKey); err != nil {
 		return fmt.Errorf("failed to add API key: %w", err)
 	}
 
@@ -363,7 +390,7 @@ func (p *ControlPlane) AddProjectAPIKey(projectID string, apiKey string) error {
 }
 
 func (p *ControlPlane) AddProjectWebhook(projectID string, webhook string) error {
-	if err := p.storage.AddProjectWebhook(projectID, webhook); err != nil {
+	if err := p.pStorage.AddProjectWebhook(projectID, webhook); err != nil {
 		return fmt.Errorf("failed to add webhook: %w", err)
 	}
 
