@@ -21,7 +21,7 @@ import (
 
 const (
 	DefaultConfigDir              = ".orra"
-	StorageDir                    = "storage"
+	DBStoreDir                    = "dbstore"
 	TaskZero                      = "task0"
 	ResultAggregatorID            = "result_aggregator"
 	FailureTrackerID              = "failure_tracker"
@@ -118,7 +118,7 @@ func getStoragePath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not determine home directory: %w", err)
 	}
-	return filepath.Join(home, DefaultConfigDir, StorageDir), nil
+	return filepath.Join(home, DefaultConfigDir, DBStoreDir), nil
 }
 
 type Status int

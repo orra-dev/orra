@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestStorage(t *testing.T) (*BadgerLogStorage, func()) {
+func setupTestStorage(t *testing.T) (*BadgerDB, func()) {
 	// Create temp directory for test DB
 	tmpDir, err := os.MkdirTemp("", "badger-test-*")
 	require.NoError(t, err)
@@ -26,7 +26,7 @@ func setupTestStorage(t *testing.T) (*BadgerLogStorage, func()) {
 	logger := zerolog.New(zerolog.NewTestWriter(t))
 
 	// Create storage
-	storage, err := NewBadgerLogStorage(tmpDir, logger)
+	storage, err := NewBadgerDB(tmpDir, logger)
 	require.NoError(t, err)
 
 	// Return cleanup function
@@ -72,7 +72,7 @@ func TestBadgerLogStorage_StoreAndLoadEntries(t *testing.T) {
 
 	// Store entries
 	for _, entry := range entries {
-		err := storage.Store(orchestrationID, entry)
+		err := storage.StoreLogEntry(orchestrationID, entry)
 		require.NoError(t, err)
 	}
 

@@ -13,38 +13,9 @@ import (
 	"strings"
 
 	"github.com/dgraph-io/badger/v4"
-	"github.com/rs/zerolog"
 )
 
-type BadgerLogStorage struct {
-	db     *badger.DB
-	logger zerolog.Logger
-}
-
-func NewBadgerLogStorage(dbPath string, logger zerolog.Logger) (*BadgerLogStorage, error) {
-	opts := badger.DefaultOptions(dbPath)
-	// Optimize for append-only workload
-	opts.SyncWrites = true // Ensure durability
-	opts.Logger = nil      // Use our own logger
-
-	db, err := badger.Open(opts)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open badger db: %w", err)
-	}
-
-	logger.Info().Msgf("Started Log Storage at: %s", dbPath)
-
-	return &BadgerLogStorage{
-		db:     db,
-		logger: logger,
-	}, nil
-}
-
-func (b *BadgerLogStorage) Close() error {
-	return b.db.Close()
-}
-
-func (b *BadgerLogStorage) Store(orchestrationID string, entry LogEntry) error {
+func (b *BadgerDB) StoreLogEntry(orchestrationID string, entry LogEntry) error {
 	// Use orchestrationID in key for correct grouping and retrieval
 	key := fmt.Sprintf("orchestration:%s:entry:%020d", orchestrationID, entry.GetOffset())
 	value, err := json.Marshal(entry)
@@ -57,7 +28,7 @@ func (b *BadgerLogStorage) Store(orchestrationID string, entry LogEntry) error {
 	})
 }
 
-func (b *BadgerLogStorage) StoreState(state *OrchestrationState) error {
+func (b *BadgerDB) StoreState(state *OrchestrationState) error {
 	key := fmt.Sprintf("orchestration:%s:state", state.ID)
 	value, err := json.Marshal(state)
 	if err != nil {
@@ -69,7 +40,7 @@ func (b *BadgerLogStorage) StoreState(state *OrchestrationState) error {
 	})
 }
 
-func (b *BadgerLogStorage) LoadEntries(orchestrationID string) ([]LogEntry, error) {
+func (b *BadgerDB) LoadEntries(orchestrationID string) ([]LogEntry, error) {
 	prefix := []byte(fmt.Sprintf("orchestration:%s:entry:", orchestrationID))
 	var entries []LogEntry
 
@@ -94,7 +65,7 @@ func (b *BadgerLogStorage) LoadEntries(orchestrationID string) ([]LogEntry, erro
 	return entries, err
 }
 
-func (b *BadgerLogStorage) ListOrchestrationStates() ([]*OrchestrationState, error) {
+func (b *BadgerDB) ListOrchestrationStates() ([]*OrchestrationState, error) {
 	prefix := []byte("orchestration:")
 	var states []*OrchestrationState
 
@@ -126,7 +97,7 @@ func (b *BadgerLogStorage) ListOrchestrationStates() ([]*OrchestrationState, err
 	return states, err
 }
 
-func (b *BadgerLogStorage) LoadState(orchestrationID string) (*OrchestrationState, error) {
+func (b *BadgerDB) LoadState(orchestrationID string) (*OrchestrationState, error) {
 	key := fmt.Sprintf("orchestration:%s:state", orchestrationID)
 	var state OrchestrationState
 

@@ -28,13 +28,13 @@ func main() {
 		log.Fatalf("could not initialise control plane server: %s", err.Error())
 	}
 
-	storage, err := NewBadgerLogStorage(cfg.StoragePath, app.Logger)
+	db, err := NewBadgerDB(cfg.StoragePath, app.Logger)
 	if err != nil {
-		log.Fatalf("could not initialise Log Storage for control plane server: %s", err.Error())
+		log.Fatalf("could not initialise DB for control plane server: %s", err.Error())
 	}
-	defer func(storage *BadgerLogStorage) {
+	defer func(storage *BadgerDB) {
 		_ = storage.Close()
-	}(storage)
+	}(db)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -48,7 +48,7 @@ func main() {
 	wsManager := NewWebSocketManager(app.Logger)
 	matcher := NewMatcher(llmClient, app.Logger)
 	vCache := NewVectorCache(llmClient, matcher, 1000, 24*time.Hour, app.Logger)
-	logManager, err := NewLogManager(ctx, storage, LogsRetentionPeriod, plane)
+	logManager, err := NewLogManager(ctx, db, LogsRetentionPeriod, plane)
 	if err != nil {
 		log.Fatalf("could not initialise Log Manager for control plane server: %s", err.Error())
 	}
@@ -58,7 +58,7 @@ func main() {
 
 	app.Plane = plane
 	app.Router = mux.NewRouter()
-	app.Storage = storage
+	app.Db = db
 	app.configureRoutes()
 	app.configureWebSocket()
 	app.Run()

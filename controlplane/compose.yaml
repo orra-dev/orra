@@ -11,9 +11,9 @@ services:
     ports:
       - "8005:8005"
     environment:
-      - STORAGE_PATH=/app/storage
+      - STORAGE_PATH=/app/dbstore
     volumes:
-      - ${HOME}/.orra/storage:/app/storage
+      - ${HOME}/.orra/dbstore:/app/dbstore
     networks:
       - orra-dev-network
 

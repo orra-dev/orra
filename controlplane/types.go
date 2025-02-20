@@ -75,8 +75,8 @@ type OrchestrationState struct {
 	Error         string            `json:"error"`
 }
 
-type LogStorage interface {
-	Store(orchestrationID string, entry LogEntry) error
+type LogStore interface {
+	StoreLogEntry(orchestrationID string, entry LogEntry) error
 	StoreState(state *OrchestrationState) error
 
 	LoadEntries(orchestrationID string) ([]LogEntry, error)
@@ -103,7 +103,7 @@ type LogManager struct {
 	retention      time.Duration
 	cleanupTicker  *time.Ticker
 	controlPlane   *ControlPlane
-	storage        LogStorage
+	storage        LogStore
 	Logger         zerolog.Logger
 }
 
@@ -112,7 +112,7 @@ type Log struct {
 	CurrentOffset uint64
 	seenEntries   map[string]bool
 	lastAccessed  time.Time // For cleanup
-	storage       LogStorage
+	storage       LogStore
 	logger        zerolog.Logger
 	mu            sync.RWMutex
 }

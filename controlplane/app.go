@@ -30,11 +30,11 @@ const ActionNotActionable = "Orra:ActionNotActionable"
 const ActionCannotExecute = "Orra:ActionCannotExecute"
 
 type App struct {
-	Plane   *ControlPlane
-	Router  *mux.Router
-	Storage *BadgerLogStorage
-	Cfg     Config
-	Logger  zerolog.Logger
+	Plane  *ControlPlane
+	Router *mux.Router
+	Db     *BadgerDB
+	Cfg    Config
+	Logger zerolog.Logger
 }
 
 func NewApp(cfg Config, args []string) (*App, error) {
@@ -140,7 +140,7 @@ func (app *App) Run() {
 	// Doesn't block if no connections, but will otherwise wait
 	// until the timeout deadline.
 
-	if err := app.Storage.Close(); err != nil {
+	if err := app.Db.Close(); err != nil {
 		app.Logger.Error().Err(err).Msg("Database shutdown error")
 	}
 

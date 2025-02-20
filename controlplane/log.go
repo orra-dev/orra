@@ -19,7 +19,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func NewLogManager(ctx context.Context, storage LogStorage, retention time.Duration, controlPlane *ControlPlane) (*LogManager, error) {
+func NewLogManager(ctx context.Context, storage LogStore, retention time.Duration, controlPlane *ControlPlane) (*LogManager, error) {
 	lm := &LogManager{
 		logs:           make(map[string]*Log),
 		orchestrations: make(map[string]*OrchestrationState),
@@ -464,7 +464,7 @@ func (lm *LogManager) triggerCompensation(orchestrationID string, candidates []C
 	go worker.Start(ctx, orchestrationID)
 }
 
-func NewLog(storage LogStorage, logger zerolog.Logger) *Log {
+func NewLog(storage LogStore, logger zerolog.Logger) *Log {
 	return &Log{
 		Entries:     make([]LogEntry, 0),
 		seenEntries: make(map[string]bool),
@@ -494,7 +494,7 @@ func (l *Log) Append(storageId string, entry LogEntry, persist bool) {
 
 	// Persist after memory operations
 	if l.storage != nil {
-		if err := l.storage.Store(storageId, entry); err != nil {
+		if err := l.storage.StoreLogEntry(storageId, entry); err != nil {
 			// Log error and trigger shutdown
 			l.logger.Error().
 				Err(err).
