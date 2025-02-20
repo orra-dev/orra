@@ -84,6 +84,7 @@ func (p *ControlPlane) Initialise(
 				projectServices = make(map[string]*ServiceInfo)
 				p.services[svc.ProjectID] = projectServices
 			}
+			svc.IdempotencyStore = NewIdempotencyStore(0)
 			projectServices[svc.ID] = svc
 		}
 	}
