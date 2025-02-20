@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -270,11 +271,11 @@ func (p *ControlPlane) attemptRetryablePreparation(ctx context.Context, orchestr
 }
 
 func (p *ControlPlane) ExecuteOrchestration(orchestration *Orchestration) {
-	orchestration.Status = Processing
-	orchestration.Timestamp = time.Now().UTC()
-
 	p.Logger.Debug().Msgf("About to create Log for orchestration %s", orchestration.ID)
 	log := p.LogManager.PrepLogForOrchestration(orchestration.ProjectID, orchestration.ID, orchestration.Plan)
+
+	orchestration.Status = Processing
+	orchestration.Timestamp = time.Now().UTC()
 
 	p.Logger.Debug().Msgf("About to create and start workers for orchestration %s", orchestration.ID)
 	p.createAndStartWorkers(
@@ -326,6 +327,56 @@ func (p *ControlPlane) FinalizeOrchestration(
 	p.cleanupLogWorkers(orchestration.ID)
 
 	return nil
+}
+
+func (p *ControlPlane) CancelAnyActiveOrchestrations() error {
+	candidates := p.getAllActiveOrchestrations()
+	if len(candidates) == 0 {
+		return nil
+	}
+
+	var errs []error
+	reason, _ := json.Marshal(ControlPlaneShuttingDown)
+	for _, o := range candidates {
+		p.LogManager.MarkOrchestration(o.ID, Cancelled, []byte(ControlPlaneShuttingDown))
+
+		err := p.FinalizeOrchestration(o.ID, Cancelled, reason, nil, true)
+		if err != nil {
+			errs = append(errs, err)
+			p.Logger.Trace().Str("OrchestrationID", o.ID).Str("Status", o.Status.String()).Msg("failed to cancel")
+			continue
+		}
+
+		p.Logger.Trace().Str("OrchestrationID", o.ID).Str("Status", o.Status.String()).Msg("finalised and cancelled")
+	}
+
+	if len(errs) > 0 {
+		if len(errs) == len(candidates) {
+			return fmt.Errorf("all orchestrations failed to cancel: %w", errors.Join(errs...))
+		}
+		return fmt.Errorf("some orchestrations failed to cancel: %w", errors.Join(errs...))
+	}
+	return nil
+}
+
+func (p *ControlPlane) getAllActiveOrchestrations() []*Orchestration {
+	p.orchestrationStoreMu.RLock()
+	defer p.orchestrationStoreMu.RUnlock()
+
+	var result []*Orchestration
+	for _, o := range p.orchestrationStore {
+		if o.Status == Processing {
+			result = append(result, o)
+		}
+	}
+
+	// Sort by timestamp (newest first)
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Timestamp.After(result[j].Timestamp)
+	})
+
+	p.Logger.Trace().Interface("ActiveOrchestrations", result).Msg("")
+	return result
 }
 
 func (p *ControlPlane) serviceDescriptions(services []*ServiceInfo) (string, error) {

@@ -45,6 +45,17 @@ const (
 	R1ReasoningModel              = "deepseek-r1-distill-llama-70b"
 )
 
+const (
+	JSONMarshalingFail           = "Orra:JSONMarshalingFail"
+	ProjectRegistrationFailed    = "Orra:ProjectRegistrationFailed"
+	ProjectAPIKeyAdditionFailed  = "Orra:ProjectAPIKeyAdditionFailed"
+	ProjectWebhookAdditionFailed = "Orra:ProjectWebhookAdditionFailed"
+	UnknownOrchestration         = "Orra:UnknownOrchestration"
+	ActionNotActionable          = "Orra:ActionNotActionable"
+	ActionCannotExecute          = "Orra:ActionCannotExecute"
+	ControlPlaneShuttingDown     = "Orra:ControlPlaneShuttingDown"
+)
+
 var (
 	Version                          = "0.2.0"
 	LogsRetentionPeriod              = 7 * 24 * time.Hour

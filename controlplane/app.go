@@ -24,14 +24,6 @@ import (
 	"github.com/rs/zerolog"
 )
 
-const JSONMarshalingFail = "Orra:JSONMarshalingFail"
-const ProjectRegistrationFailed = "Orra:ProjectRegistrationFailed"
-const ProjectAPIKeyAdditionFailed = "Orra:ProjectAPIKeyAdditionFailed"
-const ProjectWebhookAdditionFailed = "Orra:ProjectWebhookAdditionFailed"
-const UnknownOrchestration = "Orra:UnknownOrchestration"
-const ActionNotActionable = "Orra:ActionNotActionable"
-const ActionCannotExecute = "Orra:ActionCannotExecute"
-
 type App struct {
 	Plane  *ControlPlane
 	Router *mux.Router
@@ -143,14 +135,23 @@ func (app *App) Run() {
 	// Doesn't block if no connections, but will otherwise wait
 	// until the timeout deadline.
 
-	if err := app.Db.Close(); err != nil {
-		app.Logger.Error().Err(err).Msg("Database shutdown error")
+	app.gracefulShutdown(srv, ctx)
+}
+
+func (app *App) gracefulShutdown(srv *http.Server, ctx context.Context) {
+	if err := app.Plane.CancelAnyActiveOrchestrations(); err != nil {
+		app.Logger.Error().Err(err).Msg("")
 	}
+	app.Logger.Info().Msg("Control Plane shutting down")
+
+	if err := app.Db.Close(); err != nil {
+		app.Logger.Error().Err(err).Msg("DB shutdown error")
+	}
+	app.Logger.Info().Msg("DB shutdown complete")
 
 	if err := srv.Shutdown(ctx); err != nil {
 		app.Logger.Error().Err(err).Msg("Error shutting down control plane server")
 	}
-
 	app.Logger.Debug().Msg("http: All connections drained")
 }
 

@@ -247,6 +247,17 @@ func (p *ControlPlane) InspectOrchestration(orchestrationID string) (*Orchestrat
 		}, nil
 	}
 
+	if orchestration.Status == Cancelled {
+		return &OrchestrationInspectResponse{
+			ID:        orchestration.ID,
+			Status:    Cancelled,
+			Action:    orchestration.Action.Content,
+			Timestamp: orchestration.Timestamp,
+			Error:     orchestration.Error,
+			Duration:  time.Since(orchestration.Timestamp),
+		}, nil
+	}
+
 	// Build lookup maps for constructing the response
 	lookupMaps, err := p.buildLookupMaps(orchestrationID, orchestration)
 	if err != nil {
