@@ -65,14 +65,14 @@ type Project struct {
 }
 
 type OrchestrationState struct {
-	ID            string
-	ProjectID     string
-	Plan          *ExecutionPlan
-	TasksStatuses map[string]Status
-	Status        Status
-	CreatedAt     time.Time
-	LastUpdated   time.Time
-	Error         string
+	ID            string            `json:"id"`
+	ProjectID     string            `json:"projectId"`
+	Plan          *ExecutionPlan    `json:"plan"`
+	TasksStatuses map[string]Status `json:"tasksStatuses"`
+	Status        Status            `json:"status"`
+	CreatedAt     time.Time         `json:"createdAt"`
+	LastUpdated   time.Time         `json:"lastUpdated"`
+	Error         string            `json:"error"`
 }
 
 type LogStorage interface {
@@ -103,6 +103,7 @@ type LogManager struct {
 	retention      time.Duration
 	cleanupTicker  *time.Ticker
 	controlPlane   *ControlPlane
+	storage        LogStorage
 	Logger         zerolog.Logger
 }
 
@@ -111,6 +112,8 @@ type Log struct {
 	CurrentOffset uint64
 	seenEntries   map[string]bool
 	lastAccessed  time.Time // For cleanup
+	storage       LogStorage
+	logger        zerolog.Logger
 	mu            sync.RWMutex
 }
 
@@ -223,7 +226,7 @@ type ServiceInfo struct {
 
 type Orchestration struct {
 	ID                     string            `json:"id"`
-	ProjectID              string            `json:"-"`
+	ProjectID              string            `json:"projectID"`
 	Action                 Action            `json:"action"`
 	Params                 ActionParams      `json:"data"`
 	Plan                   *ExecutionPlan    `json:"plan"`

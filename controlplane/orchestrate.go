@@ -285,7 +285,7 @@ func (p *ControlPlane) ExecuteOrchestration(orchestration *Orchestration) {
 	)
 
 	initialEntry := NewLogEntry("task_output", TaskZero, orchestration.taskZero, "control-panel", 0)
-	log.Append(initialEntry)
+	log.Append(orchestration.ID, initialEntry, true)
 	p.Logger.
 		Trace().
 		Str("OrchestrationID", orchestration.ID).

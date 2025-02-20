@@ -21,6 +21,7 @@ import (
 
 const (
 	DefaultConfigDir              = ".orra"
+	StorageDir                    = "storage"
 	TaskZero                      = "task0"
 	ResultAggregatorID            = "result_aggregator"
 	FailureTrackerID              = "failure_tracker"
@@ -46,7 +47,7 @@ const (
 
 var (
 	Version                          = "0.2.0"
-	LogsRetentionPeriod              = time.Hour * 24
+	LogsRetentionPeriod              = 7 * 24 * time.Hour
 	DependencyPattern                = regexp.MustCompile(`^\$([^.]+)\.`)
 	WSWriteTimeOut                   = time.Second * 120
 	WSMaxMessageBytes          int64 = 10 * 1024 // 10K
@@ -70,7 +71,7 @@ type Config struct {
 	PlanCache             PlanCache
 	PddlValidatorPath     string        `envconfig:"default=/usr/local/bin/Validate"`
 	PddlValidationTimeout time.Duration `envconfig:"default=30s"`
-	StoragePath           string        `envconfig:"-"`
+	StoragePath           string        `envconfig:"optional"`
 }
 
 func Load() (Config, error) {
@@ -81,6 +82,9 @@ func Load() (Config, error) {
 	}
 	if err := validateReasoningConfig(cfg.Reasoning); err != nil {
 		return Config{}, err
+	}
+	if cfg.StoragePath != "" {
+		return cfg, nil
 	}
 	path, err := getStoragePath()
 	if err != nil {
@@ -114,7 +118,7 @@ func getStoragePath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not determine home directory: %w", err)
 	}
-	return filepath.Join(home, DefaultConfigDir), nil
+	return filepath.Join(home, DefaultConfigDir, StorageDir), nil
 }
 
 type Status int

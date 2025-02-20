@@ -10,6 +10,10 @@ services:
       target: final
     ports:
       - "8005:8005"
+    environment:
+      - STORAGE_PATH=/app/storage
+    volumes:
+      - ${HOME}/.orra/storage:/app/storage
     networks:
       - orra-dev-network
 

@@ -32,6 +32,8 @@ func NewBadgerLogStorage(dbPath string, logger zerolog.Logger) (*BadgerLogStorag
 		return nil, fmt.Errorf("failed to open badger db: %w", err)
 	}
 
+	logger.Info().Msgf("Started Log Storage at: %s", dbPath)
+
 	return &BadgerLogStorage{
 		db:     db,
 		logger: logger,

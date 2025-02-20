@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/gilcrest/diygoapi/errs"
@@ -29,10 +30,11 @@ const ActionNotActionable = "Orra:ActionNotActionable"
 const ActionCannotExecute = "Orra:ActionCannotExecute"
 
 type App struct {
-	Plane  *ControlPlane
-	Router *mux.Router
-	Cfg    Config
-	Logger zerolog.Logger
+	Plane   *ControlPlane
+	Router  *mux.Router
+	Storage *BadgerLogStorage
+	Cfg     Config
+	Logger  zerolog.Logger
 }
 
 func NewApp(cfg Config, args []string) (*App, error) {
@@ -127,7 +129,7 @@ func (app *App) Run() {
 
 	// We'll accept graceful shutdowns when quit via SIGINT (Ctrl+C)
 	// SIGKILL, SIGQUIT or SIGTERM (Ctrl+/) will not be caught.
-	signal.Notify(c, os.Interrupt)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
 	// Block until we receive our signal.
 	<-c
@@ -137,7 +139,14 @@ func (app *App) Run() {
 	defer cancel()
 	// Doesn't block if no connections, but will otherwise wait
 	// until the timeout deadline.
-	_ = srv.Shutdown(ctx)
+
+	if err := app.Storage.Close(); err != nil {
+		app.Logger.Error().Err(err).Msg("Database shutdown error")
+	}
+
+	if err := srv.Shutdown(ctx); err != nil {
+		app.Logger.Error().Err(err).Msg("Error shutting down control plane server")
+	}
 
 	app.Logger.Debug().Msg("http: All connections drained")
 }

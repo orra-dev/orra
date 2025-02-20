@@ -30,7 +30,7 @@ func main() {
 
 	storage, err := NewBadgerLogStorage(cfg.StoragePath, app.Logger)
 	if err != nil {
-		return
+		log.Fatalf("could not initialise Log Storage for control plane server: %s", err.Error())
 	}
 	defer func(storage *BadgerLogStorage) {
 		_ = storage.Close()
@@ -48,13 +48,17 @@ func main() {
 	wsManager := NewWebSocketManager(app.Logger)
 	matcher := NewMatcher(llmClient, app.Logger)
 	vCache := NewVectorCache(llmClient, matcher, 1000, 24*time.Hour, app.Logger)
-	logManager := NewLogManager(ctx, storage, LogsRetentionPeriod, plane)
+	logManager, err := NewLogManager(ctx, storage, LogsRetentionPeriod, plane)
+	if err != nil {
+		log.Fatalf("could not initialise Log Manager for control plane server: %s", err.Error())
+	}
 	pddlValidSvc := NewPddlValidationService(cfg.PddlValidatorPath, cfg.PddlValidationTimeout, app.Logger)
 	logManager.Logger = app.Logger
 	plane.Initialise(ctx, logManager, wsManager, vCache, pddlValidSvc, matcher, app.Logger)
 
 	app.Plane = plane
 	app.Router = mux.NewRouter()
+	app.Storage = storage
 	app.configureRoutes()
 	app.configureWebSocket()
 	app.Run()

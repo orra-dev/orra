@@ -17,6 +17,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type FakeStorage struct{}
+
+func (f *FakeStorage) Store(_ string, _ LogEntry) error { return nil }
+
+func (f *FakeStorage) StoreState(_ *OrchestrationState) error { return nil }
+
+func (f *FakeStorage) LoadEntries(_ string) ([]LogEntry, error) {
+	return []LogEntry{}, nil
+}
+
+func (f *FakeStorage) ListOrchestrationStates() ([]*OrchestrationState, error) {
+	return []*OrchestrationState{}, nil
+}
+
+func (f *FakeStorage) LoadState(_ string) (*OrchestrationState, error) {
+	return &OrchestrationState{}, nil
+}
+
+func (f *FakeStorage) Close() error { return nil }
+
 // TestState helps track and build test state
 type TestState struct {
 	plane           *ControlPlane
@@ -80,7 +100,7 @@ func (ts *TestState) setupBase() {
 	ts.orchestrationID = o.ID
 
 	// Setup log manager
-	ts.plane.LogManager = NewLogManager(context.Background(), time.Hour, ts.plane)
+	ts.plane.LogManager, _ = NewLogManager(context.Background(), &FakeStorage{}, time.Hour, ts.plane)
 	ts.plane.LogManager.PrepLogForOrchestration(o.ProjectID, o.ID, o.Plan)
 
 	// Initialize orchestration state
