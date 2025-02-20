@@ -57,11 +57,38 @@ type WebSocketManager struct {
 	healthMu          sync.RWMutex
 }
 
+// ProjectStorage defines the interface for project persistence operations
+type ProjectStorage interface {
+	// StoreProject persists a project and its related data atomically
+	StoreProject(project *Project) error
+
+	// LoadProject retrieves a project by its ID
+	LoadProject(id string) (*Project, error)
+
+	// LoadProjectByAPIKey retrieves a project using an API key (primary or additional)
+	LoadProjectByAPIKey(apiKey string) (*Project, error)
+
+	// ListProjects returns all projects
+	ListProjects() ([]*Project, error)
+
+	// AddProjectAPIKey adds a new API key to a project
+	AddProjectAPIKey(projectID string, apiKey string) error
+
+	// AddProjectWebhook adds a new webhook URL to a project
+	AddProjectWebhook(projectID string, webhook string) error
+
+	// Close releases any resources held by the storage
+	Close() error
+}
+
 type Project struct {
-	ID                string   `json:"id"`
-	APIKey            string   `json:"apiKey"`
-	AdditionalAPIKeys []string `json:"additionalAPIKeys"`
-	Webhooks          []string `json:"webhooks"`
+	ID                string    `json:"id"`
+	Name              string    `json:"name"`
+	APIKey            string    `json:"apiKey"`
+	AdditionalAPIKeys []string  `json:"additionalAPIKeys"`
+	Webhooks          []string  `json:"webhooks"`
+	CreatedAt         time.Time `json:"createdAt"`
+	UpdatedAt         time.Time `json:"updatedAt"`
 }
 
 type OrchestrationState struct {
