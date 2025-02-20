@@ -223,7 +223,7 @@ func TestGroundingAPIAuth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := app.Plane.ApplyGroundingSpec(project.ID, example); err != nil {
+			if err := app.Plane.ApplyGroundingSpec(context.Background(), project.ID, example); err != nil {
 				t.Fatalf("Failed to add example: %v", err)
 			}
 			req := httptest.NewRequest(http.MethodGet, "/groundings", nil)

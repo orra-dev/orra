@@ -36,8 +36,8 @@ func main() {
 		_ = storage.Close()
 	}(db)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	rootCtx, rootCancel := context.WithCancel(context.Background())
+	defer rootCancel()
 
 	llmClient, err := NewLLMClient(cfg, app.Logger)
 	if err != nil {
@@ -48,17 +48,19 @@ func main() {
 	wsManager := NewWebSocketManager(app.Logger)
 	matcher := NewMatcher(llmClient, app.Logger)
 	vCache := NewVectorCache(llmClient, matcher, 1000, 24*time.Hour, app.Logger)
-	logManager, err := NewLogManager(ctx, db, LogsRetentionPeriod, plane)
+	logManager, err := NewLogManager(rootCtx, db, LogsRetentionPeriod, plane)
 	if err != nil {
 		log.Fatalf("could not initialise Log Manager for control plane server: %s", err.Error())
 	}
 	pddlValidSvc := NewPddlValidationService(cfg.PddlValidatorPath, cfg.PddlValidationTimeout, app.Logger)
 	logManager.Logger = app.Logger
-	plane.Initialise(ctx, db, logManager, wsManager, vCache, pddlValidSvc, matcher, app.Logger)
+	plane.Initialise(rootCtx, db, logManager, wsManager, vCache, pddlValidSvc, matcher, app.Logger)
 
 	app.Plane = plane
 	app.Router = mux.NewRouter()
 	app.Db = db
+	app.RootCtx = rootCtx
+	app.RootCancel = rootCancel
 	app.configureRoutes()
 	app.configureWebSocket()
 	app.Run()

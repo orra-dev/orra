@@ -25,11 +25,13 @@ import (
 )
 
 type App struct {
-	Plane  *ControlPlane
-	Router *mux.Router
-	Db     *BadgerDB
-	Cfg    Config
-	Logger zerolog.Logger
+	Plane      *ControlPlane
+	Router     *mux.Router
+	Db         *BadgerDB
+	Cfg        Config
+	RootCtx    context.Context
+	RootCancel context.CancelFunc
+	Logger     zerolog.Logger
 }
 
 func NewApp(cfg Config, args []string) (*App, error) {
@@ -139,6 +141,8 @@ func (app *App) Run() {
 }
 
 func (app *App) gracefulShutdown(srv *http.Server, ctx context.Context) {
+	app.RootCancel()
+
 	if err := app.Plane.CancelAnyActiveOrchestrations(); err != nil {
 		app.Logger.Error().Err(err).Msg("")
 	}
@@ -233,8 +237,7 @@ func (app *App) OrchestrationsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := context.Background()
-	if err := app.Plane.PrepareOrchestration(ctx, project.ID, &orchestration, app.Plane.GetGroundingSpecs(project.ID)); err != nil {
+	if err := app.Plane.PrepareOrchestration(app.RootCtx, project.ID, &orchestration, app.Plane.GetGroundingSpecs(project.ID)); err != nil {
 		app.Logger.
 			Error().
 			Err(err).
@@ -252,7 +255,7 @@ func (app *App) OrchestrationsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.Logger.Debug().Msgf("About to execute orchestration %s", orchestration.ID)
-	go app.Plane.ExecuteOrchestration(&orchestration)
+	go app.Plane.ExecuteOrchestration(app.RootCtx, &orchestration)
 	w.WriteHeader(http.StatusAccepted)
 
 	data, err := json.Marshal(orchestration)
@@ -431,7 +434,7 @@ func (app *App) ApplyGrounding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := app.Plane.ApplyGroundingSpec(project.ID, &grounding); err != nil {
+	if err := app.Plane.ApplyGroundingSpec(app.RootCtx, project.ID, &grounding); err != nil {
 		var validErr ValidationError
 		if errors.As(err, &validErr) {
 			errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Parameter(validErr.Field()), validErr.Error()))

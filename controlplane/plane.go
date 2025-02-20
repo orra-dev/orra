@@ -190,9 +190,9 @@ func (p *ControlPlane) GetServiceName(projectID string, serviceID string) (strin
 }
 
 // ApplyGroundingSpec adds domain grounding to a project after validation
-func (p *ControlPlane) ApplyGroundingSpec(projectID string, spec *GroundingSpec) error {
+func (p *ControlPlane) ApplyGroundingSpec(ctx context.Context, projectID string, spec *GroundingSpec) error {
 	start := time.Now()
-	err := p.PddlValidator.HealthCheck(context.Background())
+	err := p.PddlValidator.HealthCheck(ctx)
 	duration := time.Since(start)
 
 	// Log metrics

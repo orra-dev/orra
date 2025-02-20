@@ -270,7 +270,7 @@ func (p *ControlPlane) attemptRetryablePreparation(ctx context.Context, orchestr
 	return nil
 }
 
-func (p *ControlPlane) ExecuteOrchestration(orchestration *Orchestration) {
+func (p *ControlPlane) ExecuteOrchestration(ctx context.Context, orchestration *Orchestration) {
 	p.Logger.Debug().Msgf("About to create Log for orchestration %s", orchestration.ID)
 	log := p.LogManager.PrepLogForOrchestration(orchestration.ProjectID, orchestration.ID, orchestration.Plan)
 
@@ -279,6 +279,7 @@ func (p *ControlPlane) ExecuteOrchestration(orchestration *Orchestration) {
 
 	p.Logger.Debug().Msgf("About to create and start workers for orchestration %s", orchestration.ID)
 	p.createAndStartWorkers(
+		ctx,
 		orchestration.ID,
 		orchestration.Plan,
 		orchestration.GetTimeout(),
@@ -329,6 +330,26 @@ func (p *ControlPlane) FinalizeOrchestration(
 	return nil
 }
 
+func (p *ControlPlane) CancelOrchestration(orchestrationID string, reason json.RawMessage) error {
+	p.orchestrationStoreMu.Lock()
+	defer p.orchestrationStoreMu.Unlock()
+
+	orchestration, exists := p.orchestrationStore[orchestrationID]
+	if !exists {
+		return fmt.Errorf("control plane cannot cancel missing orchestration %s", orchestrationID)
+	}
+
+	orchestration.Status = Cancelled
+	orchestration.Timestamp = time.Now().UTC()
+	orchestration.Error = reason
+
+	p.Logger.Debug().
+		Str("OrchestrationID", orchestration.ID).
+		Msgf("About to Cancel Orchestration with status: %s", orchestration.Status.String())
+
+	return nil
+}
+
 func (p *ControlPlane) CancelAnyActiveOrchestrations() error {
 	candidates := p.getAllActiveOrchestrations()
 	if len(candidates) == 0 {
@@ -340,8 +361,7 @@ func (p *ControlPlane) CancelAnyActiveOrchestrations() error {
 	for _, o := range candidates {
 		p.LogManager.MarkOrchestration(o.ID, Cancelled, []byte(ControlPlaneShuttingDown))
 
-		err := p.FinalizeOrchestration(o.ID, Cancelled, reason, nil, true)
-		if err != nil {
+		if err := p.CancelOrchestration(o.ID, reason); err != nil {
 			errs = append(errs, err)
 			p.Logger.Trace().Str("OrchestrationID", o.ID).Str("Status", o.Status.String()).Msg("failed to cancel")
 			continue
@@ -587,12 +607,7 @@ func (p *ControlPlane) enhanceWithServiceDetails(services []*ServiceInfo, subTas
 	return nil
 }
 
-func (p *ControlPlane) createAndStartWorkers(
-	orchestrationID string,
-	plan *ExecutionPlan,
-	taskTimeout,
-	healthCheckGracePeriod time.Duration,
-) {
+func (p *ControlPlane) createAndStartWorkers(ctx context.Context, orchestrationID string, plan *ExecutionPlan, taskTimeout, healthCheckGracePeriod time.Duration) {
 	p.workerMu.Lock()
 	defer p.workerMu.Unlock()
 
@@ -629,7 +644,7 @@ func (p *ControlPlane) createAndStartWorkers(
 			healthCheckGracePeriod,
 			p.LogManager,
 		)
-		ctx, cancel := context.WithCancel(context.Background())
+		taskCtx, cancel := context.WithCancel(ctx)
 		p.logWorkers[orchestrationID][task.ID] = cancel
 		p.Logger.Debug().
 			Fields(struct {
@@ -641,7 +656,7 @@ func (p *ControlPlane) createAndStartWorkers(
 			}).
 			Msg("Starting worker for task")
 
-		go worker.Start(ctx, orchestrationID)
+		go worker.Start(taskCtx, orchestrationID)
 	}
 
 	if len(resultAggregatorDeps) == 0 {
@@ -663,15 +678,15 @@ func (p *ControlPlane) createAndStartWorkers(
 		Msg("Result Aggregator extracted dependencies")
 
 	aggregator := NewResultAggregator(resultAggregatorDeps, p.LogManager)
-	ctx, cancel := context.WithCancel(context.Background())
+	aggCtx, cancel := context.WithCancel(ctx)
 	p.logWorkers[orchestrationID][ResultAggregatorID] = cancel
 
 	fTracker := NewFailureTracker(p.LogManager)
-	fCtx, fCancel := context.WithCancel(context.Background())
+	fCtx, fCancel := context.WithCancel(ctx)
 	p.logWorkers[orchestrationID][FailureTrackerID] = fCancel
 
 	p.Logger.Debug().Str("orchestrationID", orchestrationID).Msg("Starting result aggregator for orchestration")
-	go aggregator.Start(ctx, orchestrationID)
+	go aggregator.Start(aggCtx, orchestrationID)
 
 	p.Logger.Debug().Str("orchestrationID", orchestrationID).Msg("Starting failure tracker for orchestration")
 	go fTracker.Start(fCtx, orchestrationID)
