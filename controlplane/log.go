@@ -48,8 +48,11 @@ func (lm *LogManager) recover() error {
 
 	for _, state := range states {
 		// Skip expired orchestrations
-		if state.Status == Completed &&
-			time.Now().UTC().Sub(state.LastUpdated) > lm.retention {
+		if state.Status == Pending {
+			continue
+		}
+
+		if OrchestrationHasExpired(state.Status, state.LastUpdated, lm.retention) {
 			continue
 		}
 
@@ -70,6 +73,10 @@ func (lm *LogManager) recover() error {
 	}
 
 	return nil
+}
+
+func OrchestrationHasExpired(status Status, lastUpdated time.Time, retention time.Duration) bool {
+	return status == Completed && time.Now().UTC().Sub(lastUpdated) > retention
 }
 
 func (lm *LogManager) GetLog(orchestrationID string) *Log {

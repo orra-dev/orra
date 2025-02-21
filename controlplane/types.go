@@ -274,8 +274,8 @@ type OrchestrationStorage interface {
 	// LoadOrchestration retrieves an orchestration by its ID
 	LoadOrchestration(id string) (*Orchestration, error)
 
-	// ListOrchestrations returns all orchestrations for a project
-	ListOrchestrations(projectID string) ([]*Orchestration, error)
+	// ListProjectOrchestrations returns all orchestrations for a project
+	ListProjectOrchestrations(projectID string) ([]*Orchestration, error)
 }
 
 type Orchestration struct {

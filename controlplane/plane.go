@@ -76,7 +76,7 @@ func (p *ControlPlane) Initialise(
 		p.Logger.Trace().Interface("Projects", projects).Msg("Loaded projects from DB")
 		for _, project := range projects {
 			p.projects[project.ID] = project
-			orchestrations, err := orchestrationStorage.ListOrchestrations(project.ID)
+			orchestrations, err := orchestrationStorage.ListProjectOrchestrations(project.ID)
 			p.Logger.Trace().Interface("Orchestrations", orchestrations).Msg("Loaded orchestrations from DB")
 			if err != nil {
 				p.Logger.Error().
@@ -88,6 +88,14 @@ func (p *ControlPlane) Initialise(
 
 			p.orchestrationStoreMu.Lock()
 			for _, orchestration := range orchestrations {
+				if orchestration.Status == Pending {
+					continue
+				}
+
+				if OrchestrationHasExpired(orchestration.Status, orchestration.Timestamp, p.LogManager.retention) {
+					continue
+				}
+
 				p.orchestrationStore[orchestration.ID] = orchestration
 				p.Logger.Trace().Interface("Orchestration", orchestration).Msg("Loaded orchestration from DB")
 			}
