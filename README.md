@@ -1,26 +1,14 @@
 # 🪡Orra (✨Alpha✨)
 
 Move beyond simple Crews and Agents. Build production-ready multi-agent applications that handle complex real-world
-interactions. Orra orchestrates your services and agents with built-in reliability and intelligent reasoning — across
+interactions. Orra orchestrates your tools as services with your agents providing reliability and intelligent reasoning — across
 any language, agent framework or deployment platform.
 
 Prototype rapidly today, scale to production tomorrow. No complex infrastructure required.
 
+<img height="600" src="/Users/rad/Projects/Go/src/github.com/ezodude/orra/images/orra-diagram.png" width="800"/>
+
 ## Releases
-
-### Manta Ray 🐠🌊️ - January 2025 🎉
-
-Brings in a robust Compensation Guardrails system with JS and Python SDK updates to match.
-
-#### Other Features
-
-- Service/Agent stability improvements.
-- Major fixes across control plane and SDKs.
-
-#### Manta Ray Live Demo One 📹🍿
-
-- Watch the [live demo video recording](https://youtube.com/live/q38vqU2x4gI) to learn more and see [Compensations](docs/compensations.md) in action.
-- Follow along the demo with [accompanying slides](https://tinyurl.com/orra-manta-ray-demo-1).
 
 [[View all releases](https://github.com/orra-dev/orra/releases) →]
 
@@ -77,9 +65,50 @@ infrastructure headaches - just predictable, intelligent routing that gets work 
 
 ### Prerequisites
 
-- [Docker](https://docs.docker.com/desktop/) and [Docker Compose](https://docs.docker.com/compose/install/) - For
-  running the control plane
-- An [OpenAI API key](https://platform.openai.com/docs/quickstart) - For LLM-powered orchestration
+- [Docker](https://docs.docker.com/desktop/) and [Docker Compose](https://docs.docker.com/compose/install/) - For running the control plane
+- Set up Reasoning and Embedding Models to power control plane orchestration and execution plan caching/validation.
+
+#### Setup Reasoning Models
+
+Select between Groq's [deepseek-r1-distill-llama-70b](https://groq.com/groqcloud-makes-deepseek-r1-distill-llama-70b-available/) model
+
+Or OpenAI's [o1-mini / o3-mini](https://platform.openai.com/docs/guides/reasoning) models.
+
+Update the .env file with one of these,
+
+**Groq**
+
+```shell
+# GROQ Reasoning
+REASONING_PROVIDER=groq
+REASONING_MODEL=deepseek-r1-distill-llama-70b
+REASONING_API_KEY=xxxx
+```
+
+**01-mini**
+
+```shell
+# GROQ Reasoning
+REASONING_PROVIDER=openai
+REASONING_MODEL=o1-mini
+REASONING_API_KEY=xxxx
+```
+
+**03-mini**
+```shell
+# GROQ Reasoning
+REASONING_PROVIDER=openai
+REASONING_MODEL=o3-mini
+REASONING_API_KEY=xxxx
+```
+
+#### Setup Embedding models
+
+Update the .env file with,
+```shell
+# Execution Plan Cache and validation OPENAI API KEY
+PLAN_CACHE_OPENAI_API_KEY=xxxx
+```
 
 ### 1. Install Orra CLI
 
