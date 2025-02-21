@@ -1,3 +1,9 @@
+## CLI v0.2.1
+
+### Features
+- Grounding support added using `orra grounding` command.
+- Various bug fixes.
+
 ## CLI v0.2.0
 
 ### Features
