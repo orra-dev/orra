@@ -81,9 +81,6 @@ infrastructure headaches - just predictable, intelligent routing that gets work 
   running the control plane
 - An [OpenAI API key](https://platform.openai.com/docs/quickstart) - For LLM-powered orchestration
 
-> **Note**: The control plane currently runs in-memory. If restarting, follow
-> our [Reset Guide](docs/reset-control-plane.md).
-
 ### 1. Install Orra CLI
 
 Download the latest CLI binary for your platform from our releases page.

@@ -9,6 +9,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -18,6 +20,8 @@ import (
 )
 
 const (
+	DefaultConfigDir              = ".orra"
+	DBStoreDir                    = "dbstore"
 	TaskZero                      = "task0"
 	ResultAggregatorID            = "result_aggregator"
 	FailureTrackerID              = "failure_tracker"
@@ -41,9 +45,20 @@ const (
 	R1ReasoningModel              = "deepseek-r1-distill-llama-70b"
 )
 
+const (
+	JSONMarshalingFail           = "Orra:JSONMarshalingFail"
+	ProjectRegistrationFailed    = "Orra:ProjectRegistrationFailed"
+	ProjectAPIKeyAdditionFailed  = "Orra:ProjectAPIKeyAdditionFailed"
+	ProjectWebhookAdditionFailed = "Orra:ProjectWebhookAdditionFailed"
+	UnknownOrchestration         = "Orra:UnknownOrchestration"
+	ActionNotActionable          = "Orra:ActionNotActionable"
+	ActionCannotExecute          = "Orra:ActionCannotExecute"
+	ControlPlaneShuttingDown     = "Orra:ControlPlaneShuttingDown"
+)
+
 var (
 	Version                          = "0.2.0"
-	LogsRetentionPeriod              = time.Hour * 24
+	LogsRetentionPeriod              = 7 * 24 * time.Hour
 	DependencyPattern                = regexp.MustCompile(`^\$([^.]+)\.`)
 	WSWriteTimeOut                   = time.Second * 120
 	WSMaxMessageBytes          int64 = 10 * 1024 // 10K
@@ -67,6 +82,7 @@ type Config struct {
 	PlanCache             PlanCache
 	PddlValidatorPath     string        `envconfig:"default=/usr/local/bin/Validate"`
 	PddlValidationTimeout time.Duration `envconfig:"default=30s"`
+	StoragePath           string        `envconfig:"optional"`
 }
 
 func Load() (Config, error) {
@@ -78,6 +94,14 @@ func Load() (Config, error) {
 	if err := validateReasoningConfig(cfg.Reasoning); err != nil {
 		return Config{}, err
 	}
+	if cfg.StoragePath != "" {
+		return cfg, nil
+	}
+	path, err := getStoragePath()
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.StoragePath = path
 	return cfg, err
 }
 
@@ -100,6 +124,14 @@ func validateReasoningConfig(reasoning Reasoning) error {
 	return nil
 }
 
+func getStoragePath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("could not determine home directory: %w", err)
+	}
+	return filepath.Join(home, DefaultConfigDir, DBStoreDir), nil
+}
+
 type Status int
 
 const (
@@ -111,6 +143,7 @@ const (
 	Failed
 	NotActionable
 	Paused
+	Cancelled
 )
 
 func (s Status) String() string {
@@ -131,6 +164,8 @@ func (s Status) String() string {
 		return "not_actionable"
 	case Paused:
 		return "paused"
+	case Cancelled:
+		return "cancelled"
 	default:
 		return ""
 	}
@@ -162,6 +197,8 @@ func (s *Status) UnmarshalJSON(data []byte) error {
 		*s = NotActionable
 	case "paused":
 		*s = Paused
+	case "cancelled":
+		*s = Cancelled
 	default:
 		return fmt.Errorf("invalid Status: %s", s)
 	}

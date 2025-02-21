@@ -16,44 +16,67 @@ import (
 	"time"
 
 	short "github.com/lithammer/shortuuid/v4"
+	"github.com/rs/zerolog"
 )
 
-func NewLogManager(ctx context.Context, retention time.Duration, controlPlane *ControlPlane) *LogManager {
+func NewLogManager(_ context.Context, storage LogStore, retention time.Duration, controlPlane *ControlPlane) (*LogManager, error) {
 	lm := &LogManager{
 		logs:           make(map[string]*Log),
 		orchestrations: make(map[string]*OrchestrationState),
 		retention:      retention,
 		cleanupTicker:  time.NewTicker(5 * time.Minute),
 		controlPlane:   controlPlane,
+		storage:        storage,
 	}
 
-	go lm.startCleanup(ctx)
-	return lm
+	if err := lm.recover(); err != nil {
+		lm.Logger.Error().Err(err).Msg("Failed to recover state")
+		return nil, fmt.Errorf("failed to recover state: %w", err)
+	}
+
+	// TODO: enable orchestrationState cleanup
+	//go lm.startCleanup(ctx)
+	return lm, nil
 }
 
-func (lm *LogManager) startCleanup(ctx context.Context) {
-	for {
-		select {
-		case <-lm.cleanupTicker.C:
-			lm.cleanupStaleOrchestrations()
-		case <-ctx.Done():
-			return
-		}
+func (lm *LogManager) recover() error {
+	// First load all orchestration states
+	states, err := lm.storage.ListOrchestrationStates()
+	if err != nil {
+		return fmt.Errorf("failed to list orchestration states: %w", err)
 	}
+
+	for _, state := range states {
+		// Skip expired orchestrations
+		if state.Status == Pending {
+			continue
+		}
+
+		if OrchestrationHasExpired(state.Status, state.LastUpdated, lm.retention) {
+			continue
+		}
+
+		// Load entries for this orchestration
+		entries, err := lm.storage.LoadEntries(state.ID)
+		if err != nil {
+			return fmt.Errorf("failed to load entries for orchestration %s: %w", state.ID, err)
+		}
+
+		// Recreate log
+		log := NewLog(lm.storage, lm.Logger)
+		for _, entry := range entries {
+			log.Append(state.ID, entry, false)
+		}
+
+		lm.logs[state.ID] = log
+		lm.orchestrations[state.ID] = state
+	}
+
+	return nil
 }
 
-func (lm *LogManager) cleanupStaleOrchestrations() {
-	lm.mu.Lock()
-	defer lm.mu.Unlock()
-	now := time.Now().UTC()
-
-	for id, orchestrationState := range lm.orchestrations {
-		if orchestrationState.Status == Completed &&
-			now.Sub(orchestrationState.LastUpdated) > lm.retention {
-			delete(lm.orchestrations, id)
-			delete(lm.logs, id)
-		}
-	}
+func OrchestrationHasExpired(status Status, lastUpdated time.Time, retention time.Duration) bool {
+	return status == Completed && time.Now().UTC().Sub(lastUpdated) > retention
 }
 
 func (lm *LogManager) GetLog(orchestrationID string) *Log {
@@ -66,7 +89,7 @@ func (lm *LogManager) PrepLogForOrchestration(projectID string, orchestrationID 
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 
-	log := NewLog()
+	log := NewLog(lm.storage, lm.Logger)
 
 	state := &OrchestrationState{
 		ID:            orchestrationID,
@@ -100,6 +123,19 @@ func (lm *LogManager) MarkTask(orchestrationID, taskID string, s Status, timesta
 
 	state.TasksStatuses[taskID] = s
 	state.LastUpdated = timestamp
+
+	if lm.storage != nil {
+		if err := lm.storage.StoreState(state); err != nil {
+			lm.Logger.Error().
+				Err(err).
+				Str("orchestrationID", orchestrationID).
+				Msg("Failed to persist orchestration state - initiating shutdown")
+
+			//go lm.initiateGracefulShutdown()
+			panic(fmt.Sprintf("State persistence failure: %v", err))
+		}
+	}
+
 	return nil
 }
 
@@ -127,6 +163,19 @@ func (lm *LogManager) MarkOrchestration(orchestrationID string, s Status, reason
 	state.Status = s
 	state.LastUpdated = time.Now().UTC()
 
+	// Persist state change
+	if lm.storage != nil {
+		if err := lm.storage.StoreState(state); err != nil {
+			lm.Logger.Error().
+				Err(err).
+				Str("orchestrationID", orchestrationID).
+				Msg("Failed to persist orchestration state - initiating shutdown")
+
+			//go lm.initiateGracefulShutdown()
+			panic(fmt.Sprintf("State persistence failure: %v", err))
+		}
+	}
+
 	return state.Status
 }
 
@@ -142,7 +191,7 @@ func (lm *LogManager) AppendToLog(orchestrationID, entryType, id string, value j
 		return
 	}
 
-	log.Append(newEntry)
+	log.Append(orchestrationID, newEntry, true)
 }
 
 func (lm *LogManager) AppendTaskFailureToLog(orchestrationID, id, producerID, failure string, attemptNo int, skipWebhook bool) error {
@@ -347,11 +396,11 @@ func (lm *LogManager) FinalizeOrchestration(
 
 	var candidates []CompensationCandidate
 	for _, entry := range entries {
-		if entry.entryType != CompensationDataStoredLogType {
+		if entry.EntryType != CompensationDataStoredLogType {
 			continue
 		}
 
-		svc, err := lm.controlPlane.GetServiceByID(entry.producerID)
+		svc, err := lm.controlPlane.GetServiceByID(entry.ProducerID)
 		if err != nil {
 			return err
 		}
@@ -359,9 +408,9 @@ func (lm *LogManager) FinalizeOrchestration(
 			continue
 		}
 
-		taskID, _ := strings.CutPrefix(entry.id, "comp_data_")
+		taskID, _ := strings.CutPrefix(entry.Id, "comp_data_")
 		var compensation CompensationData
-		if err := json.Unmarshal(entry.Value(), &compensation); err != nil {
+		if err := json.Unmarshal(entry.GetValue(), &compensation); err != nil {
 			return err
 		}
 		candidates = append(candidates, CompensationCandidate{
@@ -398,27 +447,47 @@ func (lm *LogManager) triggerCompensation(orchestrationID string, candidates []C
 	go worker.Start(ctx, orchestrationID)
 }
 
-func NewLog() *Log {
+func NewLog(storage LogStore, logger zerolog.Logger) *Log {
 	return &Log{
 		Entries:     make([]LogEntry, 0),
 		seenEntries: make(map[string]bool),
+		storage:     storage,
+		logger:      logger,
 	}
 }
 
 // Append ensures all appends are idempotent
-func (l *Log) Append(entry LogEntry) {
+func (l *Log) Append(storageId string, entry LogEntry, persist bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	if l.seenEntries[entry.ID()] {
+	if l.seenEntries[entry.GetID()] {
 		return
 	}
 
-	entry.offset = l.CurrentOffset
+	entry.Offset = l.CurrentOffset
 	l.Entries = append(l.Entries, entry)
 	l.CurrentOffset += 1
 	l.lastAccessed = time.Now().UTC()
-	l.seenEntries[entry.ID()] = true
+	l.seenEntries[entry.GetID()] = true
+
+	if !persist {
+		return
+	}
+
+	// Persist after memory operations
+	if l.storage != nil {
+		if err := l.storage.StoreLogEntry(storageId, entry); err != nil {
+			// Log error and trigger shutdown
+			l.logger.Error().
+				Err(err).
+				Str("entryID", entry.GetID()).
+				Msg("Failed to persist log entry - initiating shutdown")
+
+			//go l.initiateGracefulShutdown()
+			panic(fmt.Sprintf("Log persistence failure: %v", err))
+		}
+	}
 }
 
 func (l *Log) ReadFrom(offset uint64) []LogEntry {
@@ -434,42 +503,22 @@ func (l *Log) ReadFrom(offset uint64) []LogEntry {
 
 func NewLogEntry(entryType, id string, value json.RawMessage, producerID string, attemptNum int) LogEntry {
 	return LogEntry{
-		entryType:  entryType,
-		id:         id,
-		value:      append(json.RawMessage(nil), value...), // Deep copy
-		timestamp:  time.Now().UTC(),
-		producerID: producerID,
-		attemptNum: attemptNum,
+		EntryType:  entryType,
+		Id:         id,
+		Value:      append(json.RawMessage(nil), value...), // Deep copy
+		Timestamp:  time.Now().UTC(),
+		ProducerID: producerID,
+		AttemptNum: attemptNum,
 	}
 }
 
-func (e LogEntry) Offset() uint64         { return e.offset }
-func (e LogEntry) Type() string           { return e.entryType }
-func (e LogEntry) ID() string             { return e.id }
-func (e LogEntry) Value() json.RawMessage { return append(json.RawMessage(nil), e.value...) }
-func (e LogEntry) Timestamp() time.Time   { return e.timestamp }
-func (e LogEntry) ProducerID() string     { return e.producerID }
-func (e LogEntry) AttemptNum() int        { return e.attemptNum }
-
-func (e LogEntry) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		Offset     uint64          `json:"offset"`
-		Type       string          `json:"type"`
-		ID         string          `json:"id"`
-		Value      json.RawMessage `json:"value"`
-		Timestamp  time.Time       `json:"timestamp"`
-		ProducerID string          `json:"producerId"`
-		AttemptNum int             `json:"attemptNum"`
-	}{
-		Offset:     e.offset,
-		Type:       e.entryType,
-		ID:         e.id,
-		Value:      e.value,
-		Timestamp:  e.timestamp,
-		ProducerID: e.producerID,
-		AttemptNum: e.attemptNum,
-	})
-}
+func (e LogEntry) GetOffset() uint64         { return e.Offset }
+func (e LogEntry) GetEntryType() string      { return e.EntryType }
+func (e LogEntry) GetID() string             { return e.Id }
+func (e LogEntry) GetValue() json.RawMessage { return append(json.RawMessage(nil), e.Value...) }
+func (e LogEntry) GetTimestamp() time.Time   { return e.Timestamp }
+func (e LogEntry) GetProducerID() string     { return e.ProducerID }
+func (e LogEntry) GetAttemptNum() int        { return e.AttemptNum }
 
 func (d DependencyState) SortedValues() []json.RawMessage {
 	var out []json.RawMessage

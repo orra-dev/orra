@@ -40,6 +40,10 @@ type ControlPlane struct {
 	VectorCache          *VectorCache
 	PddlValidator        PddlValidator
 	SimilarityMatcher    SimilarityMatcher
+	pStorage             ProjectStorage
+	svcStorage           ServiceStorage
+	orchestrationStorage OrchestrationStorage
+	groundingStorage     GroundingStorage
 	Logger               zerolog.Logger
 }
 
@@ -57,32 +61,65 @@ type WebSocketManager struct {
 	healthMu          sync.RWMutex
 }
 
+// ProjectStorage defines the interface for project persistence operations
+type ProjectStorage interface {
+	// StoreProject persists a project and its related data atomically
+	StoreProject(project *Project) error
+
+	// LoadProject retrieves a project by its ID
+	LoadProject(id string) (*Project, error)
+
+	// LoadProjectByAPIKey retrieves a project using an API key (primary or additional)
+	LoadProjectByAPIKey(apiKey string) (*Project, error)
+
+	// ListProjects returns all projects
+	ListProjects() ([]*Project, error)
+
+	// AddProjectAPIKey adds a new API key to a project
+	AddProjectAPIKey(projectID string, apiKey string) error
+
+	// AddProjectWebhook adds a new webhook URL to a project
+	AddProjectWebhook(projectID string, webhook string) error
+}
+
 type Project struct {
-	ID                string   `json:"id"`
-	APIKey            string   `json:"apiKey"`
-	AdditionalAPIKeys []string `json:"additionalAPIKeys"`
-	Webhooks          []string `json:"webhooks"`
+	ID                string    `json:"id"`
+	Name              string    `json:"name"`
+	APIKey            string    `json:"apiKey"`
+	AdditionalAPIKeys []string  `json:"additionalAPIKeys"`
+	Webhooks          []string  `json:"webhooks"`
+	CreatedAt         time.Time `json:"createdAt"`
+	UpdatedAt         time.Time `json:"updatedAt"`
 }
 
 type OrchestrationState struct {
-	ID            string
-	ProjectID     string
-	Plan          *ExecutionPlan
-	TasksStatuses map[string]Status
-	Status        Status
-	CreatedAt     time.Time
-	LastUpdated   time.Time
-	Error         string
+	ID            string            `json:"id"`
+	ProjectID     string            `json:"projectId"`
+	Plan          *ExecutionPlan    `json:"plan"`
+	TasksStatuses map[string]Status `json:"tasksStatuses"`
+	Status        Status            `json:"status"`
+	CreatedAt     time.Time         `json:"createdAt"`
+	LastUpdated   time.Time         `json:"lastUpdated"`
+	Error         string            `json:"error"`
+}
+
+type LogStore interface {
+	StoreLogEntry(orchestrationID string, entry LogEntry) error
+	StoreState(state *OrchestrationState) error
+
+	LoadEntries(orchestrationID string) ([]LogEntry, error)
+	ListOrchestrationStates() ([]*OrchestrationState, error)
+	LoadState(orchestrationID string) (*OrchestrationState, error)
 }
 
 type LogEntry struct {
-	offset     uint64
-	entryType  string
-	id         string
-	value      json.RawMessage
-	timestamp  time.Time
-	producerID string
-	attemptNum int
+	Offset     uint64          `json:"offset"`
+	EntryType  string          `json:"entryType"`
+	Id         string          `json:"id"`
+	Value      json.RawMessage `json:"logValue"`
+	Timestamp  time.Time       `json:"timestamp"`
+	ProducerID string          `json:"producerId"`
+	AttemptNum int             `json:"attemptNum"`
 }
 
 type LogManager struct {
@@ -92,6 +129,7 @@ type LogManager struct {
 	retention      time.Duration
 	cleanupTicker  *time.Ticker
 	controlPlane   *ControlPlane
+	storage        LogStore
 	Logger         zerolog.Logger
 }
 
@@ -100,6 +138,8 @@ type Log struct {
 	CurrentOffset uint64
 	seenEntries   map[string]bool
 	lastAccessed  time.Time // For cleanup
+	storage       LogStore
+	logger        zerolog.Logger
 	mu            sync.RWMutex
 }
 
@@ -198,6 +238,23 @@ type ServiceSchema struct {
 	Output Spec `json:"output"`
 }
 
+type ServiceStorage interface {
+	// StoreService stores or updates a service and its related data atomically
+	StoreService(service *ServiceInfo) error
+
+	// LoadService retrieves a service by its ID
+	//LoadService(serviceID string) (*ServiceInfo, error)
+
+	// LoadServiceByProjectID retrieves a service by a ProjectID and its ID
+	LoadServiceByProjectID(projectID, serviceID string) (*ServiceInfo, error)
+
+	// ListProjectServices lists all services for a given project
+	//ListProjectServices(projectID string) ([]*ServiceInfo, error)
+
+	// ListServices returns all services
+	ListServices() ([]*ServiceInfo, error)
+}
+
 type ServiceInfo struct {
 	Type             ServiceType       `json:"type"`
 	ID               string            `json:"id"`
@@ -205,14 +262,26 @@ type ServiceInfo struct {
 	Description      string            `json:"description"`
 	Schema           ServiceSchema     `json:"schema"`
 	Revertible       bool              `json:"revertible"`
-	ProjectID        string            `json:"-"`
+	ProjectID        string            `json:"projectID"`
 	Version          int64             `json:"version"`
 	IdempotencyStore *IdempotencyStore `json:"-"`
 }
 
+// OrchestrationStorage defines the interface for orchestration persistence operations
+type OrchestrationStorage interface {
+	// StoreOrchestration persists an orchestration and its related data
+	StoreOrchestration(orchestration *Orchestration) error
+
+	// LoadOrchestration retrieves an orchestration by its ID
+	LoadOrchestration(id string) (*Orchestration, error)
+
+	// ListProjectOrchestrations returns all orchestrations for a project
+	ListProjectOrchestrations(projectID string) ([]*Orchestration, error)
+}
+
 type Orchestration struct {
 	ID                     string            `json:"id"`
-	ProjectID              string            `json:"-"`
+	ProjectID              string            `json:"projectID"`
 	Action                 Action            `json:"action"`
 	Params                 ActionParams      `json:"data"`
 	Plan                   *ExecutionPlan    `json:"plan"`
@@ -223,8 +292,8 @@ type Orchestration struct {
 	Timeout                *Duration         `json:"timeout,omitempty"`
 	HealthCheckGracePeriod *Duration         `json:"healthCheckGracePeriod,omitempty"`
 	Webhook                string            `json:"webhook"`
-	taskZero               json.RawMessage
-	groundingHit           *GroundingHit
+	TaskZero               json.RawMessage   `json:"taskZero"`
+	GroundingHit           *GroundingHit     `json:"groundingHit,omitempty"`
 }
 
 type Duration struct {
@@ -385,6 +454,16 @@ type CompensationWorker struct {
 	cancel          context.CancelFunc // Store cancel function
 }
 
+// GroundingStorage defines the interface for persisting grounding specs
+type GroundingStorage interface {
+	StoreGrounding(grounding *GroundingSpec) error
+	LoadGrounding(projectID, name string) (*GroundingSpec, error)
+	ListProjectGroundings(projectID string) ([]*GroundingSpec, error)
+	ListGroundings() ([]*GroundingSpec, error)
+	RemoveGrounding(projectID, name string) error
+	RemoveProjectGroundings(projectID string) error
+}
+
 // GroundingUseCase represents grounding of how an action should be handled
 type GroundingUseCase struct {
 	Action       string            `json:"action" yaml:"action"`
@@ -395,6 +474,7 @@ type GroundingUseCase struct {
 
 // GroundingSpec represents a collection of planning grounding for domain-specific actions
 type GroundingSpec struct {
+	ProjectID   string             `json:"projectID"`
 	Name        string             `json:"name" yaml:"name"`
 	Domain      string             `json:"domain" yaml:"domain"`
 	Version     string             `json:"version" yaml:"version"`

@@ -73,7 +73,7 @@ func (r *ResultAggregator) PollLog(ctx context.Context, _ string, logStream *Log
 
 				select {
 				case entriesChan <- entry:
-					r.logState.LastOffset = entry.Offset() + 1
+					r.logState.LastOffset = entry.GetOffset() + 1
 				case <-ctx.Done():
 					return
 				}
@@ -86,21 +86,21 @@ func (r *ResultAggregator) PollLog(ctx context.Context, _ string, logStream *Log
 }
 
 func (r *ResultAggregator) shouldProcess(entry LogEntry) bool {
-	_, isDependency := r.Dependencies[entry.ID()]
-	return entry.Type() == "task_output" && isDependency
+	_, isDependency := r.Dependencies[entry.GetID()]
+	return entry.GetEntryType() == "task_output" && isDependency
 }
 
 func (r *ResultAggregator) processEntry(entry LogEntry, orchestrationID string) error {
-	if _, exists := r.logState.DependencyState[entry.ID()]; exists {
+	if _, exists := r.logState.DependencyState[entry.GetID()]; exists {
 		return nil
 	}
 
-	if entry.Value() == nil {
+	if entry.GetValue() == nil {
 		return nil
 	}
 
 	// Store the entry's output in our dependency state
-	r.logState.DependencyState[entry.ID()] = entry.Value()
+	r.logState.DependencyState[entry.GetID()] = entry.GetValue()
 
 	if !resultDependenciesMet(r.logState.DependencyState, r.Dependencies) {
 		return nil
@@ -109,7 +109,7 @@ func (r *ResultAggregator) processEntry(entry LogEntry, orchestrationID string) 
 	r.LogManager.Logger.Debug().
 		Msgf("All result aggregator dependencies have been processed for orchestration: %s", orchestrationID)
 
-	if err := r.LogManager.MarkTaskCompleted(orchestrationID, entry.ID(), time.Now().UTC()); err != nil {
+	if err := r.LogManager.MarkTaskCompleted(orchestrationID, entry.GetID(), time.Now().UTC()); err != nil {
 		return r.LogManager.AppendTaskFailureToLog(
 			orchestrationID,
 			ResultAggregatorID,

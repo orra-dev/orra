@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/gilcrest/diygoapi/errs"
@@ -23,16 +24,14 @@ import (
 	"github.com/rs/zerolog"
 )
 
-const JSONMarshalingFail = "Orra:JSONMarshalingFail"
-const UnknownOrchestration = "Orra:UnknownOrchestration"
-const ActionNotActionable = "Orra:ActionNotActionable"
-const ActionCannotExecute = "Orra:ActionCannotExecute"
-
 type App struct {
-	Plane  *ControlPlane
-	Router *mux.Router
-	Cfg    Config
-	Logger zerolog.Logger
+	Plane      *ControlPlane
+	Router     *mux.Router
+	Db         *BadgerDB
+	Cfg        Config
+	RootCtx    context.Context
+	RootCancel context.CancelFunc
+	Logger     zerolog.Logger
 }
 
 func NewApp(cfg Config, args []string) (*App, error) {
@@ -127,7 +126,7 @@ func (app *App) Run() {
 
 	// We'll accept graceful shutdowns when quit via SIGINT (Ctrl+C)
 	// SIGKILL, SIGQUIT or SIGTERM (Ctrl+/) will not be caught.
-	signal.Notify(c, os.Interrupt)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
 	// Block until we receive our signal.
 	<-c
@@ -137,8 +136,26 @@ func (app *App) Run() {
 	defer cancel()
 	// Doesn't block if no connections, but will otherwise wait
 	// until the timeout deadline.
-	_ = srv.Shutdown(ctx)
 
+	app.gracefulShutdown(srv, ctx)
+}
+
+func (app *App) gracefulShutdown(srv *http.Server, ctx context.Context) {
+	app.RootCancel()
+
+	if err := app.Plane.CancelAnyActiveOrchestrations(); err != nil {
+		app.Logger.Error().Err(err).Msg("")
+	}
+	app.Logger.Info().Msg("Control Plane shutting down")
+
+	if err := app.Db.Close(); err != nil {
+		app.Logger.Error().Err(err).Msg("DB shutdown error")
+	}
+	app.Logger.Info().Msg("DB shutdown complete")
+
+	if err := srv.Shutdown(ctx); err != nil {
+		app.Logger.Error().Err(err).Msg("Error shutting down control plane server")
+	}
 	app.Logger.Debug().Msg("http: All connections drained")
 }
 
@@ -152,7 +169,10 @@ func (app *App) RegisterProject(w http.ResponseWriter, r *http.Request) {
 	project.ID = app.Plane.GenerateProjectKey()
 	project.APIKey = app.Plane.GenerateAPIKey()
 
-	app.Plane.projects[project.ID] = &project
+	if err := app.Plane.AddProject(&project); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(ProjectRegistrationFailed), err))
+		return
+	}
 
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(project); err != nil {
@@ -217,8 +237,7 @@ func (app *App) OrchestrationsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := context.Background()
-	if err := app.Plane.PrepareOrchestration(ctx, project.ID, &orchestration, app.Plane.GetGroundingSpecs(project.ID)); err != nil {
+	if err := app.Plane.PrepareOrchestration(app.RootCtx, project.ID, &orchestration, app.Plane.GetGroundingSpecs(project.ID)); err != nil {
 		app.Logger.
 			Error().
 			Err(err).
@@ -236,7 +255,7 @@ func (app *App) OrchestrationsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	app.Logger.Debug().Msgf("About to execute orchestration %s", orchestration.ID)
-	go app.Plane.ExecuteOrchestration(&orchestration)
+	go app.Plane.ExecuteOrchestration(app.RootCtx, &orchestration)
 	w.WriteHeader(http.StatusAccepted)
 
 	data, err := json.Marshal(orchestration)
@@ -287,7 +306,10 @@ func (app *App) CreateAdditionalApiKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	newApiKey := app.Plane.GenerateAPIKey()
-	project.AdditionalAPIKeys = append(project.AdditionalAPIKeys, newApiKey)
+	if err := app.Plane.AddProjectAPIKey(project.ID, newApiKey); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(ProjectAPIKeyAdditionFailed), err))
+		return
+	}
 
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(map[string]string{
@@ -316,6 +338,11 @@ func (app *App) AddWebhook(w http.ResponseWriter, r *http.Request) {
 
 	if _, err := url.ParseRequestURI(webhook.Url); err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Validation, err))
+		return
+	}
+
+	if err := app.Plane.AddProjectWebhook(project.ID, webhook.Url); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(ProjectWebhookAdditionFailed), err))
 		return
 	}
 
@@ -399,13 +426,17 @@ func (app *App) ApplyGrounding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	app.Logger.Info().Interface("project", project).Msg("ApplyGrounding")
+
 	var grounding GroundingSpec
 	if err := json.NewDecoder(r.Body).Decode(&grounding); err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFail), err))
 		return
 	}
 
-	if err := app.Plane.ApplyGroundingSpec(project.ID, &grounding); err != nil {
+	grounding.ProjectID = project.ID
+
+	if err := app.Plane.ApplyGroundingSpec(app.RootCtx, &grounding); err != nil {
 		var validErr ValidationError
 		if errors.As(err, &validErr) {
 			errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Parameter(validErr.Field()), validErr.Error()))

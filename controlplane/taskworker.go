@@ -117,7 +117,7 @@ func (w *TaskWorker) PollLog(ctx context.Context, _ string, logStream *Log, entr
 
 				select {
 				case entriesChan <- entry:
-					w.logState.LastOffset = entry.Offset() + 1
+					w.logState.LastOffset = entry.GetOffset() + 1
 				case <-ctx.Done():
 					return
 				}
@@ -130,14 +130,14 @@ func (w *TaskWorker) PollLog(ctx context.Context, _ string, logStream *Log, entr
 }
 
 func (w *TaskWorker) shouldProcess(entry LogEntry) bool {
-	_, isDependency := w.Dependencies[entry.ID()]
-	processed := w.logState.Processed[entry.ID()]
-	return entry.Type() == "task_output" && isDependency && !processed
+	_, isDependency := w.Dependencies[entry.GetID()]
+	processed := w.logState.Processed[entry.GetID()]
+	return entry.GetEntryType() == "task_output" && isDependency && !processed
 }
 
 func (w *TaskWorker) processEntry(ctx context.Context, entry LogEntry, orchestrationID string) error {
 	// Store the entry's output in our dependency state
-	w.logState.DependencyState[entry.ID()] = entry.Value()
+	w.logState.DependencyState[entry.GetID()] = entry.GetValue()
 
 	if !taskDependenciesMet(w.logState.DependencyState, w.Dependencies) {
 		return nil
@@ -175,14 +175,14 @@ func (w *TaskWorker) processEntry(ctx context.Context, entry LogEntry, orchestra
 	}
 
 	// Mark this entry as processed
-	w.logState.Processed[entry.ID()] = true
+	w.logState.Processed[entry.GetID()] = true
 
 	completedTs := time.Now().UTC()
 	if err = w.LogManager.AppendTaskStatusEvent(orchestrationID, w.TaskID, w.Service.ID, Completed, nil, completedTs, w.consecutiveErrs); err != nil {
 		return err
 	}
 
-	if err := w.LogManager.MarkTaskCompleted(orchestrationID, entry.ID(), completedTs); err != nil {
+	if err := w.LogManager.MarkTaskCompleted(orchestrationID, entry.GetID(), completedTs); err != nil {
 		w.LogManager.Logger.Error().Err(err).Msgf("Cannot mark task %s completed for orchestration %s", w.TaskID, orchestrationID)
 		return w.LogManager.AppendTaskFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error(), w.consecutiveErrs, false)
 	}
