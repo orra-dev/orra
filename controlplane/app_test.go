@@ -13,10 +13,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type fakePddlValidator struct{}
@@ -26,54 +29,26 @@ func (f *fakePddlValidator) Validate(_ context.Context, _, _, _ string) error {
 }
 func (f *fakePddlValidator) HealthCheck(_ context.Context) error { return nil }
 
-type fakeProjectStorage struct {
-	project *Project
-}
-
-func (f *fakeProjectStorage) StoreProject(_ *Project) error { return nil }
-
-func (f *fakeProjectStorage) LoadProject(_ string) (*Project, error) { return f.project, nil }
-
-func (f *fakeProjectStorage) LoadProjectByAPIKey(apiKey string) (*Project, error) {
-	if f.project.APIKey != apiKey {
-		return nil, fmt.Errorf("invalid API key")
-	}
-	return f.project, nil
-}
-
-func (f *fakeProjectStorage) ListProjects() ([]*Project, error) { return []*Project{f.project}, nil }
-
-func (f *fakeProjectStorage) AddProjectAPIKey(_ string, _ string) error { return nil }
-
-func (f *fakeProjectStorage) AddProjectWebhook(_ string, _ string) error { return nil }
-
-func (f *fakeProjectStorage) Close() error { return nil }
-
-type fakeSvcStorage struct{}
-
-func (f *fakeSvcStorage) StoreService(_ *ServiceInfo) error { return nil }
-
-func (f *fakeSvcStorage) LoadServiceByProjectID(_, _ string) (*ServiceInfo, error) {
-	return nil, nil
-}
-
-func (f *fakeSvcStorage) ListServices() ([]*ServiceInfo, error) { return nil, nil }
-
 // setupTestApp creates a new App instance with a test project for testing
-func setupTestApp(t *testing.T) (*App, *Project) {
+func setupTestApp(t *testing.T) (*App, *Project, func()) {
 	t.Helper()
 
 	logger := zerolog.New(zerolog.NewTestWriter(t))
-	projectStorage := &fakeProjectStorage{}
-	plane := NewControlPlane()
+	tmpDir, err := os.MkdirTemp("", "badger-test-*")
+	require.NoError(t, err)
 
-	// Create a test project
-	project := &Project{
-		ID:     "project-id",
-		APIKey: "project-api-key",
+	db, err := NewBadgerDB(tmpDir, logger)
+	require.NoError(t, err)
+
+	dbCleanup := func() {
+		err := db.Close()
+		assert.NoError(t, err)
+		err = os.RemoveAll(tmpDir)
+		assert.NoError(t, err)
 	}
-	projectStorage.project = project
-	plane.Initialise(context.Background(), projectStorage, &fakeSvcStorage{}, nil, nil, nil, &fakePddlValidator{}, nil, logger)
+
+	plane := NewControlPlane()
+	plane.Initialise(context.Background(), db, db, nil, nil, nil, &fakePddlValidator{}, nil, logger)
 
 	app := &App{
 		Router: mux.NewRouter(),
@@ -82,9 +57,15 @@ func setupTestApp(t *testing.T) (*App, *Project) {
 	}
 
 	app.configureRoutes()
+
+	// Create a test project
+	project := &Project{
+		ID:     "project-id",
+		APIKey: "project-api-key",
+	}
 	app.Plane.projects[project.ID] = project
 
-	return app, project
+	return app, project, dbCleanup
 }
 
 // createTestGroundingSpec returns a valid domain grounding spec for testing
@@ -114,7 +95,9 @@ func createTestGroundingSpec() *GroundingSpec {
 }
 
 func TestGroundingAPI(t *testing.T) {
-	app, project := setupTestApp(t)
+	app, project, cleanup := setupTestApp(t)
+	defer cleanup()
+
 	expected := createTestGroundingSpec()
 
 	t.Run("Add Domain Grounding Spec Success", func(t *testing.T) {
@@ -211,7 +194,9 @@ func TestGroundingAPI(t *testing.T) {
 }
 
 func TestGroundingAPIAuth(t *testing.T) {
-	app, project := setupTestApp(t)
+	app, project, cleanup := setupTestApp(t)
+	defer cleanup()
+
 	example := createTestGroundingSpec()
 
 	tests := []struct {
@@ -256,7 +241,8 @@ func TestGroundingAPIAuth(t *testing.T) {
 }
 
 func TestGroundingValidationViaApi(t *testing.T) {
-	app, project := setupTestApp(t)
+	app, project, cleanup := setupTestApp(t)
+	defer cleanup()
 
 	tests := []struct {
 		name       string
