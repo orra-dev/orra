@@ -260,7 +260,7 @@ func (c *Client) GetTimeout() time.Duration {
 	return c.httpClient.Timeout
 }
 
-func (c *Client) CreateProject(ctx context.Context) (*Project, error) {
+func (c *Client) CreateProject(ctx context.Context, name string) (*Project, error) {
 	var project Project
 	var apiErr ErrorResponse
 
@@ -269,7 +269,10 @@ func (c *Client) CreateProject(ctx context.Context) (*Project, error) {
 		Path("/register/project").
 		Method(http.MethodPost).
 		Client(c.httpClient).
-		BodyJSON(map[string]any{}).
+		BodyJSON(map[string]any{
+			"name":      name,
+			"createdAt": time.Now().UTC(),
+		}).
 		ToJSON(&project).
 		ErrorJSON(&apiErr).
 		Fetch(ctx)
