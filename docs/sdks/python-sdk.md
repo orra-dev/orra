@@ -11,8 +11,6 @@ Then, install the latest version of the SDK:
 pip install orra-sdk
 ```
 
-> **Development Note**: During alpha, the control plane runs in-memory. After control plane restarts, services need to be reconfigured. See our [Reset Guide](../reset-control-plane.md) for the simple steps.
-
 ## Quick Integration Example
 
 The Orra SDK is designed to wrap your existing service logic with minimal changes. Here's a simple example showing how to integrate an existing chat service:
