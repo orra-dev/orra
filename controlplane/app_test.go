@@ -48,7 +48,7 @@ func setupTestApp(t *testing.T) (*App, *Project, func()) {
 	}
 
 	plane := NewControlPlane()
-	plane.Initialise(context.Background(), db, db, nil, nil, nil, &fakePddlValidator{}, nil, logger)
+	plane.Initialise(context.Background(), db, db, db, nil, nil, nil, &fakePddlValidator{}, nil, logger)
 
 	app := &App{
 		Router: mux.NewRouter(),

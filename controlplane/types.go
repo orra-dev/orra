@@ -42,6 +42,7 @@ type ControlPlane struct {
 	SimilarityMatcher    SimilarityMatcher
 	pStorage             ProjectStorage
 	svcStorage           ServiceStorage
+	orchestrationStorage OrchestrationStorage
 	Logger               zerolog.Logger
 }
 
@@ -265,6 +266,18 @@ type ServiceInfo struct {
 	IdempotencyStore *IdempotencyStore `json:"-"`
 }
 
+// OrchestrationStorage defines the interface for orchestration persistence operations
+type OrchestrationStorage interface {
+	// StoreOrchestration persists an orchestration and its related data
+	StoreOrchestration(orchestration *Orchestration) error
+
+	// LoadOrchestration retrieves an orchestration by its ID
+	LoadOrchestration(id string) (*Orchestration, error)
+
+	// ListOrchestrations returns all orchestrations for a project
+	ListOrchestrations(projectID string) ([]*Orchestration, error)
+}
+
 type Orchestration struct {
 	ID                     string            `json:"id"`
 	ProjectID              string            `json:"projectID"`
@@ -278,8 +291,8 @@ type Orchestration struct {
 	Timeout                *Duration         `json:"timeout,omitempty"`
 	HealthCheckGracePeriod *Duration         `json:"healthCheckGracePeriod,omitempty"`
 	Webhook                string            `json:"webhook"`
-	taskZero               json.RawMessage
-	groundingHit           *GroundingHit
+	TaskZero               json.RawMessage   `json:"taskZero"`
+	GroundingHit           *GroundingHit     `json:"groundingHit,omitempty"`
 }
 
 type Duration struct {

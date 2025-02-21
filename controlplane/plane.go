@@ -54,6 +54,7 @@ func (p *ControlPlane) Initialise(
 	ctx context.Context,
 	pStorage ProjectStorage,
 	svcStorage ServiceStorage,
+	orchestrationStorage OrchestrationStorage,
 	logMgr *LogManager,
 	wsManager *WebSocketManager,
 	vCache *VectorCache,
@@ -63,6 +64,7 @@ func (p *ControlPlane) Initialise(
 ) {
 	p.pStorage = pStorage
 	p.svcStorage = svcStorage
+	p.orchestrationStorage = orchestrationStorage
 	p.LogManager = logMgr
 	p.Logger = Logger
 	p.WebSocketManager = wsManager
@@ -71,8 +73,25 @@ func (p *ControlPlane) Initialise(
 	p.SimilarityMatcher = matcher
 
 	if projects, err := pStorage.ListProjects(); err == nil {
+		p.Logger.Trace().Interface("Projects", projects).Msg("Loaded projects from DB")
 		for _, project := range projects {
 			p.projects[project.ID] = project
+			orchestrations, err := orchestrationStorage.ListOrchestrations(project.ID)
+			p.Logger.Trace().Interface("Orchestrations", orchestrations).Msg("Loaded orchestrations from DB")
+			if err != nil {
+				p.Logger.Error().
+					Err(err).
+					Str("ProjectID", project.ID).
+					Msg("Failed to load orchestrations")
+				continue
+			}
+
+			p.orchestrationStoreMu.Lock()
+			for _, orchestration := range orchestrations {
+				p.orchestrationStore[orchestration.ID] = orchestration
+				p.Logger.Trace().Interface("Orchestration", orchestration).Msg("Loaded orchestration from DB")
+			}
+			p.orchestrationStoreMu.Unlock()
 		}
 	}
 

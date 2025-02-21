@@ -451,7 +451,7 @@ func (p *ControlPlane) buildSingleTaskResponse(
 	}
 
 	// Extract task0 values for reference resolution
-	task0Vals, err := extractTask0Values(orchestration.taskZero)
+	task0Vals, err := extractTask0Values(orchestration.TaskZero)
 	if err != nil {
 		return TaskInspectResponse{}, fmt.Errorf("failed to extract task0 values: %w", err)
 	}

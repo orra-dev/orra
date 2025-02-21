@@ -19,7 +19,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func NewLogManager(ctx context.Context, storage LogStore, retention time.Duration, controlPlane *ControlPlane) (*LogManager, error) {
+func NewLogManager(_ context.Context, storage LogStore, retention time.Duration, controlPlane *ControlPlane) (*LogManager, error) {
 	lm := &LogManager{
 		logs:           make(map[string]*Log),
 		orchestrations: make(map[string]*OrchestrationState),
@@ -34,7 +34,8 @@ func NewLogManager(ctx context.Context, storage LogStore, retention time.Duratio
 		return nil, fmt.Errorf("failed to recover state: %w", err)
 	}
 
-	go lm.startCleanup(ctx)
+	// TODO: enable orchestrationState cleanup
+	//go lm.startCleanup(ctx)
 	return lm, nil
 }
 
@@ -69,31 +70,6 @@ func (lm *LogManager) recover() error {
 	}
 
 	return nil
-}
-
-func (lm *LogManager) startCleanup(ctx context.Context) {
-	for {
-		select {
-		case <-lm.cleanupTicker.C:
-			lm.cleanupStaleOrchestrations()
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-func (lm *LogManager) cleanupStaleOrchestrations() {
-	lm.mu.Lock()
-	defer lm.mu.Unlock()
-	now := time.Now().UTC()
-
-	for id, orchestrationState := range lm.orchestrations {
-		if orchestrationState.Status == Completed &&
-			now.Sub(orchestrationState.LastUpdated) > lm.retention {
-			delete(lm.orchestrations, id)
-			delete(lm.logs, id)
-		}
-	}
 }
 
 func (lm *LogManager) GetLog(orchestrationID string) *Log {

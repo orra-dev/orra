@@ -45,6 +45,13 @@ func (p *ControlPlane) prepForError(orchestration *Orchestration, err error, sta
 	orchestration.Timestamp = time.Now().UTC()
 	marshaledErr, _ := json.Marshal(err.Error())
 	orchestration.Error = marshaledErr
+
+	if storeErr := p.orchestrationStorage.StoreOrchestration(orchestration); storeErr != nil {
+		p.Logger.Error().
+			Err(storeErr).
+			Str("OrchestrationID", orchestration.ID).
+			Msg("Failed to persist failed orchestration state")
+	}
 }
 
 func (p *ControlPlane) InjectGroundingMatchForAnyAppliedSpecs(ctx context.Context, orchestration *Orchestration, specs []GroundingSpec) error {
@@ -57,7 +64,7 @@ func (p *ControlPlane) InjectGroundingMatchForAnyAppliedSpecs(ctx context.Contex
 		return fmt.Errorf("cannot match grounding specs against orchestration action: %w", err)
 	}
 
-	orchestration.groundingHit = hit
+	orchestration.GroundingHit = hit
 
 	p.Logger.Trace().
 		Str("ProjectID", orchestration.ProjectID).
@@ -80,6 +87,15 @@ func (p *ControlPlane) PrepareOrchestration(ctx context.Context, projectID strin
 	p.orchestrationStoreMu.Lock()
 	p.orchestrationStore[orchestration.ID] = orchestration
 	p.orchestrationStoreMu.Unlock()
+
+	// Persist to storage
+	if err := p.orchestrationStorage.StoreOrchestration(orchestration); err != nil {
+		p.Logger.Error().
+			Err(err).
+			Str("OrchestrationID", orchestration.ID).
+			Msg("Failed to persist orchestration")
+		return fmt.Errorf("failed to persist orchestration: %w", err)
+	}
 
 	// Non-retryable validations
 	if err := p.validateWebhook(orchestration.ProjectID, orchestration.Webhook); err != nil {
@@ -172,6 +188,10 @@ func (p *ControlPlane) PrepareOrchestration(ctx context.Context, projectID strin
 					consecutiveRetries++
 					return prepErr
 				}
+				p.Logger.Error().
+					Err(err).
+					Str("OrchestrationID", orchestration.ID).
+					Msg("Failed to persist orchestration")
 				return back.Permanent(fmt.Errorf("exceeded maximum retries (%d): %w", maxPreparationRetries, prepErr.Err))
 
 			default:
@@ -266,7 +286,7 @@ func (p *ControlPlane) attemptRetryablePreparation(ctx context.Context, orchestr
 
 	// Store the final plan
 	orchestration.Plan = onlyServicesCallingPlan
-	orchestration.taskZero = taskZeroInput
+	orchestration.TaskZero = taskZeroInput
 	return nil
 }
 
@@ -277,6 +297,13 @@ func (p *ControlPlane) ExecuteOrchestration(ctx context.Context, orchestration *
 	orchestration.Status = Processing
 	orchestration.Timestamp = time.Now().UTC()
 
+	if err := p.orchestrationStorage.StoreOrchestration(orchestration); err != nil {
+		p.Logger.Error().
+			Err(err).
+			Str("OrchestrationID", orchestration.ID).
+			Msg("Failed to persist orchestration")
+	}
+
 	p.Logger.Debug().Msgf("About to create and start workers for orchestration %s", orchestration.ID)
 	p.createAndStartWorkers(
 		ctx,
@@ -286,7 +313,7 @@ func (p *ControlPlane) ExecuteOrchestration(ctx context.Context, orchestration *
 		orchestration.GetHealthCheckGracePeriod(),
 	)
 
-	initialEntry := NewLogEntry("task_output", TaskZero, orchestration.taskZero, "control-panel", 0)
+	initialEntry := NewLogEntry("task_output", TaskZero, orchestration.TaskZero, "control-panel", 0)
 	log.Append(orchestration.ID, initialEntry, true)
 	p.Logger.
 		Trace().
@@ -315,6 +342,15 @@ func (p *ControlPlane) FinalizeOrchestration(
 	orchestration.Error = reason
 	orchestration.Results = results
 
+	// Persist updated state
+	if err := p.orchestrationStorage.StoreOrchestration(orchestration); err != nil {
+		p.Logger.Error().
+			Err(err).
+			Str("OrchestrationID", orchestration.ID).
+			Msg("Failed to persist orchestration state")
+		return fmt.Errorf("failed to persist orchestration state: %w", err)
+	}
+
 	p.Logger.Debug().
 		Str("OrchestrationID", orchestration.ID).
 		Msgf("About to FinalizeOrchestration with status: %s", orchestration.Status.String())
@@ -342,6 +378,11 @@ func (p *ControlPlane) CancelOrchestration(orchestrationID string, reason json.R
 	orchestration.Status = Cancelled
 	orchestration.Timestamp = time.Now().UTC()
 	orchestration.Error = reason
+
+	// Persist updated state
+	if err := p.orchestrationStorage.StoreOrchestration(orchestration); err != nil {
+		return fmt.Errorf("failed to persist orchestration state: %w", err)
+	}
 
 	p.Logger.Debug().
 		Str("OrchestrationID", orchestration.ID).
@@ -439,7 +480,7 @@ func (p *ControlPlane) decomposeAction(ctx context.Context, orchestration *Orche
 		action,
 		actionParams,
 		serviceDescriptions,
-		orchestration.groundingHit,
+		orchestration.GroundingHit,
 		retryCauseIfAny,
 	)
 	if err != nil {
@@ -456,7 +497,7 @@ func (p *ControlPlane) decomposeAction(ctx context.Context, orchestration *Orche
 	}
 
 	result.ProjectID = orchestration.ProjectID
-	result.GroundingHit = orchestration.groundingHit
+	result.GroundingHit = orchestration.GroundingHit
 
 	return result, cacheResult.ID, cacheResult.Hit, nil
 }
