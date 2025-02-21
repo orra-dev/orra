@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/dgraph-io/badger/v4"
 )
@@ -19,28 +18,27 @@ var (
 	ErrOrchestrationNotFound = errors.New("orchestration not found")
 )
 
-// StoreOrchestration persists an orchestration to BadgerDB
+// StoreOrchestration persists an orchestration
 func (b *BadgerDB) StoreOrchestration(orchestration *Orchestration) error {
 	return b.db.Update(func(txn *badger.Txn) error {
 		// Store orchestration data
-		orchKey := fmt.Sprintf("orchestration:%s", orchestration.ID)
-		orchData, err := json.Marshal(orchestration)
+		oKey := fmt.Sprintf("orchestration:info:%s", orchestration.ID)
+		oData, err := json.Marshal(orchestration)
 		if err != nil {
 			return fmt.Errorf("failed to marshal orchestration: %w", err)
 		}
 
 		// Set orchestration data
-		if err := txn.Set([]byte(orchKey), orchData); err != nil {
+		if err := txn.Set([]byte(oKey), oData); err != nil {
 			return fmt.Errorf("failed to store orchestration: %w", err)
 		}
 
 		// Store project index for listing
-		projectIndexKey := fmt.Sprintf("project-orchestrations:%s:%s:%d",
+		projectOrchestrationKey := fmt.Sprintf("orchestration:project:%s:%s",
 			orchestration.ProjectID,
 			orchestration.ID,
-			orchestration.Timestamp.UnixNano(),
 		)
-		if err := txn.Set([]byte(projectIndexKey), nil); err != nil {
+		if err := txn.Set([]byte(projectOrchestrationKey), nil); err != nil {
 			return fmt.Errorf("failed to store project orchestration index: %w", err)
 		}
 
@@ -53,7 +51,7 @@ func (b *BadgerDB) LoadOrchestration(id string) (*Orchestration, error) {
 	var orchestration Orchestration
 
 	err := b.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte(fmt.Sprintf("orchestration:%s", id)))
+		item, err := txn.Get([]byte(fmt.Sprintf("orchestration:info:%s", id)))
 		if err != nil {
 			if errors.Is(err, badger.ErrKeyNotFound) {
 				return ErrOrchestrationNotFound
@@ -73,52 +71,27 @@ func (b *BadgerDB) LoadOrchestration(id string) (*Orchestration, error) {
 	return &orchestration, nil
 }
 
-func (b *BadgerDB) ListOrchestrations(projectID string) ([]*Orchestration, error) {
+func (b *BadgerDB) ListProjectOrchestrations(projectID string) ([]*Orchestration, error) {
 	var orchestrations []*Orchestration
+	prefix := []byte(fmt.Sprintf("orchestration:project:%s:", projectID))
 
 	err := b.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
-		opts.Prefix = []byte(fmt.Sprintf("project-orchestrations:%s:", projectID))
-		opts.Reverse = true // Get newest first
+		opts.Prefix = prefix
 
 		it := txn.NewIterator(opts)
 		defer it.Close()
 
-		for it.Rewind(); it.Valid(); it.Next() {
-			// Extract orchestration ID from the index key
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 			key := string(it.Item().Key())
-			orchID := extractOrchestrationIDFromIndex(key)
-			if orchID == "" {
-				continue
-			}
+			oID := key[len(fmt.Sprintf("orchestration:project:%s:", projectID)):]
 
-			// Load the actual orchestration
-			item, err := txn.Get([]byte(fmt.Sprintf("orchestration:%s", orchID)))
+			orchestration, err := b.LoadOrchestration(oID)
 			if err != nil {
-				if errors.Is(err, badger.ErrKeyNotFound) {
-					// Skip if orchestration was deleted
-					continue
-				}
-				b.logger.Error().
-					Err(err).
-					Str("OrchestrationID", orchID).
-					Msg("Failed to load orchestration")
-				continue
+				return fmt.Errorf("failed to load orchestration %s: %w", oID, err)
 			}
 
-			var orch Orchestration
-			err = item.Value(func(val []byte) error {
-				return json.Unmarshal(val, &orch)
-			})
-			if err != nil {
-				b.logger.Error().
-					Err(err).
-					Str("OrchestrationID", orchID).
-					Msg("Failed to unmarshal orchestration")
-				continue
-			}
-
-			orchestrations = append(orchestrations, &orch)
+			orchestrations = append(orchestrations, orchestration)
 		}
 		return nil
 	})
@@ -133,14 +106,4 @@ func (b *BadgerDB) ListOrchestrations(projectID string) ([]*Orchestration, error
 	}
 
 	return orchestrations, nil
-}
-
-// Helper function to extract orchestration ID from index key
-func extractOrchestrationIDFromIndex(key string) string {
-	// Format: project-orchestrations:<projectID>:<orchID>:<timestamp>
-	parts := strings.Split(key, ":")
-	if len(parts) >= 3 {
-		return parts[2]
-	}
-	return ""
 }
