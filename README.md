@@ -5,8 +5,8 @@ interactions. Orra orchestrates your tools as services with your agents providin
 any language, agent framework or deployment platform.
 
 Prototype rapidly today, scale to production tomorrow. No complex infrastructure required.
+![](images/orra-diagram.png)
 
-<img height="600" src="images/orra-diagram.png" width="800"/>
 
 ## Releases
 
