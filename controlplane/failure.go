@@ -64,7 +64,6 @@ func (f *FailureTracker) PollLog(ctx context.Context, _ string, logStream *Log, 
 	for {
 		select {
 		case <-ticker.C:
-			var processableEntries []LogEntry
 
 			entries := logStream.ReadFrom(f.logState.LastOffset)
 			for _, entry := range entries {
@@ -72,18 +71,14 @@ func (f *FailureTracker) PollLog(ctx context.Context, _ string, logStream *Log, 
 					continue
 				}
 
-				processableEntries = append(processableEntries, entry)
 				select {
 				case entriesChan <- entry:
-					f.logState.LastOffset = entry.Offset() + 1
+					f.logState.LastOffset = entry.GetOffset() + 1
 				case <-ctx.Done():
 					return
 				}
 			}
 
-			//f.LogManager.Logger.Debug().
-			//	Interface("entries", processableEntries).
-			//	Msgf("polling entries for failure tracker in orchestration: %s", orchestrationID)
 		case <-ctx.Done():
 			return
 		}
@@ -91,15 +86,15 @@ func (f *FailureTracker) PollLog(ctx context.Context, _ string, logStream *Log, 
 }
 
 func (f *FailureTracker) shouldProcess(entry LogEntry) bool {
-	return entry.Type() == "task_failure"
+	return entry.GetEntryType() == "task_failure"
 }
 
 func (f *FailureTracker) processEntry(entry LogEntry, orchestrationID string) error {
 	// Mark this entry as processed
-	f.logState.Processed[entry.ID()] = true
+	f.logState.Processed[entry.GetID()] = true
 
 	var failure LoggedFailure
-	if err := json.Unmarshal(entry.Value(), &failure); err != nil {
+	if err := json.Unmarshal(entry.GetValue(), &failure); err != nil {
 		return fmt.Errorf("failure tracker failed to unmarshal entry: %w", err)
 	}
 
@@ -109,8 +104,8 @@ func (f *FailureTracker) processEntry(entry LogEntry, orchestrationID string) er
 		OrchestrationID string `json:"orchestration"`
 		Error           string `json:"error"`
 	}{
-		Id:              entry.ID(),
-		ProducerID:      entry.ProducerID(),
+		Id:              entry.GetID(),
+		ProducerID:      entry.GetProducerID(),
 		OrchestrationID: orchestrationID,
 		Error:           failure.Failure,
 	}

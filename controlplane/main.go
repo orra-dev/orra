@@ -20,7 +20,7 @@ import (
 func main() {
 	cfg, err := Load()
 	if err != nil {
-		log.Fatalf("could not load api config: %s", err.Error())
+		log.Fatalf("could not load control plane config: %s", err.Error())
 	}
 
 	app, err := NewApp(cfg, os.Args)
@@ -28,18 +28,39 @@ func main() {
 		log.Fatalf("could not initialise control plane server: %s", err.Error())
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	db, err := NewBadgerDB(cfg.StoragePath, app.Logger)
+	if err != nil {
+		log.Fatalf("could not initialise DB for control plane server: %s", err.Error())
+	}
+	defer func(storage *BadgerDB) {
+		_ = storage.Close()
+	}(db)
 
-	plane := NewControlPlane(cfg.OpenaiApiKey)
+	rootCtx, rootCancel := context.WithCancel(context.Background())
+	defer rootCancel()
+
+	llmClient, err := NewLLMClient(cfg, app.Logger)
+	if err != nil {
+		log.Fatalf("could not initialise LLM client for control plane server: %s", err.Error())
+	}
+
+	plane := NewControlPlane()
 	wsManager := NewWebSocketManager(app.Logger)
-	vCache := NewVectorCache(cfg.OpenaiApiKey, 1000, 24*time.Hour, app.Logger)
-	logManager := NewLogManager(ctx, LogsRetentionPeriod, plane)
+	matcher := NewMatcher(llmClient, app.Logger)
+	vCache := NewVectorCache(llmClient, matcher, 1000, 24*time.Hour, app.Logger)
+	logManager, err := NewLogManager(rootCtx, db, LogsRetentionPeriod, plane)
+	if err != nil {
+		log.Fatalf("could not initialise Log Manager for control plane server: %s", err.Error())
+	}
+	pddlValidSvc := NewPddlValidationService(cfg.PddlValidatorPath, cfg.PddlValidationTimeout, app.Logger)
 	logManager.Logger = app.Logger
-	plane.Initialise(ctx, logManager, wsManager, vCache, app.Logger)
+	plane.Initialise(rootCtx, db, db, db, db, logManager, wsManager, vCache, pddlValidSvc, matcher, app.Logger)
 
 	app.Plane = plane
 	app.Router = mux.NewRouter()
+	app.Db = db
+	app.RootCtx = rootCtx
+	app.RootCancel = rootCancel
 	app.configureRoutes()
 	app.configureWebSocket()
 	app.Run()

@@ -1,3 +1,20 @@
+## Control Plane v0.2.1
+
+### Features
+- Execution plan generation using Reasoning models.
+- Added domain grounding.
+- Execution plan validation based pn grounding capability matching
+- Further execution plan validation using PDDL
+- BadgerDB for persisting control plane state.
+
+### Bug fixes
+- Various bug fixes.
+
+### Documentation
+- General README updates across the project.
+- Grounding documentation.
+- Grounding template.
+
 ## Control Plane v0.2.0
 
 ### Features

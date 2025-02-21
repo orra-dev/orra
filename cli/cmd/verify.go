@@ -92,7 +92,7 @@ execute the required project services`,
 				HealthCheckGracePeriod: healthCheckGracePeriod,
 			})
 			if err != nil {
-				return fmt.Errorf("failed to create orchestration: %w", err)
+				return fmt.Errorf("failed to create orchestration - %w", err)
 			}
 
 			fmt.Printf("Project: %s\nServer:  %s\n", projectName, proj.ServerAddr)

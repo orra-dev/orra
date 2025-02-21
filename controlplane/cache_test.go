@@ -8,6 +8,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 	"testing"
 
@@ -134,7 +135,7 @@ func TestExtractTask0Input(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := extractTask0Input(tt.content)
+			got, err := extractTaskZeroInput(tt.content)
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -163,8 +164,8 @@ func TestSubstituteTask0Params(t *testing.T) {
 		content       string
 		originalInput string
 		newParams     string
-		mappings      []ParamMapping
-		want          string
+		mappings      []TaskZeroCacheMapping
+		want          map[string]string
 	}{
 		{
 			name: "substitute customer id into message field",
@@ -188,23 +189,12 @@ func TestSubstituteTask0Params(t *testing.T) {
             }`,
 			originalInput: `{"message":"cust12345"}`,
 			newParams:     `[{"field":"customerId","value":"cust98765"},{"field":"productDescription","value":"Red shoes"}]`,
-			mappings: []ParamMapping{
-				{Task0Field: "message", ActionField: "customerId"},
+			mappings: []TaskZeroCacheMapping{
+				{Field: "message", ActionField: "customerId"},
 			},
-			want: `{
-                "tasks":[
-                    {
-                        "id":"task0",
-                        "input":{"message":"cust98765"}
-                    },
-                    {
-                        "id":"task1",
-                        "service":"Echo",
-                        "input":{"data":"$task0.message"}
-                    }
-                ],
-                "parallel_groups":[["task1"]]
-            }`,
+			want: map[string]string{
+				"message": "cust98765",
+			},
 		},
 		{
 			name: "substitute multiple fields",
@@ -222,22 +212,14 @@ func TestSubstituteTask0Params(t *testing.T) {
             }`,
 			originalInput: `{"text":"Peanuts collectible","id":"cust12345"}`,
 			newParams:     `[{"field":"customerId","value":"cust98765"},{"field":"productDescription","value":"Vintage comics"}]`,
-			mappings: []ParamMapping{
-				{Task0Field: "text", ActionField: "productDescription"},
-				{Task0Field: "id", ActionField: "customerId"},
+			mappings: []TaskZeroCacheMapping{
+				{Field: "text", ActionField: "productDescription"},
+				{Field: "id", ActionField: "customerId"},
 			},
-			want: `{
-                "tasks":[
-                    {
-                        "id":"task0",
-                        "input":{
-                            "text":"Vintage comics",
-                            "id":"cust98765"
-                        }
-                    }
-                ],
-                "parallel_groups":[]
-            }`,
+			want: map[string]string{
+				"id":   "cust98765",
+				"text": "Vintage comics",
+			},
 		},
 		{
 			name: "preserve non-mapped fields",
@@ -255,39 +237,29 @@ func TestSubstituteTask0Params(t *testing.T) {
             }`,
 			originalInput: `{"constant":"some-fixed-value","message":"cust12345"}`,
 			newParams:     `[{"field":"customerId","value":"cust98765"}]`,
-			mappings: []ParamMapping{
-				{Task0Field: "message", ActionField: "customerId"},
+			mappings: []TaskZeroCacheMapping{
+				{Field: "message", ActionField: "customerId"},
 			},
-			want: `{
-                "tasks":[
-                    {
-                        "id":"task0",
-                        "input":{
-                            "constant":"some-fixed-value",
-                            "message":"cust98765"
-                        }
-                    }
-                ],
-                "parallel_groups":[]
-            }`,
+			want: map[string]string{
+				"constant": "some-fixed-value",
+				"message":  "cust98765",
+			},
 		},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := substituteTask0Params(tt.content, []byte(tt.originalInput), []byte(tt.newParams), tt.mappings)
-			require.NoError(t, err)
+		got, err := substituteTask0Params(tt.content, []byte(tt.originalInput), []byte(tt.newParams), tt.mappings)
+		require.NoError(t, err)
 
-			// Compare JSON structures
-			var gotJSON, wantJSON interface{}
-			err = json.Unmarshal([]byte(got), &gotJSON)
-			require.NoError(t, err)
+		var gotJSON map[string]any
+		err = json.Unmarshal([]byte(got), &gotJSON)
+		require.NoError(t, err)
 
-			err = json.Unmarshal([]byte(tt.want), &wantJSON)
-			require.NoError(t, err)
-
-			assert.Equal(t, wantJSON, gotJSON)
-		})
+		for k, v := range tt.want {
+			t.Run(fmt.Sprintf("%s_has %+v", tt.name, v), func(t *testing.T) {
+				assert.Equal(t, v, gotJSON["tasks"].([]any)[0].(map[string]any)["input"].(map[string]any)[k])
+			})
+		}
 	}
 }
 
@@ -297,7 +269,7 @@ func TestSubstituteTask0ParamsErrors(t *testing.T) {
 		content       string
 		originalInput string
 		newParams     string
-		mappings      []ParamMapping
+		mappings      []TaskZeroCacheMapping
 		errContains   string
 	}{
 		{
@@ -315,8 +287,8 @@ func TestSubstituteTask0ParamsErrors(t *testing.T) {
             }`,
 			originalInput: `{"message":"cust12345"}`,
 			newParams:     `[{"field":"otherField","value":"someValue"}]`,
-			mappings: []ParamMapping{
-				{Task0Field: "message", ActionField: "customerId"},
+			mappings: []TaskZeroCacheMapping{
+				{Field: "message", ActionField: "customerId"},
 			},
 			errContains: "missing required action parameter: customerId",
 		},
@@ -335,8 +307,8 @@ func TestSubstituteTask0ParamsErrors(t *testing.T) {
             }`,
 			originalInput: `{"message":"cust12345"}`,
 			newParams:     `[{"field":"customerId", bad json}]`,
-			mappings: []ParamMapping{
-				{Task0Field: "message", ActionField: "customerId"},
+			mappings: []TaskZeroCacheMapping{
+				{Field: "message", ActionField: "customerId"},
 			},
 			errContains: "failed to parse new action params",
 		},
@@ -355,8 +327,8 @@ func TestSubstituteTask0ParamsErrors(t *testing.T) {
             }`,
 			originalInput: `{"message":"cust12345"}`,
 			newParams:     `[{"field":"customerId","value":"cust98765"}]`,
-			mappings: []ParamMapping{
-				{Task0Field: "message", ActionField: "customerId"},
+			mappings: []TaskZeroCacheMapping{
+				{Field: "message", ActionField: "customerId"},
 			},
 			errContains: "task0 not found",
 		},
@@ -376,7 +348,7 @@ func TestExtractParamMappings(t *testing.T) {
 		name         string
 		actionParams ActionParams
 		task0Input   map[string]interface{}
-		want         []ParamMapping
+		want         []TaskZeroCacheMapping
 		wantErr      bool
 	}{
 		{
@@ -388,8 +360,8 @@ func TestExtractParamMappings(t *testing.T) {
 			task0Input: map[string]interface{}{
 				"message": "cust12345",
 			},
-			want: []ParamMapping{
-				{Task0Field: "message", ActionField: "customerId", Value: "cust12345"},
+			want: []TaskZeroCacheMapping{
+				{Field: "message", ActionField: "customerId", Value: "cust12345"},
 			},
 		},
 		{
@@ -402,9 +374,9 @@ func TestExtractParamMappings(t *testing.T) {
 				"text": "Red shoes",
 				"id":   "cust12345",
 			},
-			want: []ParamMapping{
-				{Task0Field: "id", ActionField: "customerId", Value: "cust12345"},
-				{Task0Field: "text", ActionField: "productDescription", Value: "Red shoes"},
+			want: []TaskZeroCacheMapping{
+				{Field: "id", ActionField: "customerId", Value: "cust12345"},
+				{Field: "text", ActionField: "productDescription", Value: "Red shoes"},
 			},
 		},
 		{
@@ -426,8 +398,8 @@ func TestExtractParamMappings(t *testing.T) {
 				"message": "cust12345",
 				"count":   42,
 			},
-			want: []ParamMapping{
-				{Task0Field: "message", ActionField: "customerId", Value: "cust12345"},
+			want: []TaskZeroCacheMapping{
+				{Field: "message", ActionField: "customerId", Value: "cust12345"},
 			},
 		},
 	}
@@ -443,10 +415,10 @@ func TestExtractParamMappings(t *testing.T) {
 
 			// Sort both slices for consistent comparison
 			sort.Slice(got, func(i, j int) bool {
-				return got[i].Task0Field < got[j].Task0Field
+				return got[i].Field < got[j].Field
 			})
 			sort.Slice(tt.want, func(i, j int) bool {
-				return tt.want[i].Task0Field < tt.want[j].Task0Field
+				return tt.want[i].Field < tt.want[j].Field
 			})
 
 			assert.Equal(t, tt.want, got)

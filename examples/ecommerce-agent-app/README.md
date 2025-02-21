@@ -41,7 +41,7 @@ docker compose up
 2. Setup your Orra project:
 ```bash
 # Install Orra CLI 
-curl -L https://github.com/ezodude/orra/releases/download/v0.2.0-manta-ray/orra-darwin-arm64 -o /usr/local/bin/orra
+curl -L https://github.com/ezodude/orra/releases/download/v0.2.1/orra-darwin-arm64 -o /usr/local/bin/orra
 chmod +x /usr/local/bin/orra
 
 # Create project and configure a webhook
@@ -179,5 +179,4 @@ The example consists of:
 ## Learn More
 
 - [Orra Documentation](../../docs)
-- [Reset Guide](../../docs/reset-control-plane.md) (if restarting)
 - [CLI Documentation](../../docs/cli.md)

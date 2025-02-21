@@ -33,7 +33,7 @@ docker compose up
 
 ```bash
 # Install Orra CLI 
-curl -L https://github.com/ezodude/orra/releases/download/v0.2.0-manta-ray/orra-linux-amd64 -o /usr/local/bin/orra
+curl -L https://github.com/ezodude/orra/releases/download/v0.2.1/orra-linux-amd64 -o /usr/local/bin/orra
 chmod +x /usr/local/bin/orra
 
 # Create project, add a webhook and API key
@@ -120,5 +120,4 @@ That's it! Orra provides:
 ## Learn More
 
 - [Orra Documentation](../../docs)
-- [Reset Guide](../../docs/reset-control-plane.md) (if restarting)
 - [CLI Documentation](../../docs/cli.md)

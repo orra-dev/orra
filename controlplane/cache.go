@@ -11,19 +11,21 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
-	"github.com/sashabaranov/go-openai"
 	"gonum.org/v1/gonum/mat"
 )
 
-func NewVectorCache(openAIKey string, maxSize int, ttl time.Duration, logger zerolog.Logger) *VectorCache {
+func NewVectorCache(llmClient *LLMClient, matcher SimilarityMatcher, maxSize int, ttl time.Duration, logger zerolog.Logger) *VectorCache {
 	return &VectorCache{
 		projectCaches: make(map[string]*ProjectCache),
-		embedder:      openai.NewClient(openAIKey),
+		llmClient:     llmClient,
+		matcher:       matcher,
 		ttl:           ttl,
 		maxSize:       maxSize,
 		logger:        logger,
@@ -44,7 +46,7 @@ func computeHash(content string) string {
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
-func (pc *ProjectCache) findBestMatch(actionVector *mat.VecDense, servicesHash string, action string) (*CacheEntry, float64) {
+func (pc *ProjectCache) findBestMatch(query CacheQuery) (*CacheEntry, float64) {
 	pc.mu.RLock()
 	defer pc.mu.RUnlock()
 
@@ -53,15 +55,19 @@ func (pc *ProjectCache) findBestMatch(actionVector *mat.VecDense, servicesHash s
 
 	// First pass: quick check on matching services
 	for _, entry := range pc.entries {
-		if entry.ServicesHash != servicesHash {
+		if entry.ServicesHash != query.servicesHash {
 			continue
 		}
 
-		score := cosineSimilarity(actionVector, entry.ActionVector)
+		if entry.Grounded != query.grounded {
+			continue
+		}
+
+		score := CosineSimilarity(query.actionVector, entry.ActionVector)
 
 		pc.logger.Debug().
-			Str("Action Cached", action).
-			Str("Action To Match", entry.Action).
+			Str("ActionWithFields", query.actionWithFields).
+			Str("CachedActionWithFields To Match", entry.CachedActionWithFields).
 			Float64("score", score).
 			Msg("cosineSimilarity")
 
@@ -77,29 +83,6 @@ func (pc *ProjectCache) findBestMatch(actionVector *mat.VecDense, servicesHash s
 	}
 
 	return bestEntry, bestScore
-}
-
-func cosineSimilarity(a, b *mat.VecDense) float64 {
-	if a.Len() != b.Len() {
-		return -1
-	}
-
-	dotProduct := mat.Dot(a, b)
-	normA := mat.Norm(a, 2)
-	normB := mat.Norm(b, 2)
-
-	if normA == 0 || normB == 0 {
-		return 0
-	}
-
-	return dotProduct / (normA * normB)
-}
-
-func normalizeVector(v *mat.VecDense) {
-	norm := mat.Norm(v, 2)
-	if norm != 0 {
-		v.ScaleVec(1/norm, v)
-	}
 }
 
 func (c *VectorCache) getProjectCache(projectID string) *ProjectCache {
@@ -118,48 +101,40 @@ func (c *VectorCache) getProjectCache(projectID string) *ProjectCache {
 	return pc
 }
 
-func (c *VectorCache) Get(
-	ctx context.Context,
-	projectID,
-	action string,
-	actionParams json.RawMessage,
-	serviceDescriptions string,
-) (*openai.ChatCompletionResponse, string, json.RawMessage, error) {
+func (c *VectorCache) Get(ctx context.Context, projectID, action string, actionParams json.RawMessage, serviceDescriptions string, groundingHit *GroundingHit, backPromptContext string) (*CacheResult, json.RawMessage, error) {
 	result, err, _ := c.group.Do(fmt.Sprintf("%s:%s", projectID, action), func() (interface{}, error) {
-		return c.getWithRetry(ctx, projectID, action, actionParams, serviceDescriptions)
+		return c.getWithRetry(ctx, projectID, action, actionParams, serviceDescriptions, groundingHit, backPromptContext)
 	})
 
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, err
 	}
 
 	cacheResult := result.(*CacheResult)
 
 	if cacheResult.Hit && cacheResult.Task0Input != nil {
-		modifiedResponse := *cacheResult.Response
+		modifiedResponse := cacheResult.Response
 		newContent, err := substituteTask0Params(
-			sanitizeJSONOutput(modifiedResponse.Choices[0].Message.Content),
+			modifiedResponse,
 			cacheResult.Task0Input,
 			actionParams,
-			cacheResult.ParamMappings,
+			cacheResult.CacheMappings,
 		)
 		if err != nil {
-			return nil, "", nil, err
+			return nil, nil, err
 		}
-		modifiedResponse.Choices[0].Message.Content = newContent
-		return &modifiedResponse, cacheResult.ID, actionParams, nil
+		cacheResult.Response = newContent
+		return cacheResult, actionParams, nil
 	}
 
-	return cacheResult.Response, cacheResult.ID, actionParams, nil
+	return cacheResult, actionParams, nil
 }
 
-func (c *VectorCache) getWithRetry(ctx context.Context,
-	projectID,
-	action string,
-	actionParams json.RawMessage,
-	serviceDescriptions string,
-) (*CacheResult, error) {
-	pc := c.getProjectCache(projectID)
+func (c *VectorCache) getWithRetry(ctx context.Context, projectID, action string, rawActionParams json.RawMessage, serviceDescriptions string, groundingHit *GroundingHit, backPromptContext string) (*CacheResult, error) {
+	var actionParams ActionParams
+	if err := json.Unmarshal(rawActionParams, &actionParams); err != nil {
+		return nil, fmt.Errorf("failed to parse action params: %w", err)
+	}
 	servicesHash := computeHash(serviceDescriptions)
 
 	c.logger.Trace().
@@ -167,93 +142,150 @@ func (c *VectorCache) getWithRetry(ctx context.Context,
 		Str("servicesHash", servicesHash).
 		Msg("Hashed serviceDescriptions for cache evaluation")
 
-	// Generate embedding for the action
-	actionEmbedding, err := c.generateEmbedding(ctx, action)
+	actionWithFields := fmt.Sprintf("%s:::%s", action, actionParams.String())
+	actionVector, err := c.matcher.GenerateEmbeddingVector(ctx, actionWithFields)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate embedding: %w", err)
+		return nil, fmt.Errorf("failed to generate embedding for action with param fields: %w", err)
 	}
-	normalizeVector(actionEmbedding)
+	NormalizeVector(actionVector)
 
-	// Find best matching entry
-	bestEntry, bestScore := pc.findBestMatch(actionEmbedding, servicesHash, action)
-
-	c.logger.Trace().
-		Str("projectID", projectID).
-		Str("action", action).
-		Float64("bestScore", bestScore).
-		Float64("threshold", pc.threshold).
-		Msg("Cache lookup attempt")
-
-	// Cache hit
-	if bestEntry != nil && bestScore > pc.threshold && time.Since(bestEntry.Timestamp) < c.ttl {
-		c.logger.Debug().
-			Str("projectID", projectID).
-			Str("action", action).
-			Float64("similarity", bestScore).
-			Msg("CACHE HIT")
-
-		return &CacheResult{
-			ID:            bestEntry.ID,
-			Response:      bestEntry.Response,
-			Task0Input:    bestEntry.Task0Input,
-			ParamMappings: bestEntry.ParamMappings,
-			Hit:           true,
-		}, nil
+	query := CacheQuery{
+		actionWithFields: actionWithFields,
+		actionParams:     actionParams,
+		actionVector:     actionVector,
+		servicesHash:     servicesHash,
+		grounded:         groundingHit != nil,
 	}
 
-	// Cache miss
+	if cached, cacheHit := c.lookupProjectCache(projectID, query); cacheHit {
+		return cached, nil
+	}
+
 	c.logger.Debug().
 		Str("projectID", projectID).
-		Str("action", action).
+		Str("actionWithFields", actionWithFields).
 		Msg("CACHE MISS")
 
-	llmResp, err := c.embedder.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-		Model: openai.GPT4o,
-		Messages: []openai.ChatCompletionMessage{
-			{
-				Role:    openai.ChatMessageRoleUser,
-				Content: generateLLMPrompt(action, actionParams, serviceDescriptions),
-			},
-		},
-	})
+	planJson, err := c.genExecutionPlanJson(ctx, action, rawActionParams, serviceDescriptions, groundingHit, backPromptContext)
 	if err != nil {
 		return nil, err
 	}
 
-	sanitizedAsJson := sanitizeJSONOutput(llmResp.Choices[0].Message.Content)
-	c.logger.Trace().RawJSON("Cache Miss Plan", []byte(sanitizedAsJson)).Msg("")
-	task0Input, err := extractTask0Input(sanitizedAsJson)
+	c.logger.Trace().RawJSON("Cache Miss Plan", []byte(planJson)).Msg("")
+
+	task0Input, taskZeroCacheMappings, err := c.prepTaskZeroForCache(planJson, actionParams)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract task0 input: %w", err)
+		return nil, err
 	}
 
-	// Parse action params and task0 input for mapping
-	var params ActionParams
-	if err := json.Unmarshal(actionParams, &params); err != nil {
-		return nil, fmt.Errorf("failed to parse action params: %w", err)
+	cachedEntry := c.cache(projectID, planJson, actionVector, servicesHash, task0Input, taskZeroCacheMappings, actionWithFields, groundingHit != nil)
+
+	return &CacheResult{
+		ID:         cachedEntry.ID,
+		Response:   planJson,
+		Task0Input: task0Input,
+		Hit:        false,
+		Grounded:   cachedEntry.Grounded,
+	}, nil
+}
+
+func (c *VectorCache) lookupProjectCache(projectID string, query CacheQuery) (*CacheResult, bool) {
+	pc := c.getProjectCache(projectID)
+	bestEntry, bestScore := pc.findBestMatch(query)
+
+	c.logger.Trace().
+		Str("projectID", projectID).
+		Str("actionWithFields", query.actionWithFields).
+		Float64("bestScore", bestScore).
+		Float64("threshold", pc.threshold).
+		Msg("Cache lookup attempt")
+
+	if bestEntry != nil && bestEntry.MatchesActionParams(query.actionParams) && bestScore > pc.threshold {
+		if time.Since(bestEntry.Timestamp) < c.ttl {
+			// Cache hit
+			c.logger.Debug().
+				Str("projectID", projectID).
+				Str("actionWithFields", query.actionWithFields).
+				Str("CachedActionWithFields", bestEntry.CachedActionWithFields).
+				Float64("Similarity", bestScore).
+				Bool("Grounded", bestEntry.Grounded).
+				Msg("CACHE HIT")
+
+			return &CacheResult{
+				ID:            bestEntry.ID,
+				Response:      bestEntry.Response,
+				Task0Input:    bestEntry.Task0Input,
+				CacheMappings: bestEntry.CacheMappings,
+				Grounded:      bestEntry.Grounded,
+				Hit:           true,
+			}, true
+		} else {
+			c.Remove(projectID, bestEntry.ID)
+		}
+	}
+
+	return nil, false
+}
+
+// genExecutionPlanJson queries the LLM and extracts the execution plan.
+func (c *VectorCache) genExecutionPlanJson(ctx context.Context, action string, rawActionParams json.RawMessage, serviceDescriptions string, groundingHit *GroundingHit, backPromptContext string) (string, error) {
+	prompt := buildPlannerPrompt(action, rawActionParams, serviceDescriptions, groundingHit, backPromptContext)
+	llmResp, err := c.llmClient.Generate(ctx, prompt)
+	if err != nil {
+		return "", err
+	}
+
+	c.logger.Trace().Str("Raw llm Response", llmResp).Msg("")
+
+	rawPlanJson, cot := cutCoT(llmResp)
+	c.logger.Trace().Str("CoT", cot).Msg("If any")
+
+	planJson, err := extractValidJSONOutput(rawPlanJson)
+	if err != nil {
+		return "", fmt.Errorf("cannot extract JSON from LLM response: %w", err)
+	}
+
+	return planJson, nil
+}
+
+// prepTaskZeroForCache prepares task zero so future cache hits can dynamically work with
+// incoming action parameter values
+func (c *VectorCache) prepTaskZeroForCache(execPlanJson string, actionParams ActionParams) (json.RawMessage, []TaskZeroCacheMapping, error) {
+	task0Input, err := extractTaskZeroInput(execPlanJson)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to extract task0 input: %w", err)
 	}
 
 	var task0InputMap map[string]interface{}
 	if err := json.Unmarshal(task0Input, &task0InputMap); err != nil {
-		return nil, fmt.Errorf("failed to parse task0 input: %w", err)
+		return nil, nil, fmt.Errorf("failed to parse task0 input: %w", err)
 	}
+	c.logger.Trace().Interface("task0InputMap", task0InputMap).Msg("")
 
 	// Extract parameter mappings
-	mappings, err := extractParamMappings(params, task0InputMap)
+	mappings, err := extractParamMappings(actionParams, task0InputMap)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract parameter mappings: %w", err)
+		return nil, nil, fmt.Errorf("failed to extract parameter mappings: %w", err)
 	}
+	c.logger.Trace().Interface("Task0 Param Mapping", mappings).Msg("")
+
+	return task0Input, mappings, nil
+}
+
+func (c *VectorCache) cache(projectID string, planJson string, actionVector *mat.VecDense, servicesHash string, task0Input json.RawMessage, taskZeroCacheMappings []TaskZeroCacheMapping, actionWithFields string, grounded bool) *CacheEntry {
+	pc := c.getProjectCache(projectID)
 
 	// Create new cache entry
 	entry := &CacheEntry{
-		ID:            uuid.New().String(),
-		Response:      &llmResp,
-		ActionVector:  actionEmbedding,
-		ServicesHash:  servicesHash,
-		Task0Input:    task0Input,
-		ParamMappings: mappings,
-		Timestamp:     time.Now(),
-		Action:        action,
+		ID:                     uuid.New().String(),
+		Response:               planJson,
+		ActionVector:           actionVector,
+		ServicesHash:           servicesHash,
+		Task0Input:             task0Input,
+		CacheMappings:          taskZeroCacheMappings,
+		Timestamp:              time.Now(),
+		CachedActionWithFields: actionWithFields,
+		Grounded:               grounded,
 	}
 
 	// Add to project cache
@@ -265,15 +297,18 @@ func (c *VectorCache) getWithRetry(ctx context.Context,
 	pc.entries = append(pc.entries, entry)
 	pc.mu.Unlock()
 
-	return &CacheResult{
-		ID:         entry.ID,
-		Response:   &llmResp,
-		Task0Input: task0Input,
-		Hit:        false,
-	}, nil
+	return entry
 }
 
 func (c *VectorCache) Remove(projectID, id string) bool {
+	c.logger.Debug().
+		Str("projectID", projectID).
+		Str("id", id).
+		Msg("About removed cache entry")
+
+	if len(id) == 0 {
+		return false
+	}
 	c.mu.RLock()
 	pc, exists := c.projectCaches[projectID]
 	c.mu.RUnlock()
@@ -291,7 +326,7 @@ func (c *VectorCache) Remove(projectID, id string) bool {
 			c.logger.Debug().
 				Str("projectID", projectID).
 				Str("id", id).
-				Str("action", entry.Action).
+				Str("actionWithFields", entry.CachedActionWithFields).
 				Msg("Removed cache entry")
 			return true
 		}
@@ -340,43 +375,77 @@ func (c *VectorCache) cleanup() {
 	}
 }
 
-func (c *VectorCache) generateEmbedding(ctx context.Context, text string) (*mat.VecDense, error) {
-	c.logger.Debug().Str("Input", text).Msg("generate embedding for input")
-	resp, err := c.embedder.CreateEmbeddings(ctx, openai.EmbeddingRequest{
-		Model: openai.AdaEmbeddingV2,
-		Input: []string{text},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// Convert to dense vector
-	embedding := mat.NewVecDense(len(resp.Data[0].Embedding), nil)
-	for i, v := range resp.Data[0].Embedding {
-		embedding.SetVec(i, float64(v))
-	}
-
-	return embedding, nil
-}
-
-// extractTask0Input extracts the input parameters from task0 in the calling plan
-func extractTask0Input(content string) (json.RawMessage, error) {
-	var plan ServiceCallingPlan
-	if err := json.Unmarshal([]byte(content), &plan); err != nil {
-		return nil, fmt.Errorf("failed to parse calling plan: %w", err)
-	}
-
-	// Find task0
-	for _, task := range plan.Tasks {
-		if task.ID == "task0" {
-			// Marshal the input map to get the exact JSON structure
-			input, err := json.Marshal(task.Input)
-			if err != nil {
-				return nil, fmt.Errorf("failed to marshal task0 input: %w", err)
-			}
-			return input, nil
+func (p ActionParams) String() string {
+	var builder strings.Builder
+	for i, param := range p {
+		builder.WriteString(param.Field)
+		if i != len(p)-1 {
+			builder.WriteString("::")
 		}
 	}
+	return builder.String()
+}
 
-	return nil, fmt.Errorf("task0 not found in calling plan")
+func (m TaskZeroCacheMappings) ContainsAll(params ActionParams) bool {
+	for _, param := range params {
+		if !m.IncludesActionField(param.Field) {
+			return false
+		}
+	}
+	return true
+}
+
+func (m TaskZeroCacheMappings) IncludesActionField(f string) bool {
+	for _, mapping := range m {
+		if mapping.ActionField == f {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *CacheEntry) MatchesActionParams(actionParams ActionParams) bool {
+	return c.CacheMappings.ContainsAll(actionParams)
+}
+
+// extractTaskZeroInput extracts the input parameters from task0 in the calling plan
+func extractTaskZeroInput(content string) (json.RawMessage, error) {
+	var plan ExecutionPlan
+	if err := json.Unmarshal([]byte(content), &plan); err != nil {
+		return nil, fmt.Errorf("failed to parse execution plan: %w", err)
+	}
+
+	for _, task := range plan.Tasks {
+		if !strings.EqualFold(task.ID, TaskZero) {
+			continue
+		}
+
+		if task.Service != "" {
+			return nil, errors.New("task0 must only contain constant inputs from the user action, not assigned a service")
+		}
+
+		input, err := json.Marshal(task.Input)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal task0 input: %w", err)
+		}
+		return input, nil
+	}
+
+	return nil, fmt.Errorf("task0 not found in execution plan")
+}
+
+func cutCoT(input string) (after string, cot string) {
+	trimmed := strings.TrimSpace(input)
+
+	afterTagStart, tagStart := strings.CutPrefix(trimmed, "<think>")
+	if !tagStart {
+		return input, ""
+	}
+
+	beforeTagEnd, afterTagEnd, tagEnd := strings.Cut(afterTagStart, "</think>")
+	if !tagEnd {
+		return input, ""
+	}
+
+	return afterTagEnd, beforeTagEnd
 }

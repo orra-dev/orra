@@ -8,6 +8,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -149,7 +150,7 @@ func parseError(errStr string) error {
 	if errStr == "" {
 		return nil
 	}
-	return fmt.Errorf(errStr)
+	return errors.New(errStr)
 }
 
 func (wsm *WebSocketManager) SendTask(serviceID string, task *Task) error {

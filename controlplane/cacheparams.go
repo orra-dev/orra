@@ -13,14 +13,14 @@ import (
 )
 
 // extractParamMappings discovers which Task0 input fields were derived from action parameters
-func extractParamMappings(actionParams ActionParams, task0Input map[string]interface{}) ([]ParamMapping, error) {
+func extractParamMappings(actionParams ActionParams, task0Input map[string]interface{}) ([]TaskZeroCacheMapping, error) {
 	// Create value to field lookup from action params
 	valueToField := make(map[string]string)
 	for _, param := range actionParams {
 		valueToField[param.Value] = param.Field
 	}
 
-	var mappings []ParamMapping
+	var mappings []TaskZeroCacheMapping
 
 	// Find Task0 input values that match action param values
 	for task0Field, task0Value := range task0Input {
@@ -31,8 +31,8 @@ func extractParamMappings(actionParams ActionParams, task0Input map[string]inter
 
 		// If we find a matching value in action params
 		if actionField, exists := valueToField[strValue]; exists {
-			mappings = append(mappings, ParamMapping{
-				Task0Field:  task0Field,
+			mappings = append(mappings, TaskZeroCacheMapping{
+				Field:       task0Field,
 				ActionField: actionField,
 				Value:       strValue,
 			})
@@ -41,7 +41,7 @@ func extractParamMappings(actionParams ActionParams, task0Input map[string]inter
 
 	// Sort mappings for consistency
 	sort.Slice(mappings, func(i, j int) bool {
-		return mappings[i].Task0Field < mappings[j].Task0Field
+		return mappings[i].Field < mappings[j].Field
 	})
 
 	return mappings, nil
@@ -51,7 +51,7 @@ func extractParamMappings(actionParams ActionParams, task0Input map[string]inter
 func applyParamMappings(
 	originalTask0Input map[string]interface{},
 	actionParams ActionParams,
-	mappings []ParamMapping,
+	mappings []TaskZeroCacheMapping,
 ) (map[string]interface{}, error) {
 	// Create lookup for new action param values
 	actionParamLookup := make(map[string]string)
@@ -71,18 +71,18 @@ func applyParamMappings(
 		if !exists {
 			return nil, fmt.Errorf("missing required action parameter: %s", mapping.ActionField)
 		}
-		newTask0Input[mapping.Task0Field] = newValue
+		newTask0Input[mapping.Field] = newValue
 	}
 
 	return newTask0Input, nil
 }
 
 // substituteTask0Params creates a new plan with updated Task0 parameters
-func substituteTask0Params(content string, originalInput, newParams json.RawMessage, mappings []ParamMapping) (string, error) {
+func substituteTask0Params(content string, originalInput, newParams json.RawMessage, mappings []TaskZeroCacheMapping) (string, error) {
 	// Parse the calling plan
-	var plan ServiceCallingPlan
+	var plan ExecutionPlan
 	if err := json.Unmarshal([]byte(content), &plan); err != nil {
-		return "", fmt.Errorf("failed to parse calling plan: %w", err)
+		return "", fmt.Errorf("failed to parse calling plan for task0 param substitution: %w", err)
 	}
 
 	// Parse original Task0 input

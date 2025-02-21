@@ -9,10 +9,12 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
+	"os"
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,9 +35,17 @@ func newTestSetup() *TestState {
 }
 
 // Helper to create test project and service
-func (ts *TestState) setupBase() {
+func (ts *TestState) setupBase() func() {
+	logger := zerolog.New(zerolog.NewTestWriter(&testing.T{}))
+	tmpDir, _ := os.MkdirTemp("", "badger-test-*")
+	db, _ := NewBadgerDB(tmpDir, logger)
+
+	dbCleanup := func() {
+		_ = db.Close()
+		_ = os.RemoveAll(tmpDir)
+	}
 	// Create control plane
-	ts.plane = NewControlPlane("test-openai-key")
+	ts.plane = NewControlPlane()
 
 	// Register project
 	ts.plane.projects["p_test"] = &Project{
@@ -63,8 +73,8 @@ func (ts *TestState) setupBase() {
 		},
 		Status:    Processing,
 		Timestamp: ts.baseTime,
-		taskZero:  json.RawMessage(`{"message": "Hello World", "userId": "user123"}`),
-		Plan: &ServiceCallingPlan{
+		TaskZero:  json.RawMessage(`{"message": "Hello World", "userId": "user123"}`),
+		Plan: &ExecutionPlan{
 			Tasks: []*SubTask{
 				{
 					ID:      "task1",
@@ -80,8 +90,9 @@ func (ts *TestState) setupBase() {
 	ts.orchestrationID = o.ID
 
 	// Setup log manager
-	ts.plane.LogManager = NewLogManager(context.Background(), time.Hour, ts.plane)
+	ts.plane.LogManager, _ = NewLogManager(context.Background(), db, time.Hour, ts.plane)
 	ts.plane.LogManager.PrepLogForOrchestration(o.ProjectID, o.ID, o.Plan)
+	ts.plane.orchestrationStorage = db
 
 	// Initialize orchestration state
 	ts.plane.LogManager.orchestrations[o.ID] = &OrchestrationState{
@@ -94,6 +105,8 @@ func (ts *TestState) setupBase() {
 	}
 
 	ts.plane.orchestrationStore[o.ID] = o
+
+	return dbCleanup
 }
 
 // Helper to add a task state transition
@@ -101,7 +114,7 @@ func (ts *TestState) addTaskState(status Status, errMsg string, afterMinutes int
 	timestamp := ts.baseTime.Add(time.Duration(afterMinutes) * time.Minute)
 	err := error(nil)
 	if errMsg != "" {
-		err = fmt.Errorf(errMsg)
+		err = errors.New(errMsg)
 	}
 
 	_ = ts.plane.LogManager.AppendTaskStatusEvent(ts.orchestrationID, "task1", "s_echo", status, err, timestamp, ts.attempts)
@@ -121,7 +134,8 @@ func (ts *TestState) addTaskOutput(output string) {
 func TestInspectOrchestration(t *testing.T) {
 	t.Run("successful inspection with task0 resolution", func(t *testing.T) {
 		ts := newTestSetup()
-		ts.setupBase()
+		cleanDB := ts.setupBase()
+		defer cleanDB()
 
 		// Add task transitions
 		ts.addTaskState(Processing, "", 1)
@@ -164,7 +178,8 @@ func TestInspectOrchestration(t *testing.T) {
 
 	t.Run("inspect orchestration with paused task", func(t *testing.T) {
 		ts := newTestSetup()
-		ts.setupBase()
+		cleanDB := ts.setupBase()
+		defer cleanDB()
 
 		// Add task transitions including pause
 		ts.addTaskState(Processing, "", 1)
@@ -190,7 +205,8 @@ func TestInspectOrchestration(t *testing.T) {
 
 	t.Run("inspect failed orchestration", func(t *testing.T) {
 		ts := newTestSetup()
-		ts.setupBase()
+		cleanDB := ts.setupBase()
+		defer cleanDB()
 
 		// Add task transitions ending in failure
 		ts.addTaskState(Processing, "", 1)
@@ -210,7 +226,8 @@ func TestInspectOrchestration(t *testing.T) {
 
 	t.Run("inspect non-existent orchestration", func(t *testing.T) {
 		ts := newTestSetup()
-		ts.setupBase()
+		cleanDB := ts.setupBase()
+		defer cleanDB()
 
 		_, err := ts.plane.InspectOrchestration("o_nonexistent")
 		require.Error(t, err)
@@ -219,7 +236,8 @@ func TestInspectOrchestration(t *testing.T) {
 
 	t.Run("inspect orchestration with missing task0 reference", func(t *testing.T) {
 		ts := newTestSetup()
-		ts.setupBase()
+		cleanDB := ts.setupBase()
+		defer cleanDB()
 
 		// Add invalid task0 reference
 		ts.plane.orchestrationStore[ts.orchestrationID].Plan.Tasks[0].Input["invalid"] = "$task0.nonexistent"
@@ -232,14 +250,15 @@ func TestInspectOrchestration(t *testing.T) {
 
 func TestInspectOrchestration_NotActionable(t *testing.T) {
 	ts := newTestSetup()
-	ts.setupBase()
+	cleanDB := ts.setupBase()
+	defer cleanDB()
 
 	// Update the test orchestration to be NotActionable
 	orchestration := ts.plane.orchestrationStore[ts.orchestrationID]
 	orchestration.Status = NotActionable
 	orchestration.Error = json.RawMessage(`"Cannot process order: No payment service available"`)
 	// Add a "final" task that explains why it's not actionable
-	orchestration.Plan = &ServiceCallingPlan{
+	orchestration.Plan = &ExecutionPlan{
 		Tasks: []*SubTask{
 			{
 				ID: "final",
@@ -264,13 +283,14 @@ func TestInspectOrchestration_NotActionable(t *testing.T) {
 
 func TestInspectOrchestration_NotActionableWithoutTasks(t *testing.T) {
 	ts := newTestSetup()
-	ts.setupBase()
+	cleanDB := ts.setupBase()
+	defer cleanDB()
 
 	// Create NotActionable orchestration without any tasks
 	orchestration := ts.plane.orchestrationStore[ts.orchestrationID]
 	orchestration.Status = NotActionable
 	orchestration.Error = json.RawMessage(`"Invalid action: unsupported operation"`)
-	orchestration.Plan = &ServiceCallingPlan{Tasks: []*SubTask{}}
+	orchestration.Plan = &ExecutionPlan{Tasks: []*SubTask{}}
 
 	resp, err := ts.plane.InspectOrchestration(ts.orchestrationID)
 	require.NoError(t, err)

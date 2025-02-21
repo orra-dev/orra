@@ -1,26 +1,21 @@
 # 🪡Orra (✨Alpha✨)
 
 Move beyond simple Crews and Agents. Build production-ready multi-agent applications that handle complex real-world
-interactions. Orra orchestrates your services and agents with built-in reliability and intelligent reasoning — across
+interactions. Orra orchestrates your tools as services with your agents providing reliability and intelligent reasoning — across
 any language, agent framework or deployment platform.
 
 Prototype rapidly today, scale to production tomorrow. No complex infrastructure required.
 
+![](images/orra-diagram.png)
+
+### More coming soon
+
+* Agent replay and multi-LLM consensus planning
+* Continuous adjustment of Agent workflows during runtime
+* Additional language SDKs - Ruby, DotNet and Go very soon!
+  ... and many more planned
+
 ## Releases
-
-### Manta Ray 🐠🌊️ - January 2025 🎉
-
-Brings in a robust Compensation Guardrails system with JS and Python SDK updates to match.
-
-#### Other Features
-
-- Service/Agent stability improvements.
-- Major fixes across control plane and SDKs.
-
-#### Manta Ray Live Demo One 📹🍿
-
-- Watch the [live demo video recording](https://youtube.com/live/q38vqU2x4gI) to learn more and see [Compensations](docs/compensations.md) in action.
-- Follow along the demo with [accompanying slides](https://tinyurl.com/orra-manta-ray-demo-1).
 
 [[View all releases](https://github.com/orra-dev/orra/releases) →]
 
@@ -77,12 +72,50 @@ infrastructure headaches - just predictable, intelligent routing that gets work 
 
 ### Prerequisites
 
-- [Docker](https://docs.docker.com/desktop/) and [Docker Compose](https://docs.docker.com/compose/install/) - For
-  running the control plane
-- An [OpenAI API key](https://platform.openai.com/docs/quickstart) - For LLM-powered orchestration
+- [Docker](https://docs.docker.com/desktop/) and [Docker Compose](https://docs.docker.com/compose/install/) - For running the control plane
+- Set up Reasoning and Embedding Models to power control plane orchestration and execution plan caching/validation.
 
-> **Note**: The control plane currently runs in-memory. If restarting, follow
-> our [Reset Guide](docs/reset-control-plane.md).
+#### Setup Reasoning Models
+
+Select between Groq's [deepseek-r1-distill-llama-70b](https://groq.com/groqcloud-makes-deepseek-r1-distill-llama-70b-available/) model
+
+Or OpenAI's [o1-mini / o3-mini](https://platform.openai.com/docs/guides/reasoning) models.
+
+Update the .env file with one of these,
+
+**Groq**
+
+```shell
+# GROQ Reasoning
+REASONING_PROVIDER=groq
+REASONING_MODEL=deepseek-r1-distill-llama-70b
+REASONING_API_KEY=xxxx
+```
+
+**01-mini**
+
+```shell
+# GROQ Reasoning
+REASONING_PROVIDER=openai
+REASONING_MODEL=o1-mini
+REASONING_API_KEY=xxxx
+```
+
+**03-mini**
+```shell
+# GROQ Reasoning
+REASONING_PROVIDER=openai
+REASONING_MODEL=o3-mini
+REASONING_API_KEY=xxxx
+```
+
+#### Setup Embedding models
+
+Update the .env file with,
+```shell
+# Execution Plan Cache and validation OPENAI API KEY
+PLAN_CACHE_OPENAI_API_KEY=xxxx
+```
 
 ### 1. Install Orra CLI
 
@@ -90,11 +123,11 @@ Download the latest CLI binary for your platform from our releases page.
 
 ```shell
 # macOS
-curl -L https://github.com/ezodude/orra/releases/download/v0.2.0-manta-ray/orra-macos -o /usr/local/bin/orra
+curl -L https://github.com/ezodude/orra/releases/download/v0.2.1/orra-macos -o /usr/local/bin/orra
 chmod +x /usr/local/bin/orra
 
 # Linux
-curl -L https://github.com/ezodude/orra/releases/download/v0.2.0-manta-ray/orra-linux -o /usr/local/bin/orra
+curl -L https://github.com/ezodude/orra/releases/download/v0.2.1/orra-linux -o /usr/local/bin/orra
 chmod +x /usr/local/bin/orra
 
 # Verify installation
@@ -110,9 +143,6 @@ Clone the repository and start the control plane:
 ```shell
 git clone https://github.com/ezodude/orra.git
 cd orra/controlplane
-
-# Set your OpenAI API key
-echo "OPENAI_API_KEY=your-key-here" > .env
 
 # Start the control plane
 docker compose up --build
@@ -302,35 +332,13 @@ orra verify run "Estimate delivery for customer order" \
 
 - [Rapid Multi-Agent App Development with Orra](docs/rapid-agent-app-devlopment.md)
 - [Orchestrating Actions with Orra](docs/actions.md)
-- [Advanced Topics & Internals](docs/advanced.md)
+- [Domain Grounding Execution](docs/grounding.md) 
+- [Core Topics & Internals](docs/core)
 
-## Alpha Features & Limitations
+## Self Hosting
 
-### Available Now
-
-* Robust Compensation guardrails for revertible services and agents 🆕🎉
-* Prototype your multi-agent app in a single file then split and deploy as containers 🆕🎉
-* LLM-powered task decomposition and routing
-* In-memory execution tracking with exactly-once guarantees
-* Smart service health handling with execution pausing and heartbeat monitoring
-* Short-term retries with exponential backoff (up to 5 attempts)
-* Intuitive JavaScript and Python SDKs
-* CLI for Orra-powered projects management
-* Automatic parallel execution optimization
-* Built-in service discovery
-
-### Current Limitations
-
-1. **Storage**: All state is in-memory and will be lost on control plane restart
+1. **Storage**: We use BadgerDB to persist all state. 
 2. **Deployment**: Single-instance only, designed for development and self-hosted deployments
-
-### Coming Soon
-
-* Ahead of time execution plan domain grounding with pre-execution checks
-* Agent replay and multi-LLM consensus planning
-* Continuous adjustment of Agent workflows during runtime
-* Additional language SDKs - Ruby, DotNet and Go very soon!
-  ... and many more planned
 
 ## Join Our Alpha Testing Community
 

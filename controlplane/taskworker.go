@@ -10,12 +10,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
-	"github.com/lithammer/shortuuid/v4"
+	back "github.com/cenkalti/backoff/v4"
+	short "github.com/lithammer/shortuuid/v4"
 )
 
 var (
@@ -38,7 +39,7 @@ func NewTaskWorker(
 	healthCheckGracePeriod time.Duration,
 	logManager *LogManager,
 ) LogWorker {
-	expBackoff := backoff.NewExponentialBackOff()
+	expBackoff := back.NewExponentialBackOff()
 
 	// Configure backoff parameters
 	expBackoff.InitialInterval = 2 * time.Second // Start with 2 seconds delay
@@ -107,7 +108,6 @@ func (w *TaskWorker) PollLog(ctx context.Context, _ string, logStream *Log, entr
 	for {
 		select {
 		case <-ticker.C:
-			var processableEntries []LogEntry
 
 			entries := logStream.ReadFrom(w.logState.LastOffset)
 			for _, entry := range entries {
@@ -115,18 +115,14 @@ func (w *TaskWorker) PollLog(ctx context.Context, _ string, logStream *Log, entr
 					continue
 				}
 
-				processableEntries = append(processableEntries, entry)
 				select {
 				case entriesChan <- entry:
-					w.logState.LastOffset = entry.Offset() + 1
+					w.logState.LastOffset = entry.GetOffset() + 1
 				case <-ctx.Done():
 					return
 				}
 			}
 
-			//w.LogManager.Logger.Debug().
-			//	Interface("entries", processableEntries).
-			//	Msgf("polling entries for task %s - orchestration %s", w.TaskID, orchestrationID)
 		case <-ctx.Done():
 			return
 		}
@@ -134,14 +130,14 @@ func (w *TaskWorker) PollLog(ctx context.Context, _ string, logStream *Log, entr
 }
 
 func (w *TaskWorker) shouldProcess(entry LogEntry) bool {
-	_, isDependency := w.Dependencies[entry.ID()]
-	processed := w.logState.Processed[entry.ID()]
-	return entry.Type() == "task_output" && isDependency && !processed
+	_, isDependency := w.Dependencies[entry.GetID()]
+	processed := w.logState.Processed[entry.GetID()]
+	return entry.GetEntryType() == "task_output" && isDependency && !processed
 }
 
 func (w *TaskWorker) processEntry(ctx context.Context, entry LogEntry, orchestrationID string) error {
 	// Store the entry's output in our dependency state
-	w.logState.DependencyState[entry.ID()] = entry.Value()
+	w.logState.DependencyState[entry.GetID()] = entry.GetValue()
 
 	if !taskDependenciesMet(w.logState.DependencyState, w.Dependencies) {
 		return nil
@@ -179,14 +175,14 @@ func (w *TaskWorker) processEntry(ctx context.Context, entry LogEntry, orchestra
 	}
 
 	// Mark this entry as processed
-	w.logState.Processed[entry.ID()] = true
+	w.logState.Processed[entry.GetID()] = true
 
 	completedTs := time.Now().UTC()
 	if err = w.LogManager.AppendTaskStatusEvent(orchestrationID, w.TaskID, w.Service.ID, Completed, nil, completedTs, w.consecutiveErrs); err != nil {
 		return err
 	}
 
-	if err := w.LogManager.MarkTaskCompleted(orchestrationID, entry.ID(), completedTs); err != nil {
+	if err := w.LogManager.MarkTaskCompleted(orchestrationID, entry.GetID(), completedTs); err != nil {
 		w.LogManager.Logger.Error().Err(err).Msgf("Cannot mark task %s completed for orchestration %s", w.TaskID, orchestrationID)
 		return w.LogManager.AppendTaskFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error(), w.consecutiveErrs, false)
 	}
@@ -222,7 +218,7 @@ func (w *TaskWorker) executeTaskWithRetry(ctx context.Context, orchestrationID s
 			w.consecutiveErrs++
 			if w.stopRetryingTask() {
 				logger.Trace().Err(err).Msg("Stop retrying task - too many consecutive failures")
-				return backoff.Permanent(fmt.Errorf("too many consecutive failures: %w", err))
+				return back.Permanent(fmt.Errorf("too many consecutive failures: %w", err))
 			}
 
 			logger.Trace().Err(err).Msg("Retrying failed task")
@@ -247,11 +243,11 @@ func (w *TaskWorker) executeTaskWithRetry(ctx context.Context, orchestrationID s
 		return nil
 	}
 
-	err := backoff.RetryNotify(operation, w.backOff, func(err error, duration time.Duration) {
+	err := back.RetryNotify(operation, w.backOff, func(err error, duration time.Duration) {
 		if retryErr, ok := err.(RetryableError); ok {
 			w.LogManager.Logger.Info().
 				Err(retryErr.Err).
-				Str("Operation", "backoff.RetryNotify: executeTaskWithRetry").
+				Str("Operation", "back.RetryNotify: executeTaskWithRetry").
 				Str("OrchestrationID", orchestrationID).
 				Str("TaskID", w.TaskID).
 				Str("Service", w.Service.Name).
@@ -366,18 +362,17 @@ func (w *TaskWorker) checkServiceHealth(orchestrationID string) error {
 	if time.Since(w.pauseStart) >= w.HealthCheckGracePeriod {
 		logger.Trace().Msg("EXCEEDED MaxServiceDowntime - TERMINATE TASK")
 
-		return backoff.Permanent(fmt.Errorf("service %s remained unhealthy while exceeding maximum duration of %v",
+		return back.Permanent(fmt.Errorf("service %s remained unhealthy while exceeding maximum duration of %v",
 			w.Service.ID, w.HealthCheckGracePeriod))
 	}
 
 	logger.Trace().Msg("KEEP PAUSING TASK")
-	//w.backOff.Reset() --> possibly useful, will check after the base algo is working again.
 	return RetryableError{Err: fmt.Errorf("service %s is not healthy - pause %s", w.Service.ID, w.TaskID)}
 }
 
 func (w *TaskWorker) tryExecute(ctx context.Context, orchestrationID string) (json.RawMessage, error) {
 	idempotencyKey := w.generateIdempotencyKey(orchestrationID)
-	executionID := fmt.Sprintf("e_%s", shortuuid.New())
+	executionID := fmt.Sprintf("e_%s", short.New())
 
 	// Initialize or get existing execution
 	result, isNewExecution, err := w.Service.IdempotencyStore.InitializeOrGetExecution(idempotencyKey, executionID)
@@ -538,7 +533,7 @@ func (w *TaskWorker) waitForResult(ctx context.Context, key IdempotencyKey, exec
 				logger.Trace().Str("State", "ExecutionFailed").Msg("Failed but no failure entry- DO NOTHING")
 			case result.State == ExecutionPaused:
 				logger.Trace().Str("State", "ExecutionPaused").Msg("PAUSED - Trigger Pause")
-				return nil, RetryableError{Err: fmt.Errorf(PauseExecutionCode)}
+				return nil, RetryableError{Err: errors.New(PauseExecutionCode)}
 			case result.State == ExecutionInProgress:
 				logger.Trace().Str("State", "ExecutionInProgress").Msg("DO NOTHING")
 			}
@@ -594,10 +589,10 @@ func mergeValueMapsToJson(src map[string]json.RawMessage, dependencies TaskDepen
 		}
 
 		for _, k := range dependencies[depID] {
-			if _, ok := temp[k]; !ok {
+			if _, ok := temp[k.DependencyKey]; !ok {
 				continue
 			}
-			out[k] = temp[k]
+			out[k.TaskKey] = temp[k.DependencyKey]
 		}
 	}
 	return json.Marshal(out)
