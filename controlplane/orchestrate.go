@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -44,6 +45,13 @@ func (p *ControlPlane) prepForError(orchestration *Orchestration, err error, sta
 	orchestration.Timestamp = time.Now().UTC()
 	marshaledErr, _ := json.Marshal(err.Error())
 	orchestration.Error = marshaledErr
+
+	if storeErr := p.orchestrationStorage.StoreOrchestration(orchestration); storeErr != nil {
+		p.Logger.Error().
+			Err(storeErr).
+			Str("OrchestrationID", orchestration.ID).
+			Msg("Failed to persist failed orchestration state")
+	}
 }
 
 func (p *ControlPlane) InjectGroundingMatchForAnyAppliedSpecs(ctx context.Context, orchestration *Orchestration, specs []GroundingSpec) error {
@@ -56,7 +64,7 @@ func (p *ControlPlane) InjectGroundingMatchForAnyAppliedSpecs(ctx context.Contex
 		return fmt.Errorf("cannot match grounding specs against orchestration action: %w", err)
 	}
 
-	orchestration.groundingHit = hit
+	orchestration.GroundingHit = hit
 
 	p.Logger.Trace().
 		Str("ProjectID", orchestration.ProjectID).
@@ -79,6 +87,15 @@ func (p *ControlPlane) PrepareOrchestration(ctx context.Context, projectID strin
 	p.orchestrationStoreMu.Lock()
 	p.orchestrationStore[orchestration.ID] = orchestration
 	p.orchestrationStoreMu.Unlock()
+
+	// Persist to storage
+	if err := p.orchestrationStorage.StoreOrchestration(orchestration); err != nil {
+		p.Logger.Error().
+			Err(err).
+			Str("OrchestrationID", orchestration.ID).
+			Msg("Failed to persist orchestration")
+		return fmt.Errorf("failed to persist orchestration: %w", err)
+	}
 
 	// Non-retryable validations
 	if err := p.validateWebhook(orchestration.ProjectID, orchestration.Webhook); err != nil {
@@ -171,6 +188,10 @@ func (p *ControlPlane) PrepareOrchestration(ctx context.Context, projectID strin
 					consecutiveRetries++
 					return prepErr
 				}
+				p.Logger.Error().
+					Err(err).
+					Str("OrchestrationID", orchestration.ID).
+					Msg("Failed to persist orchestration")
 				return back.Permanent(fmt.Errorf("exceeded maximum retries (%d): %w", maxPreparationRetries, prepErr.Err))
 
 			default:
@@ -265,27 +286,35 @@ func (p *ControlPlane) attemptRetryablePreparation(ctx context.Context, orchestr
 
 	// Store the final plan
 	orchestration.Plan = onlyServicesCallingPlan
-	orchestration.taskZero = taskZeroInput
+	orchestration.TaskZero = taskZeroInput
 	return nil
 }
 
-func (p *ControlPlane) ExecuteOrchestration(orchestration *Orchestration) {
-	orchestration.Status = Processing
-	orchestration.Timestamp = time.Now().UTC()
-
+func (p *ControlPlane) ExecuteOrchestration(ctx context.Context, orchestration *Orchestration) {
 	p.Logger.Debug().Msgf("About to create Log for orchestration %s", orchestration.ID)
 	log := p.LogManager.PrepLogForOrchestration(orchestration.ProjectID, orchestration.ID, orchestration.Plan)
 
+	orchestration.Status = Processing
+	orchestration.Timestamp = time.Now().UTC()
+
+	if err := p.orchestrationStorage.StoreOrchestration(orchestration); err != nil {
+		p.Logger.Error().
+			Err(err).
+			Str("OrchestrationID", orchestration.ID).
+			Msg("Failed to persist orchestration")
+	}
+
 	p.Logger.Debug().Msgf("About to create and start workers for orchestration %s", orchestration.ID)
 	p.createAndStartWorkers(
+		ctx,
 		orchestration.ID,
 		orchestration.Plan,
 		orchestration.GetTimeout(),
 		orchestration.GetHealthCheckGracePeriod(),
 	)
 
-	initialEntry := NewLogEntry("task_output", TaskZero, orchestration.taskZero, "control-panel", 0)
-	log.Append(initialEntry)
+	initialEntry := NewLogEntry("task_output", TaskZero, orchestration.TaskZero, "control-panel", 0)
+	log.Append(orchestration.ID, initialEntry, true)
 	p.Logger.
 		Trace().
 		Str("OrchestrationID", orchestration.ID).
@@ -313,6 +342,15 @@ func (p *ControlPlane) FinalizeOrchestration(
 	orchestration.Error = reason
 	orchestration.Results = results
 
+	// Persist updated state
+	if err := p.orchestrationStorage.StoreOrchestration(orchestration); err != nil {
+		p.Logger.Error().
+			Err(err).
+			Str("OrchestrationID", orchestration.ID).
+			Msg("Failed to persist orchestration state")
+		return fmt.Errorf("failed to persist orchestration state: %w", err)
+	}
+
 	p.Logger.Debug().
 		Str("OrchestrationID", orchestration.ID).
 		Msgf("About to FinalizeOrchestration with status: %s", orchestration.Status.String())
@@ -326,6 +364,80 @@ func (p *ControlPlane) FinalizeOrchestration(
 	p.cleanupLogWorkers(orchestration.ID)
 
 	return nil
+}
+
+func (p *ControlPlane) CancelOrchestration(orchestrationID string, reason json.RawMessage) error {
+	p.orchestrationStoreMu.Lock()
+	defer p.orchestrationStoreMu.Unlock()
+
+	orchestration, exists := p.orchestrationStore[orchestrationID]
+	if !exists {
+		return fmt.Errorf("control plane cannot cancel missing orchestration %s", orchestrationID)
+	}
+
+	orchestration.Status = Cancelled
+	orchestration.Timestamp = time.Now().UTC()
+	orchestration.Error = reason
+
+	// Persist updated state
+	if err := p.orchestrationStorage.StoreOrchestration(orchestration); err != nil {
+		return fmt.Errorf("failed to persist orchestration state: %w", err)
+	}
+
+	p.Logger.Debug().
+		Str("OrchestrationID", orchestration.ID).
+		Msgf("About to Cancel Orchestration with status: %s", orchestration.Status.String())
+
+	return nil
+}
+
+func (p *ControlPlane) CancelAnyActiveOrchestrations() error {
+	candidates := p.getAllActiveOrchestrations()
+	if len(candidates) == 0 {
+		return nil
+	}
+
+	var errs []error
+	reason, _ := json.Marshal(ControlPlaneShuttingDown)
+	for _, o := range candidates {
+		p.LogManager.MarkOrchestration(o.ID, Cancelled, []byte(ControlPlaneShuttingDown))
+
+		if err := p.CancelOrchestration(o.ID, reason); err != nil {
+			errs = append(errs, err)
+			p.Logger.Trace().Str("OrchestrationID", o.ID).Str("Status", o.Status.String()).Msg("failed to cancel")
+			continue
+		}
+
+		p.Logger.Trace().Str("OrchestrationID", o.ID).Str("Status", o.Status.String()).Msg("finalised and cancelled")
+	}
+
+	if len(errs) > 0 {
+		if len(errs) == len(candidates) {
+			return fmt.Errorf("all orchestrations failed to cancel: %w", errors.Join(errs...))
+		}
+		return fmt.Errorf("some orchestrations failed to cancel: %w", errors.Join(errs...))
+	}
+	return nil
+}
+
+func (p *ControlPlane) getAllActiveOrchestrations() []*Orchestration {
+	p.orchestrationStoreMu.RLock()
+	defer p.orchestrationStoreMu.RUnlock()
+
+	var result []*Orchestration
+	for _, o := range p.orchestrationStore {
+		if o.Status == Processing {
+			result = append(result, o)
+		}
+	}
+
+	// Sort by timestamp (newest first)
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Timestamp.After(result[j].Timestamp)
+	})
+
+	p.Logger.Trace().Interface("ActiveOrchestrations", result).Msg("")
+	return result
 }
 
 func (p *ControlPlane) serviceDescriptions(services []*ServiceInfo) (string, error) {
@@ -368,7 +480,7 @@ func (p *ControlPlane) decomposeAction(ctx context.Context, orchestration *Orche
 		action,
 		actionParams,
 		serviceDescriptions,
-		orchestration.groundingHit,
+		orchestration.GroundingHit,
 		retryCauseIfAny,
 	)
 	if err != nil {
@@ -385,7 +497,7 @@ func (p *ControlPlane) decomposeAction(ctx context.Context, orchestration *Orche
 	}
 
 	result.ProjectID = orchestration.ProjectID
-	result.GroundingHit = orchestration.groundingHit
+	result.GroundingHit = orchestration.GroundingHit
 
 	return result, cacheResult.ID, cacheResult.Hit, nil
 }
@@ -536,12 +648,7 @@ func (p *ControlPlane) enhanceWithServiceDetails(services []*ServiceInfo, subTas
 	return nil
 }
 
-func (p *ControlPlane) createAndStartWorkers(
-	orchestrationID string,
-	plan *ExecutionPlan,
-	taskTimeout,
-	healthCheckGracePeriod time.Duration,
-) {
+func (p *ControlPlane) createAndStartWorkers(ctx context.Context, orchestrationID string, plan *ExecutionPlan, taskTimeout, healthCheckGracePeriod time.Duration) {
 	p.workerMu.Lock()
 	defer p.workerMu.Unlock()
 
@@ -578,7 +685,7 @@ func (p *ControlPlane) createAndStartWorkers(
 			healthCheckGracePeriod,
 			p.LogManager,
 		)
-		ctx, cancel := context.WithCancel(context.Background())
+		taskCtx, cancel := context.WithCancel(ctx)
 		p.logWorkers[orchestrationID][task.ID] = cancel
 		p.Logger.Debug().
 			Fields(struct {
@@ -590,7 +697,7 @@ func (p *ControlPlane) createAndStartWorkers(
 			}).
 			Msg("Starting worker for task")
 
-		go worker.Start(ctx, orchestrationID)
+		go worker.Start(taskCtx, orchestrationID)
 	}
 
 	if len(resultAggregatorDeps) == 0 {
@@ -612,15 +719,15 @@ func (p *ControlPlane) createAndStartWorkers(
 		Msg("Result Aggregator extracted dependencies")
 
 	aggregator := NewResultAggregator(resultAggregatorDeps, p.LogManager)
-	ctx, cancel := context.WithCancel(context.Background())
+	aggCtx, cancel := context.WithCancel(ctx)
 	p.logWorkers[orchestrationID][ResultAggregatorID] = cancel
 
 	fTracker := NewFailureTracker(p.LogManager)
-	fCtx, fCancel := context.WithCancel(context.Background())
+	fCtx, fCancel := context.WithCancel(ctx)
 	p.logWorkers[orchestrationID][FailureTrackerID] = fCancel
 
 	p.Logger.Debug().Str("orchestrationID", orchestrationID).Msg("Starting result aggregator for orchestration")
-	go aggregator.Start(ctx, orchestrationID)
+	go aggregator.Start(aggCtx, orchestrationID)
 
 	p.Logger.Debug().Str("orchestrationID", orchestrationID).Msg("Starting failure tracker for orchestration")
 	go fTracker.Start(fCtx, orchestrationID)

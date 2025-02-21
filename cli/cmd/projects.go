@@ -56,7 +56,7 @@ func newProjectCreateCmd(opts *CliOpts) *cobra.Command {
 			ctx, cancel := context.WithTimeout(cmd.Context(), client.GetTimeout())
 			defer cancel()
 
-			project, err := client.CreateProject(ctx)
+			project, err := client.CreateProject(ctx, projectName)
 			if err != nil {
 				return fmt.Errorf("failed to create project - %w", err)
 			}

@@ -13,10 +13,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type fakePddlValidator struct{}
@@ -27,35 +30,51 @@ func (f *fakePddlValidator) Validate(_ context.Context, _, _, _ string) error {
 func (f *fakePddlValidator) HealthCheck(_ context.Context) error { return nil }
 
 // setupTestApp creates a new App instance with a test project for testing
-func setupTestApp(t *testing.T) (*App, *Project) {
+func setupTestApp(t *testing.T) (*App, *Project, func()) {
 	t.Helper()
+
+	logger := zerolog.New(zerolog.NewTestWriter(t))
+	tmpDir, err := os.MkdirTemp("", "badger-test-*")
+	require.NoError(t, err)
+
+	db, err := NewBadgerDB(tmpDir, logger)
+	require.NoError(t, err)
+
+	dbCleanup := func() {
+		err := db.Close()
+		assert.NoError(t, err)
+		err = os.RemoveAll(tmpDir)
+		assert.NoError(t, err)
+	}
+
+	plane := NewControlPlane()
+	plane.Initialise(context.Background(), db, db, db, db, nil, nil, nil, &fakePddlValidator{}, nil, logger)
 
 	app := &App{
 		Router: mux.NewRouter(),
-		Plane:  NewControlPlane(),
-		Logger: zerolog.New(zerolog.NewTestWriter(t)),
+		Plane:  plane,
+		Logger: logger,
 	}
-
-	app.Plane.Initialise(context.Background(), nil, nil, nil, &fakePddlValidator{}, nil, app.Logger)
 
 	app.configureRoutes()
 
 	// Create a test project
 	project := &Project{
-		ID:     app.Plane.GenerateProjectKey(),
-		APIKey: app.Plane.GenerateAPIKey(),
+		ID:     "project-id",
+		APIKey: "project-api-key",
 	}
 	app.Plane.projects[project.ID] = project
 
-	return app, project
+	return app, project, dbCleanup
 }
 
 // createTestGroundingSpec returns a valid domain grounding spec for testing
-func createTestGroundingSpec() *GroundingSpec {
+func createTestGroundingSpec(projectID string) *GroundingSpec {
 	return &GroundingSpec{
-		Name:    "customer-support-examples",
-		Domain:  "e-commerce-customer-support",
-		Version: "1.0",
+		ProjectID: projectID,
+		Name:      "customer-support-examples",
+		Domain:    "e-commerce-customer-support",
+		Version:   "1.0",
 		UseCases: []GroundingUseCase{
 			{
 				Action: "Handle customer inquiry about {orderId}",
@@ -77,8 +96,10 @@ func createTestGroundingSpec() *GroundingSpec {
 }
 
 func TestGroundingAPI(t *testing.T) {
-	app, project := setupTestApp(t)
-	expected := createTestGroundingSpec()
+	app, project, cleanup := setupTestApp(t)
+	defer cleanup()
+
+	expected := createTestGroundingSpec(project.ID)
 
 	t.Run("Add Domain Grounding Spec Success", func(t *testing.T) {
 		body, err := json.Marshal(expected)
@@ -174,8 +195,10 @@ func TestGroundingAPI(t *testing.T) {
 }
 
 func TestGroundingAPIAuth(t *testing.T) {
-	app, project := setupTestApp(t)
-	example := createTestGroundingSpec()
+	app, project, cleanup := setupTestApp(t)
+	defer cleanup()
+
+	example := createTestGroundingSpec(project.ID)
 
 	tests := []struct {
 		name       string
@@ -196,7 +219,7 @@ func TestGroundingAPIAuth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := app.Plane.ApplyGroundingSpec(project.ID, example); err != nil {
+			if err := app.Plane.ApplyGroundingSpec(context.Background(), example); err != nil {
 				t.Fatalf("Failed to add example: %v", err)
 			}
 			req := httptest.NewRequest(http.MethodGet, "/groundings", nil)
@@ -219,7 +242,8 @@ func TestGroundingAPIAuth(t *testing.T) {
 }
 
 func TestGroundingValidationViaApi(t *testing.T) {
-	app, project := setupTestApp(t)
+	app, project, cleanup := setupTestApp(t)
+	defer cleanup()
 
 	tests := []struct {
 		name       string

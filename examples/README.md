@@ -25,7 +25,6 @@ Having deployed agent architectures in production, here's what to watch for:
 - Start small (Echo example) before tackling complex workflows
 - Always implement proper error handling and graceful shutdowns
 - Monitor your service health and orchestration status using `orra inspect`
-- Use the [Reset Guide](../docs/reset-control-plane.md) when restarting the control plane in development
 - Keep your Mistral/OpenAI API keys secure and never commit them
 
 ## Quick Links

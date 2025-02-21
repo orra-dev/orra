@@ -120,5 +120,4 @@ That's it! Orra provides:
 ## Learn More
 
 - [Orra Documentation](../../docs)
-- [Reset Guide](../../docs/reset-control-plane.md) (if restarting)
 - [CLI Documentation](../../docs/cli.md)
