@@ -144,9 +144,6 @@ Clone the repository and start the control plane:
 git clone https://github.com/ezodude/orra.git
 cd orra/controlplane
 
-# Set your OpenAI API key
-echo "OPENAI_API_KEY=your-key-here" > .env
-
 # Start the control plane
 docker compose up --build
 ```
