@@ -355,6 +355,16 @@ func (p *ControlPlane) GetGroundingSpecs(projectID string) []GroundingSpec {
 
 // RemoveGroundingSpecByName removes a specific domain grounding from a project by its name
 func (p *ControlPlane) RemoveGroundingSpecByName(projectID string, name string) error {
+	// Remove from persistent storage first
+	if err := p.groundingStorage.RemoveGrounding(projectID, name); err != nil {
+		p.Logger.Error().
+			Err(err).
+			Str("projectID", projectID).
+			Str("name", name).
+			Msg("Failed to remove grounding from storage")
+		return fmt.Errorf("failed to remove grounding from storage: %w", err)
+	}
+
 	p.groundingsMu.Lock()
 	defer p.groundingsMu.Unlock()
 
@@ -384,6 +394,16 @@ func (p *ControlPlane) RemoveGroundingSpecByName(projectID string, name string) 
 
 // RemoveProjectGrounding removes all domain grounding for a project
 func (p *ControlPlane) RemoveProjectGrounding(projectID string) error {
+	// Remove from persistent storage first
+	if err := p.groundingStorage.RemoveProjectGroundings(projectID); err != nil {
+		p.Logger.Error().
+			Err(err).
+			Str("projectID", projectID).
+			Msg("Failed to remove project groundings from storage")
+
+		return fmt.Errorf("failed to remove project groundings from storage: %w", err)
+	}
+
 	p.groundingsMu.Lock()
 	defer p.groundingsMu.Unlock()
 

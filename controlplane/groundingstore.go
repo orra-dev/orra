@@ -109,6 +109,47 @@ func (b *BadgerDB) ListProjectGroundings(projectID string) ([]*GroundingSpec, er
 	return groundings, nil
 }
 
+func (b *BadgerDB) RemoveGrounding(projectID, name string) error {
+	return b.db.Update(func(txn *badger.Txn) error {
+
+		groundingKey := fmt.Sprintf("grounding:info:%s:%s", projectID, name)
+		if err := txn.Delete([]byte(groundingKey)); err != nil {
+			return fmt.Errorf("failed to delete grounding %s: %w", name, err)
+		}
+
+		projectGroundingKey := fmt.Sprintf("grounding:project:%s:%s", projectID, name)
+		if err := txn.Delete([]byte(projectGroundingKey)); err != nil {
+			return fmt.Errorf("failed to delete project grounding index %s: %w", name, err)
+		}
+
+		return nil
+	})
+}
+
+func (b *BadgerDB) RemoveProjectGroundings(projectID string) error {
+	// First get all groundings for the project
+	groundings, err := b.ListProjectGroundings(projectID)
+	if err != nil {
+		return fmt.Errorf("failed to list project groundings: %w", err)
+	}
+
+	return b.db.Update(func(txn *badger.Txn) error {
+		// Remove each grounding and its index
+		for _, grounding := range groundings {
+			groundingKey := fmt.Sprintf("grounding:info:%s:%s", projectID, grounding.Name)
+			if err := txn.Delete([]byte(groundingKey)); err != nil {
+				return fmt.Errorf("failed to delete grounding %s: %w", grounding.Name, err)
+			}
+
+			projectGroundingKey := fmt.Sprintf("grounding:project:%s:%s", projectID, grounding.Name)
+			if err := txn.Delete([]byte(projectGroundingKey)); err != nil {
+				return fmt.Errorf("failed to delete project grounding index %s: %w", grounding.Name, err)
+			}
+		}
+		return nil
+	})
+}
+
 func (b *BadgerDB) ListGroundings() ([]*GroundingSpec, error) {
 	var groundings []*GroundingSpec
 	prefix := []byte("grounding:info:")

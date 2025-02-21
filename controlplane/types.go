@@ -460,6 +460,8 @@ type GroundingStorage interface {
 	LoadGrounding(projectID, name string) (*GroundingSpec, error)
 	ListProjectGroundings(projectID string) ([]*GroundingSpec, error)
 	ListGroundings() ([]*GroundingSpec, error)
+	RemoveGrounding(projectID, name string) error
+	RemoveProjectGroundings(projectID string) error
 }
 
 // GroundingUseCase represents grounding of how an action should be handled
