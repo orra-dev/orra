@@ -43,6 +43,7 @@ type ControlPlane struct {
 	pStorage             ProjectStorage
 	svcStorage           ServiceStorage
 	orchestrationStorage OrchestrationStorage
+	groundingStorage     GroundingStorage
 	Logger               zerolog.Logger
 }
 
@@ -453,6 +454,14 @@ type CompensationWorker struct {
 	cancel          context.CancelFunc // Store cancel function
 }
 
+// GroundingStorage defines the interface for persisting grounding specs
+type GroundingStorage interface {
+	StoreGrounding(grounding *GroundingSpec) error
+	LoadGrounding(projectID, name string) (*GroundingSpec, error)
+	ListProjectGroundings(projectID string) ([]*GroundingSpec, error)
+	ListGroundings() ([]*GroundingSpec, error)
+}
+
 // GroundingUseCase represents grounding of how an action should be handled
 type GroundingUseCase struct {
 	Action       string            `json:"action" yaml:"action"`
@@ -463,6 +472,7 @@ type GroundingUseCase struct {
 
 // GroundingSpec represents a collection of planning grounding for domain-specific actions
 type GroundingSpec struct {
+	ProjectID   string             `json:"projectID"`
 	Name        string             `json:"name" yaml:"name"`
 	Domain      string             `json:"domain" yaml:"domain"`
 	Version     string             `json:"version" yaml:"version"`

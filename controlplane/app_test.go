@@ -48,7 +48,7 @@ func setupTestApp(t *testing.T) (*App, *Project, func()) {
 	}
 
 	plane := NewControlPlane()
-	plane.Initialise(context.Background(), db, db, db, nil, nil, nil, &fakePddlValidator{}, nil, logger)
+	plane.Initialise(context.Background(), db, db, db, db, nil, nil, nil, &fakePddlValidator{}, nil, logger)
 
 	app := &App{
 		Router: mux.NewRouter(),
@@ -69,11 +69,12 @@ func setupTestApp(t *testing.T) (*App, *Project, func()) {
 }
 
 // createTestGroundingSpec returns a valid domain grounding spec for testing
-func createTestGroundingSpec() *GroundingSpec {
+func createTestGroundingSpec(projectID string) *GroundingSpec {
 	return &GroundingSpec{
-		Name:    "customer-support-examples",
-		Domain:  "e-commerce-customer-support",
-		Version: "1.0",
+		ProjectID: projectID,
+		Name:      "customer-support-examples",
+		Domain:    "e-commerce-customer-support",
+		Version:   "1.0",
 		UseCases: []GroundingUseCase{
 			{
 				Action: "Handle customer inquiry about {orderId}",
@@ -98,7 +99,7 @@ func TestGroundingAPI(t *testing.T) {
 	app, project, cleanup := setupTestApp(t)
 	defer cleanup()
 
-	expected := createTestGroundingSpec()
+	expected := createTestGroundingSpec(project.ID)
 
 	t.Run("Add Domain Grounding Spec Success", func(t *testing.T) {
 		body, err := json.Marshal(expected)
@@ -197,7 +198,7 @@ func TestGroundingAPIAuth(t *testing.T) {
 	app, project, cleanup := setupTestApp(t)
 	defer cleanup()
 
-	example := createTestGroundingSpec()
+	example := createTestGroundingSpec(project.ID)
 
 	tests := []struct {
 		name       string
@@ -218,7 +219,7 @@ func TestGroundingAPIAuth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := app.Plane.ApplyGroundingSpec(context.Background(), project.ID, example); err != nil {
+			if err := app.Plane.ApplyGroundingSpec(context.Background(), example); err != nil {
 				t.Fatalf("Failed to add example: %v", err)
 			}
 			req := httptest.NewRequest(http.MethodGet, "/groundings", nil)

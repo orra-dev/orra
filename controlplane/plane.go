@@ -55,6 +55,7 @@ func (p *ControlPlane) Initialise(
 	pStorage ProjectStorage,
 	svcStorage ServiceStorage,
 	orchestrationStorage OrchestrationStorage,
+	groundingStorage GroundingStorage,
 	logMgr *LogManager,
 	wsManager *WebSocketManager,
 	vCache *VectorCache,
@@ -65,6 +66,7 @@ func (p *ControlPlane) Initialise(
 	p.pStorage = pStorage
 	p.svcStorage = svcStorage
 	p.orchestrationStorage = orchestrationStorage
+	p.groundingStorage = groundingStorage
 	p.LogManager = logMgr
 	p.Logger = Logger
 	p.WebSocketManager = wsManager
@@ -113,6 +115,18 @@ func (p *ControlPlane) Initialise(
 			}
 			svc.IdempotencyStore = NewIdempotencyStore(0)
 			projectServices[svc.ID] = svc
+		}
+	}
+
+	// Load existing groundings
+	if groundings, err := groundingStorage.ListGroundings(); err == nil {
+		for _, grounding := range groundings {
+			projectGroundings, exists := p.groundings[grounding.ProjectID]
+			if !exists {
+				projectGroundings = make(map[string]*GroundingSpec)
+				p.groundings[grounding.ProjectID] = projectGroundings
+			}
+			projectGroundings[grounding.Name] = grounding
 		}
 	}
 
@@ -245,7 +259,9 @@ func (p *ControlPlane) GetServiceName(projectID string, serviceID string) (strin
 }
 
 // ApplyGroundingSpec adds domain grounding to a project after validation
-func (p *ControlPlane) ApplyGroundingSpec(ctx context.Context, projectID string, spec *GroundingSpec) error {
+func (p *ControlPlane) ApplyGroundingSpec(ctx context.Context, spec *GroundingSpec) error {
+	projectID := spec.ProjectID
+
 	start := time.Now()
 	err := p.PddlValidator.HealthCheck(ctx)
 	duration := time.Since(start)
@@ -283,6 +299,11 @@ func (p *ControlPlane) ApplyGroundingSpec(ctx context.Context, projectID string,
 			spec.Name,
 			spec.Version,
 		)}
+	}
+
+	// Store in persistent storage first
+	if err := p.groundingStorage.StoreGrounding(spec); err != nil {
+		return fmt.Errorf("failed to store grounding: %w", err)
 	}
 
 	// Store the spec

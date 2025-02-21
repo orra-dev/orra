@@ -434,7 +434,9 @@ func (app *App) ApplyGrounding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := app.Plane.ApplyGroundingSpec(app.RootCtx, project.ID, &grounding); err != nil {
+	grounding.ProjectID = project.ID
+
+	if err := app.Plane.ApplyGroundingSpec(app.RootCtx, &grounding); err != nil {
 		var validErr ValidationError
 		if errors.As(err, &validErr) {
 			errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Parameter(validErr.Field()), validErr.Error()))
