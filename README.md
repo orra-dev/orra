@@ -8,6 +8,12 @@ Prototype rapidly today, scale to production tomorrow. No complex infrastructure
 
 ![](images/orra-diagram.png)
 
+### More coming soon
+
+* Agent replay and multi-LLM consensus planning
+* Continuous adjustment of Agent workflows during runtime
+* Additional language SDKs - Ruby, DotNet and Go very soon!
+  ... and many more planned
 
 ## Releases
 
@@ -332,33 +338,10 @@ orra verify run "Estimate delivery for customer order" \
 - [Domain Grounding Execution](docs/grounding.md) 
 - [Core Topics & Internals](docs/core)
 
-## Alpha Features & Limitations
+## Self Hosting
 
-### Available Now
-
-* Robust Compensation guardrails for revertible services and agents 🆕🎉
-* Prototype your multi-agent app in a single file then split and deploy as containers 🆕🎉
-* LLM-powered task decomposition and routing
-* In-memory execution tracking with exactly-once guarantees
-* Smart service health handling with execution pausing and heartbeat monitoring
-* Short-term retries with exponential backoff (up to 5 attempts)
-* Intuitive JavaScript and Python SDKs
-* CLI for Orra-powered projects management
-* Automatic parallel execution optimization
-* Built-in service discovery
-
-### Current Limitations
-
-1. **Storage**: All state is in-memory and will be lost on control plane restart
+1. **Storage**: We use BadgerDB to persist all state. 
 2. **Deployment**: Single-instance only, designed for development and self-hosted deployments
-
-### Coming Soon
-
-* Ahead of time execution plan domain grounding with pre-execution checks
-* Agent replay and multi-LLM consensus planning
-* Continuous adjustment of Agent workflows during runtime
-* Additional language SDKs - Ruby, DotNet and Go very soon!
-  ... and many more planned
 
 ## Join Our Alpha Testing Community
 
