@@ -5,9 +5,7 @@ interactions.
 
 ![](images/orra-diagram.png)
 
-Orra coordinates tasks across your existing stack, agents and any tools run as services using intelligent reasoning — across any language, agent framework or deployment platform.
-
-Prototype rapidly today, scale to production tomorrow. No complex infrastructure required.
+Orra coordinates tasks across your existing stack, agents and any tools run as services using intelligent reasoning — across any language, agent framework or deployment platform.  From Prototyping to production, no complex infrastructure required.
 
 ### More coming soon
 
