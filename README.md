@@ -1,12 +1,13 @@
 # 🪡Orra (✨Alpha✨)
 
-Move beyond simple Crews and Agents. Build production-ready multi-agent applications that handle complex real-world
-interactions. Orra orchestrates your tools as services with your agents providing reliability and intelligent reasoning — across
-any language, agent framework or deployment platform.
-
-Prototype rapidly today, scale to production tomorrow. No complex infrastructure required.
+Move beyond simple Crews and Agents. Use Orra to build production-ready multi-agent applications that handle complex real-world
+interactions.
 
 ![](images/orra-diagram.png)
+
+Orra coordinates tasks across your existing stack, agents and any tools run as services using intelligent reasoning — across any language, agent framework or deployment platform.
+
+Prototype rapidly today, scale to production tomorrow. No complex infrastructure required.
 
 ### More coming soon
 
