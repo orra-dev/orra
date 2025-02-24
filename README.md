@@ -15,6 +15,8 @@ Orra coordinates tasks across your existing stack, agents and any tools run as s
 * 🔮 Real-time status tracking
 * 🪝 Webhook result delivery
 
+Read the [launch blog post](https://outgoing-icecream-a85.notion.site/The-Missing-Glue-Layer-for-Multi-Agent-Applications-1a0605f92f9c80ca83acef5402a334dd).
+
 ### Coming Soon
 
 * Agent replay and multi-LLM consensus planning
