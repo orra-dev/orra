@@ -78,15 +78,15 @@ PLAN_CACHE_OPENAI_API_KEY=xxxx
 
 ### 1. Install Orra CLI
 
-Download the latest CLI binary for your platform from our releases page:
+Download the latest CLI binary for your platform from our [releases page](https://github.com/orra-dev/orra/releases):
 
 ```shell
 # macOS
-curl -L https://github.com/ezodude/orra/releases/download/v0.2.1/orra-macos -o /usr/local/bin/orra
+curl -L https://github.com/orra-dev/orra/releases/download/v0.2.1/orra-darwin-arm64 -o /usr/local/bin/orra
 chmod +x /usr/local/bin/orra
 
 # Linux
-curl -L https://github.com/ezodude/orra/releases/download/v0.2.1/orra-linux -o /usr/local/bin/orra
+curl -L https://github.com/ezodude/orra/releases/download/v0.2.1/orra-linux-amd64 -o /usr/local/bin/orra
 chmod +x /usr/local/bin/orra
 
 # Verify installation

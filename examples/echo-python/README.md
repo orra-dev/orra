@@ -24,7 +24,7 @@ sequenceDiagram
 
 ## Setup
 
-1. First, setup Orra by following the [Quick Start](../../README.md#quick-start) guide:
+1. First, setup Orra by following the [Installation instructions](../../README.md#installation):
 ```bash
 # Clone Orra
 git clone https://github.com/ezodude/orra
