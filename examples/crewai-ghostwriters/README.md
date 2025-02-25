@@ -15,7 +15,7 @@ Quick [CrewAI](https://www.crewai.com) agentic writer and editor system that dra
 
 ## Setup
 
-1. First, setup Orra by following the [Quick Start](../../README.md#quick-start) guide:
+1. First, setup Orra by following the [installation instructions](../../README.md#installation):
 
 ```bash
 # Clone Orra
@@ -32,7 +32,7 @@ docker compose up
 2. Setup your Orra project:
 
 ```bash
-# Install Orra CLI 
+# Install Orra CLI - if using Linux, otherwise download the latest CLI binary for your platform: https://github.com/orra-dev/orra/releases
 curl -L https://github.com/ezodude/orra/releases/download/v0.2.1/orra-linux-amd64 -o /usr/local/bin/orra
 chmod +x /usr/local/bin/orra
 
