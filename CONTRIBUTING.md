@@ -8,12 +8,6 @@ If you are a first-time contributor and want some help getting started, feel fre
 
 * Ezo Saleh - [e@orra.dev](mailto:e@orra.dev?subject=Orra Contribution Help)
 
-## Temporary Guide for Contributions in Private Alpha
-
-* Contributions are by invitation only as determined by the core maintainers.
-* Write access to the repo will be made available temporarily and removed after the PR is merged.
-* Aside from the Fork+Pull model, please follow the [normal contributions guide](#guide-for-contributions). 
-
 ## Guide for Contributions
 
 * We use the usual Fork+Pull model (more info here: [https://help.github.com/articles/using-pull-requests/](https://help.github.com/articles/using-pull-requests/))
