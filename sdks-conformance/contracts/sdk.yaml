@@ -17,10 +17,10 @@ info:
     
     Task Execution Model:
     - SDKs are responsible for task execution and result reporting
-    - Task timeouts and retry policies are managed by the control plane
-    - Long-running tasks may be retried multiple times by the control plane
+    - Task timeouts and retry policies are managed by the plan engine
+    - Long-running tasks may be retried multiple times by the plan engine
     - SDKs should focus on maintaining exactly-once execution guarantees
-    - The control plane is the source of truth for task lifecycle and completion status
+    - The plan engine is the source of truth for task lifecycle and completion status
     
     Compensation Model:
     - Services can opt-in to compensation by registering as revertible
@@ -35,10 +35,10 @@ info:
       * Expired: Compensation TTL elapsed before execution
 
 servers:
-  controlPlane:
+  planEngine:
     url: ws://localhost:8005
     protocol: ws
-    description: Orra Control Plane WebSocket endpoint
+    description: Orra Plan Engine WebSocket endpoint
 
 channels:
   /ws:
@@ -53,13 +53,13 @@ channels:
         schema:
           type: string
     subscribe:
-      description: Messages received from control plane
+      description: Messages received from plan engine
       message:
         oneOf:
           - $ref: '#/components/messages/TaskRequest'
           - $ref: '#/components/messages/Ping'
     publish:
-      description: Messages sent to control plane
+      description: Messages sent to plan engine
       message:
         oneOf:
           - $ref: '#/components/messages/TaskResult'
@@ -535,9 +535,9 @@ x-sdk-requirements:
     - Result caching: 24 hours
     - Maximum queued messages: 1000
       notes: |
-        Task timeouts and retry policies are handled by the control plane's orchestration layer.
+        Task timeouts and retry policies are handled by the plan engine's orchestration layer.
         SDKs should focus on executing tasks and reporting results accurately, while the
-        control plane manages task lifecycle, timeouts, and retries.
+        plan engine manages task lifecycle, timeouts, and retries.
 
   error_handling:
     - All errors must include:

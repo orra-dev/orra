@@ -7,9 +7,9 @@
 import { request } from 'http';
 import { ProtocolValidator } from './protocol-validator.js';
 
-export function createHttpProxy(controlPlaneUrl, sdkContractPath) {
+export function createHttpProxy(planEngineUrl, sdkContractPath) {
 	const validator = new ProtocolValidator(sdkContractPath);
-	const baseUrl = new URL(controlPlaneUrl);
+	const baseUrl = new URL(planEngineUrl);
 	
 	return {
 		forward: async (req, res) => {

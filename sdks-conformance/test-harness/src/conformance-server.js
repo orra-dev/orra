@@ -12,8 +12,8 @@ import { createWebhookHandler } from './webhook-handler.js';
 import { ProtocolValidator } from "./protocol-validator.js";
 
 export class ConformanceServer {
-	constructor(controlPlaneUrl, sdkContractPath) {
-		this.controlPlaneUrl = controlPlaneUrl;
+	constructor(planEngineUrl, sdkContractPath) {
+		this.planEngineUrl = planEngineUrl;
 		this.sdkContractPath = sdkContractPath
 		this.httpServer = null;
 		this.wsProxy = null;
@@ -26,12 +26,12 @@ export class ConformanceServer {
 		this.httpServer = createServer();
 		this.wsServer = new WebSocketServer({ server: this.httpServer });
 		
-		const httpProxy = createHttpProxy(this.controlPlaneUrl, this.sdkContractPath);
+		const httpProxy = createHttpProxy(this.planEngineUrl, this.sdkContractPath);
 		const webhookHandler = createWebhookHandler(this.webhookResults);
 		
 		// Setup WebSocket handling
 		this.wsProxy = createWebSocketProxy(
-			this.controlPlaneUrl,
+			this.planEngineUrl,
 			this.sdkContractPath,
 			this.webhookResults);
 		this.wsServer.on('connection', this.wsProxy.handleConnection);
@@ -64,7 +64,7 @@ export class ConformanceServer {
 				return;
 			}
 			
-			// Forward all other requests to control plane
+			// Forward all other requests to plan engine
 			httpProxy.forward(req, res);
 		});
 		

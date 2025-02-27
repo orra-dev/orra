@@ -5,10 +5,10 @@
  */
 
 export class ConnectionManager {
-	constructor(serviceId, clientWs, controlPlaneWs, activeConnections, metrics, validator, webhookResults, compensationTestManager) {
+	constructor(serviceId, clientWs, planEngineWs, activeConnections, metrics, validator, webhookResults, compensationTestManager) {
 		this.serviceId = serviceId;
 		this.clientWs = clientWs;
-		this.controlPlaneWs = controlPlaneWs;
+		this.planEngineWs = planEngineWs;
 		this.activeConnections = activeConnections;
 		this.metrics = metrics;
 		this.validator = validator;
@@ -21,18 +21,18 @@ export class ConnectionManager {
 			console.log('Client WebSocket error:', error);
 		});
 		
-		this.controlPlaneWs.on('error', (error) => {
+		this.planEngineWs.on('error', (error) => {
 			console.log('Control plane WebSocket error:', error);
 		});
 		
-		console.log('Control plane WebSocket readyState:', this.controlPlaneWs.readyState);
+		console.log('Control plane WebSocket readyState:', this.planEngineWs.readyState);
 		console.log('Client WebSocket readyState:', this.clientWs.readyState);
 		
 		this.clientWs.on('message', data => {
 			this.handleClientMessage(data)
 		});
 		
-		this.controlPlaneWs.on('message', data => {
+		this.planEngineWs.on('message', data => {
 			this.handleControlPlaneMessage(data)
 		});
 		
@@ -41,7 +41,7 @@ export class ConnectionManager {
 			this.handleClose()
 		});
 		
-		this.controlPlaneWs.on('close', () => {
+		this.planEngineWs.on('close', () => {
 			console.log('Control plane WebSocket closed');
 			this.clientWs.close()
 		});
@@ -61,7 +61,7 @@ export class ConnectionManager {
 			} else if (this.isCompensationFlowResult(payload)) {
 				this.handleCompensationTestResult(payload);
 			} else {
-				this.controlPlaneWs.send(JSON.stringify(msg));
+				this.planEngineWs.send(JSON.stringify(msg));
 			}
 		} catch (error) {
 			this.handleError(error);
@@ -80,7 +80,7 @@ export class ConnectionManager {
 	
 	handleClose() {
 		this.activeConnections.delete(this.serviceId);
-		this.controlPlaneWs.close();
+		this.planEngineWs.close();
 		this.metrics.reset(this.serviceId);
 	}
 	

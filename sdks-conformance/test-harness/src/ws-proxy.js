@@ -26,7 +26,7 @@ function shouldSimulate(message) {
 	return simulateRequest && simulateTestCase;
 }
 
-export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookResults) {
+export function createWebSocketProxy(planEngineUrl, sdkContractPath, webhookResults) {
 	const validator = new ProtocolValidator(sdkContractPath);
 	const activeConnections = new Map();
 	const metrics = new MetricsCollector();
@@ -52,14 +52,14 @@ export function createWebSocketProxy(controlPlaneUrl, sdkContractPath, webhookRe
 					return;
 				}
 				
-				const controlPlaneWs = new WebSocket(controlPlaneUrl + req.url);
+				const planEngineWs = new WebSocket(planEngineUrl + req.url);
 				
-				controlPlaneWs.on('open', () => {
+				planEngineWs.on('open', () => {
 					console.log('Control plane WebSocket opened');
 					const manager = new ConnectionManager(
 						serviceId,
 						clientWs,
-						controlPlaneWs,
+						planEngineWs,
 						activeConnections,
 						metrics,
 						validator,

@@ -1,7 +1,7 @@
 services:
-  control-plane:
-    image: orra-control-plane-sdk-valid
-    container_name: orra-cp-sdk-valid
+  plan-engine:
+    image: orra-plan-engine-sdk-valid
+    container_name: orra-peng-sdk-valid
     build:
       context: ../../planengine
       dockerfile: Dockerfile
@@ -24,13 +24,13 @@ services:
       dockerfile: Dockerfile
     container_name: orra-sdk-test-harness
     environment:
-      - CONTROL_PLANE_URL=http://control-plane:8005
+      - PLAN_ENGINE_URL=http://plan-engine:8005
       - SDK_TEST_HARNESS_PORT=8006
       - SDK_CONTRACT_PATH=/app/contracts/sdk.yaml
     ports:
       - "8006:8006"
     depends_on:
-      control-plane:
+      plan-engine:
         condition: service_healthy
     networks:
       - sdk-test-network
