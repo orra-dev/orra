@@ -37,7 +37,7 @@ func (e PreparationError) Error() string {
 	return fmt.Sprintf("preparation failed with status %s: %v", e.Status, e.Err)
 }
 
-func (p *ControlPlane) prepForError(orchestration *Orchestration, err error, status Status) {
+func (p *PlanEngine) prepForError(orchestration *Orchestration, err error, status Status) {
 	p.Logger.Error().
 		Str("OrchestrationID", orchestration.ID).
 		Err(err)
@@ -54,7 +54,7 @@ func (p *ControlPlane) prepForError(orchestration *Orchestration, err error, sta
 	}
 }
 
-func (p *ControlPlane) InjectGroundingMatchForAnyAppliedSpecs(ctx context.Context, orchestration *Orchestration, specs []GroundingSpec) error {
+func (p *PlanEngine) InjectGroundingMatchForAnyAppliedSpecs(ctx context.Context, orchestration *Orchestration, specs []GroundingSpec) error {
 	if len(specs) == 0 {
 		return nil
 	}
@@ -77,7 +77,7 @@ func (p *ControlPlane) InjectGroundingMatchForAnyAppliedSpecs(ctx context.Contex
 	return nil
 }
 
-func (p *ControlPlane) PrepareOrchestration(ctx context.Context, projectID string, orchestration *Orchestration, specs []GroundingSpec) error {
+func (p *PlanEngine) PrepareOrchestration(ctx context.Context, projectID string, orchestration *Orchestration, specs []GroundingSpec) error {
 	// Initial setup and validation that shouldn't be retried
 	orchestration.ID = p.GenerateOrchestrationKey()
 	orchestration.Status = Pending
@@ -226,7 +226,7 @@ func (p *ControlPlane) PrepareOrchestration(ctx context.Context, projectID strin
 	return nil
 }
 
-func (p *ControlPlane) attemptRetryablePreparation(ctx context.Context, orchestration *Orchestration, services []*ServiceInfo, actionParams json.RawMessage, serviceDescriptions string, retryCauseIfAny string) error {
+func (p *PlanEngine) attemptRetryablePreparation(ctx context.Context, orchestration *Orchestration, services []*ServiceInfo, actionParams json.RawMessage, serviceDescriptions string, retryCauseIfAny string) error {
 	p.Logger.Trace().Str("retryCauseIfAny", retryCauseIfAny).Msg("")
 
 	callingPlan, cachedEntryID, isCacheHit, err := p.decomposeAction(
@@ -290,7 +290,7 @@ func (p *ControlPlane) attemptRetryablePreparation(ctx context.Context, orchestr
 	return nil
 }
 
-func (p *ControlPlane) ExecuteOrchestration(ctx context.Context, orchestration *Orchestration) {
+func (p *PlanEngine) ExecuteOrchestration(ctx context.Context, orchestration *Orchestration) {
 	p.Logger.Debug().Msgf("About to create Log for orchestration %s", orchestration.ID)
 	log := p.LogManager.PrepLogForOrchestration(orchestration.ProjectID, orchestration.ID, orchestration.Plan)
 
@@ -322,7 +322,7 @@ func (p *ControlPlane) ExecuteOrchestration(ctx context.Context, orchestration *
 		Msg("Appended initial entry to Log")
 }
 
-func (p *ControlPlane) FinalizeOrchestration(
+func (p *PlanEngine) FinalizeOrchestration(
 	orchestrationID string,
 	status Status,
 	reason json.RawMessage,
@@ -334,7 +334,7 @@ func (p *ControlPlane) FinalizeOrchestration(
 
 	orchestration, exists := p.orchestrationStore[orchestrationID]
 	if !exists {
-		return fmt.Errorf("control plane cannot finalize missing orchestration %s", orchestrationID)
+		return fmt.Errorf("plan engine cannot finalize missing orchestration %s", orchestrationID)
 	}
 
 	orchestration.Status = status
@@ -366,13 +366,13 @@ func (p *ControlPlane) FinalizeOrchestration(
 	return nil
 }
 
-func (p *ControlPlane) CancelOrchestration(orchestrationID string, reason json.RawMessage) error {
+func (p *PlanEngine) CancelOrchestration(orchestrationID string, reason json.RawMessage) error {
 	p.orchestrationStoreMu.Lock()
 	defer p.orchestrationStoreMu.Unlock()
 
 	orchestration, exists := p.orchestrationStore[orchestrationID]
 	if !exists {
-		return fmt.Errorf("control plane cannot cancel missing orchestration %s", orchestrationID)
+		return fmt.Errorf("plan engine cannot cancel missing orchestration %s", orchestrationID)
 	}
 
 	orchestration.Status = Cancelled
@@ -391,16 +391,16 @@ func (p *ControlPlane) CancelOrchestration(orchestrationID string, reason json.R
 	return nil
 }
 
-func (p *ControlPlane) CancelAnyActiveOrchestrations() error {
+func (p *PlanEngine) CancelAnyActiveOrchestrations() error {
 	candidates := p.getAllActiveOrchestrations()
 	if len(candidates) == 0 {
 		return nil
 	}
 
 	var errs []error
-	reason, _ := json.Marshal(ControlPlaneShuttingDown)
+	reason, _ := json.Marshal(PlanEngineShuttingDownErr)
 	for _, o := range candidates {
-		p.LogManager.MarkOrchestration(o.ID, Cancelled, []byte(ControlPlaneShuttingDown))
+		p.LogManager.MarkOrchestration(o.ID, Cancelled, []byte(PlanEngineShuttingDownErr))
 
 		if err := p.CancelOrchestration(o.ID, reason); err != nil {
 			errs = append(errs, err)
@@ -420,7 +420,7 @@ func (p *ControlPlane) CancelAnyActiveOrchestrations() error {
 	return nil
 }
 
-func (p *ControlPlane) getAllActiveOrchestrations() []*Orchestration {
+func (p *PlanEngine) getAllActiveOrchestrations() []*Orchestration {
 	p.orchestrationStoreMu.RLock()
 	defer p.orchestrationStoreMu.RUnlock()
 
@@ -440,7 +440,7 @@ func (p *ControlPlane) getAllActiveOrchestrations() []*Orchestration {
 	return result
 }
 
-func (p *ControlPlane) serviceDescriptions(services []*ServiceInfo) (string, error) {
+func (p *PlanEngine) serviceDescriptions(services []*ServiceInfo) (string, error) {
 	out := make([]string, len(services))
 	for i, service := range services {
 		schemaStr, err := json.Marshal(service.Schema)
@@ -452,7 +452,7 @@ func (p *ControlPlane) serviceDescriptions(services []*ServiceInfo) (string, err
 	return strings.Join(out, "\n\n"), nil
 }
 
-func (p *ControlPlane) discoverProjectServices(projectID string) ([]*ServiceInfo, error) {
+func (p *PlanEngine) discoverProjectServices(projectID string) ([]*ServiceInfo, error) {
 	p.servicesMu.RLock()
 	defer p.servicesMu.RUnlock()
 
@@ -473,7 +473,7 @@ func (p *ControlPlane) discoverProjectServices(projectID string) ([]*ServiceInfo
 	return out, nil
 }
 
-func (p *ControlPlane) decomposeAction(ctx context.Context, orchestration *Orchestration, action string, actionParams json.RawMessage, serviceDescriptions string, retryCauseIfAny string) (*ExecutionPlan, string, bool, error) {
+func (p *PlanEngine) decomposeAction(ctx context.Context, orchestration *Orchestration, action string, actionParams json.RawMessage, serviceDescriptions string, retryCauseIfAny string) (*ExecutionPlan, string, bool, error) {
 	cacheResult, _, err := p.VectorCache.Get(
 		ctx,
 		orchestration.ProjectID,
@@ -502,7 +502,7 @@ func (p *ControlPlane) decomposeAction(ctx context.Context, orchestration *Orche
 	return result, cacheResult.ID, cacheResult.Hit, nil
 }
 
-func (p *ControlPlane) validateWebhook(projectID string, webhookUrl string) error {
+func (p *PlanEngine) validateWebhook(projectID string, webhookUrl string) error {
 	if len(strings.TrimSpace(webhookUrl)) == 0 {
 		return fmt.Errorf("a webhook url is required to return orchestration results")
 	}
@@ -521,7 +521,7 @@ func (p *ControlPlane) validateWebhook(projectID string, webhookUrl string) erro
 
 // validateSubTaskInputs checks that each subTask's input keys are valid for its service
 // and that every required key provided by the service is present in the subTask.
-func (p *ControlPlane) validateSubTaskInputs(services []*ServiceInfo, subTasks []*SubTask) error {
+func (p *PlanEngine) validateSubTaskInputs(services []*ServiceInfo, subTasks []*SubTask) error {
 	// Build a lookup map for services.
 	serviceMap := make(map[string]*ServiceInfo, len(services))
 	for _, service := range services {
@@ -571,7 +571,7 @@ func (p *ControlPlane) validateSubTaskInputs(services []*ServiceInfo, subTasks [
 	return nil
 }
 
-func (p *ControlPlane) validateExecPlanAgainstDomain(ctx context.Context, plan *ExecutionPlan, orchestration *Orchestration) error {
+func (p *PlanEngine) validateExecPlanAgainstDomain(ctx context.Context, plan *ExecutionPlan, orchestration *Orchestration) error {
 	// Skip validation if no grounding was used
 	if plan.GroundingHit == nil {
 		return nil
@@ -624,7 +624,7 @@ func (s *SubTask) InputKeys() []string {
 	return out
 }
 
-func (p *ControlPlane) enhanceWithServiceDetails(services []*ServiceInfo, subTasks []*SubTask) error {
+func (p *PlanEngine) enhanceWithServiceDetails(services []*ServiceInfo, subTasks []*SubTask) error {
 	serviceMap := make(map[string]*ServiceInfo)
 	for _, service := range services {
 		serviceMap[service.ID] = service
@@ -648,7 +648,7 @@ func (p *ControlPlane) enhanceWithServiceDetails(services []*ServiceInfo, subTas
 	return nil
 }
 
-func (p *ControlPlane) createAndStartWorkers(ctx context.Context, orchestrationID string, plan *ExecutionPlan, taskTimeout, healthCheckGracePeriod time.Duration) {
+func (p *PlanEngine) createAndStartWorkers(ctx context.Context, orchestrationID string, plan *ExecutionPlan, taskTimeout, healthCheckGracePeriod time.Duration) {
 	p.workerMu.Lock()
 	defer p.workerMu.Unlock()
 
@@ -733,7 +733,7 @@ func (p *ControlPlane) createAndStartWorkers(ctx context.Context, orchestrationI
 	go fTracker.Start(fCtx, orchestrationID)
 }
 
-func (p *ControlPlane) cleanupLogWorkers(orchestrationID string) {
+func (p *PlanEngine) cleanupLogWorkers(orchestrationID string) {
 	p.workerMu.Lock()
 	defer p.workerMu.Unlock()
 
@@ -752,7 +752,7 @@ func (p *ControlPlane) cleanupLogWorkers(orchestrationID string) {
 	}
 }
 
-func (p *ControlPlane) callingPlanMinusTaskZero(callingPlan *ExecutionPlan) (*SubTask, *ExecutionPlan) {
+func (p *PlanEngine) callingPlanMinusTaskZero(callingPlan *ExecutionPlan) (*SubTask, *ExecutionPlan) {
 	var taskZero *SubTask
 	var serviceTasks []*SubTask
 
@@ -771,7 +771,7 @@ func (p *ControlPlane) callingPlanMinusTaskZero(callingPlan *ExecutionPlan) (*Su
 	}
 }
 
-func (p *ControlPlane) validateActionable(subTasks []*SubTask) error {
+func (p *PlanEngine) validateActionable(subTasks []*SubTask) error {
 	for _, subTask := range subTasks {
 		if strings.EqualFold(subTask.ID, "final") {
 			return fmt.Errorf("%s", subTask.Input["error"])
@@ -780,7 +780,7 @@ func (p *ControlPlane) validateActionable(subTasks []*SubTask) error {
 	return nil
 }
 
-func (p *ControlPlane) triggerWebhook(orchestration *Orchestration) error {
+func (p *PlanEngine) triggerWebhook(orchestration *Orchestration) error {
 	var payload = struct {
 		OrchestrationID string            `json:"orchestrationId"`
 		Results         []json.RawMessage `json:"results"`

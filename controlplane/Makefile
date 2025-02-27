@@ -3,9 +3,9 @@
 # Default target
 all: clean vet fmt lint test build
 
-# Build the controlplane binary
+# Build the plan engine binary
 build:
-	@echo "Building controlplane..."
+	@echo "Building planengine..."
 	@go build -v -o bin/orra-cp
 
 # Run tests with coverage

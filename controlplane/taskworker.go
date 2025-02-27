@@ -462,7 +462,7 @@ func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string, ke
 
 	logger.Trace().Msg("Executing task request - about to send task")
 
-	if err := w.LogManager.controlPlane.WebSocketManager.SendTask(w.Service.ID, task); err != nil {
+	if err := w.LogManager.planEngine.WebSocketManager.SendTask(w.Service.ID, task); err != nil {
 		logger.Trace().Err(err).Msg("Failed to send task request to service - trying again using RetryableError")
 
 		// Pause execution before returning error
@@ -608,7 +608,7 @@ func taskDependenciesMet(s map[string]json.RawMessage, e TaskDependenciesWithKey
 }
 
 func (w *TaskWorker) isServiceHealthy() bool {
-	return w.LogManager.controlPlane.WebSocketManager.IsServiceHealthy(w.Service.ID)
+	return w.LogManager.planEngine.WebSocketManager.IsServiceHealthy(w.Service.ID)
 }
 
 func (w *TaskWorker) generateIdempotencyKey(orchestrationID string) IdempotencyKey {

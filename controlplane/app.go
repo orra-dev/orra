@@ -25,7 +25,7 @@ import (
 )
 
 type App struct {
-	Plane      *ControlPlane
+	Engine     *PlanEngine
 	Router     *mux.Router
 	Db         *BadgerDB
 	Cfg        Config
@@ -68,34 +68,34 @@ func (app *App) configureRoutes() *App {
 }
 
 func (app *App) configureWebSocket() {
-	app.Plane.WebSocketManager.melody.HandleConnect(func(s *melody.Session) {
+	app.Engine.WebSocketManager.melody.HandleConnect(func(s *melody.Session) {
 		apiKey := s.Request.URL.Query().Get("apiKey")
-		project, err := app.Plane.GetProjectByApiKey(apiKey)
+		project, err := app.Engine.GetProjectByApiKey(apiKey)
 		if err != nil {
 			app.Logger.Error().Err(err).Msg("Invalid API key for WebSocket connection")
 			return
 		}
 		svcID := s.Request.URL.Query().Get("serviceId")
-		svcName, err := app.Plane.GetServiceName(project.ID, svcID)
+		svcName, err := app.Engine.GetServiceName(project.ID, svcID)
 		if err != nil {
 			app.Logger.Error().Err(err).Msg("Unknown service for WebSocket connection")
 			return
 		}
-		app.Plane.WebSocketManager.HandleConnection(svcID, svcName, s)
+		app.Engine.WebSocketManager.HandleConnection(svcID, svcName, s)
 	})
 
-	app.Plane.WebSocketManager.melody.HandleDisconnect(func(s *melody.Session) {
+	app.Engine.WebSocketManager.melody.HandleDisconnect(func(s *melody.Session) {
 		serviceID, exists := s.Get("serviceID")
 		if !exists {
 			app.Logger.Error().Msg("serviceID missing from disconnected session")
 			return
 		}
-		app.Plane.WebSocketManager.HandleDisconnection(serviceID.(string))
+		app.Engine.WebSocketManager.HandleDisconnection(serviceID.(string))
 	})
 
-	app.Plane.WebSocketManager.melody.HandleMessage(func(s *melody.Session, msg []byte) {
-		app.Plane.WebSocketManager.HandleMessage(s, msg, func(serviceID string) (*ServiceInfo, error) {
-			return app.Plane.GetServiceByID(serviceID)
+	app.Engine.WebSocketManager.melody.HandleMessage(func(s *melody.Session, msg []byte) {
+		app.Engine.WebSocketManager.HandleMessage(s, msg, func(serviceID string) (*ServiceInfo, error) {
+			return app.Engine.GetServiceByID(serviceID)
 		})
 	})
 }
@@ -116,7 +116,7 @@ func (app *App) Run() {
 
 	// Set up our server in s goroutine so that it doesn't block.
 	go func() {
-		app.Logger.Info().Msgf("Starting control plane on %s", addr)
+		app.Logger.Info().Msgf("Starting plan engine on %s", addr)
 		if err := srv.ListenAndServe(); err != nil {
 			app.Logger.Info().Msg(err.Error())
 		}
@@ -143,10 +143,10 @@ func (app *App) Run() {
 func (app *App) gracefulShutdown(srv *http.Server, ctx context.Context) {
 	app.RootCancel()
 
-	if err := app.Plane.CancelAnyActiveOrchestrations(); err != nil {
+	if err := app.Engine.CancelAnyActiveOrchestrations(); err != nil {
 		app.Logger.Error().Err(err).Msg("")
 	}
-	app.Logger.Info().Msg("Control Plane shutting down")
+	app.Logger.Info().Msg("Plan Engine shutting down")
 
 	if err := app.Db.Close(); err != nil {
 		app.Logger.Error().Err(err).Msg("DB shutdown error")
@@ -154,7 +154,7 @@ func (app *App) gracefulShutdown(srv *http.Server, ctx context.Context) {
 	app.Logger.Info().Msg("DB shutdown complete")
 
 	if err := srv.Shutdown(ctx); err != nil {
-		app.Logger.Error().Err(err).Msg("Error shutting down control plane server")
+		app.Logger.Error().Err(err).Msg("Error shutting down plan engine server")
 	}
 	app.Logger.Debug().Msg("http: All connections drained")
 }
@@ -162,28 +162,28 @@ func (app *App) gracefulShutdown(srv *http.Server, ctx context.Context) {
 func (app *App) RegisterProject(w http.ResponseWriter, r *http.Request) {
 	var project Project
 	if err := json.NewDecoder(r.Body).Decode(&project); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFail), err))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFailErr), err))
 		return
 	}
 
-	project.ID = app.Plane.GenerateProjectKey()
-	project.APIKey = app.Plane.GenerateAPIKey()
+	project.ID = app.Engine.GenerateProjectKey()
+	project.APIKey = app.Engine.GenerateAPIKey()
 
-	if err := app.Plane.AddProject(&project); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(ProjectRegistrationFailed), err))
+	if err := app.Engine.AddProject(&project); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(ProjectRegistrationFailedErr), err))
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(project); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(JSONMarshalingFail), err))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(JSONMarshalingFailErr), err))
 		return
 	}
 }
 
 func (app *App) RegisterServiceOrAgent(w http.ResponseWriter, r *http.Request, serviceType ServiceType) {
 	apiKey := r.Context().Value(apiKeyContextKey).(string)
-	project, err := app.Plane.GetProjectByApiKey(apiKey)
+	project, err := app.Engine.GetProjectByApiKey(apiKey)
 	if err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
 		return
@@ -191,14 +191,14 @@ func (app *App) RegisterServiceOrAgent(w http.ResponseWriter, r *http.Request, s
 
 	var service ServiceInfo
 	if err := json.NewDecoder(r.Body).Decode(&service); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFail), err))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFailErr), err))
 		return
 	}
 
 	service.ProjectID = project.ID
 	service.Type = serviceType
 
-	if err := app.Plane.RegisterOrUpdateService(&service); err != nil {
+	if err := app.Engine.RegisterOrUpdateService(&service); err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
 		return
 	}
@@ -225,7 +225,7 @@ func (app *App) RegisterAgent(w http.ResponseWriter, r *http.Request) {
 
 func (app *App) OrchestrationsHandler(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Context().Value(apiKeyContextKey).(string)
-	project, err := app.Plane.GetProjectByApiKey(apiKey)
+	project, err := app.Engine.GetProjectByApiKey(apiKey)
 	if err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
 		return
@@ -233,11 +233,11 @@ func (app *App) OrchestrationsHandler(w http.ResponseWriter, r *http.Request) {
 
 	var orchestration Orchestration
 	if err := json.NewDecoder(r.Body).Decode(&orchestration); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFail), err))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFailErr), err))
 		return
 	}
 
-	if err := app.Plane.PrepareOrchestration(app.RootCtx, project.ID, &orchestration, app.Plane.GetGroundingSpecs(project.ID)); err != nil {
+	if err := app.Engine.PrepareOrchestration(app.RootCtx, project.ID, &orchestration, app.Engine.GetGroundingSpecs(project.ID)); err != nil {
 		app.Logger.
 			Error().
 			Err(err).
@@ -247,21 +247,21 @@ func (app *App) OrchestrationsHandler(w http.ResponseWriter, r *http.Request) {
 			Msgf("Action cannot be executed")
 
 		if orchestration.Status == NotActionable {
-			errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(ActionNotActionable), err))
+			errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(ActionNotActionableErr), err))
 		} else {
-			errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(ActionCannotExecute), err))
+			errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(ActionCannotExecuteErr), err))
 		}
 		return
 	}
 
 	app.Logger.Debug().Msgf("About to execute orchestration %s", orchestration.ID)
-	go app.Plane.ExecuteOrchestration(app.RootCtx, &orchestration)
+	go app.Engine.ExecuteOrchestration(app.RootCtx, &orchestration)
 	w.WriteHeader(http.StatusAccepted)
 
 	data, err := json.Marshal(orchestration)
 	if err != nil {
 		app.Logger.Error().Err(err).Interface("orchestration", orchestration).Msg("")
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(JSONMarshalingFail), err))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(JSONMarshalingFailErr), err))
 		return
 	}
 
@@ -277,20 +277,20 @@ func (app *App) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	// Perform API key authentication
 	apiKey := r.URL.Query().Get("apiKey")
-	project, err := app.Plane.GetProjectByApiKey(apiKey)
+	project, err := app.Engine.GetProjectByApiKey(apiKey)
 	if err != nil {
 		app.Logger.Error().Err(err).Msg("Invalid API key for WebSocket connection")
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unauthorized, err))
 		return
 	}
 
-	if !app.Plane.ServiceBelongsToProject(serviceID, project.ID) {
+	if !app.Engine.ServiceBelongsToProject(serviceID, project.ID) {
 		app.Logger.Error().Str("serviceID", serviceID).Msg("Service not found for the given project")
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unauthorized, err))
 		return
 	}
 
-	if err := app.Plane.WebSocketManager.melody.HandleRequest(w, r); err != nil {
+	if err := app.Engine.WebSocketManager.melody.HandleRequest(w, r); err != nil {
 		app.Logger.Error().Str("serviceID", serviceID).Msg("Failed to handle request using the WebSocket")
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
 		return
@@ -299,15 +299,15 @@ func (app *App) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 func (app *App) CreateAdditionalApiKey(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Context().Value(apiKeyContextKey).(string)
-	project, err := app.Plane.GetProjectByApiKey(apiKey)
+	project, err := app.Engine.GetProjectByApiKey(apiKey)
 	if err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
 		return
 	}
 
-	newApiKey := app.Plane.GenerateAPIKey()
-	if err := app.Plane.AddProjectAPIKey(project.ID, newApiKey); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(ProjectAPIKeyAdditionFailed), err))
+	newApiKey := app.Engine.GenerateAPIKey()
+	if err := app.Engine.AddProjectAPIKey(project.ID, newApiKey); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(ProjectAPIKeyAdditionFailedErr), err))
 		return
 	}
 
@@ -322,7 +322,7 @@ func (app *App) CreateAdditionalApiKey(w http.ResponseWriter, r *http.Request) {
 
 func (app *App) AddWebhook(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Context().Value(apiKeyContextKey).(string)
-	project, err := app.Plane.GetProjectByApiKey(apiKey)
+	project, err := app.Engine.GetProjectByApiKey(apiKey)
 	if err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
 		return
@@ -332,7 +332,7 @@ func (app *App) AddWebhook(w http.ResponseWriter, r *http.Request) {
 		Url string `json:"url"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&webhook); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFail), err))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFailErr), err))
 		return
 	}
 
@@ -341,8 +341,8 @@ func (app *App) AddWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := app.Plane.AddProjectWebhook(project.ID, webhook.Url); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(ProjectWebhookAdditionFailed), err))
+	if err := app.Engine.AddProjectWebhook(project.ID, webhook.Url); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(ProjectWebhookAdditionFailedErr), err))
 		return
 	}
 
@@ -358,13 +358,13 @@ func (app *App) AddWebhook(w http.ResponseWriter, r *http.Request) {
 
 func (app *App) ListOrchestrationsHandler(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Context().Value(apiKeyContextKey).(string)
-	project, err := app.Plane.GetProjectByApiKey(apiKey)
+	project, err := app.Engine.GetProjectByApiKey(apiKey)
 	if err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
 		return
 	}
 
-	orchestrationList := app.Plane.GetOrchestrationList(project.ID)
+	orchestrationList := app.Engine.GetOrchestrationList(project.ID)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -377,7 +377,7 @@ func (app *App) ListOrchestrationsHandler(w http.ResponseWriter, r *http.Request
 func (app *App) OrchestrationInspectionHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	apiKey := r.Context().Value(apiKeyContextKey).(string)
-	project, err := app.Plane.GetProjectByApiKey(apiKey)
+	project, err := app.Engine.GetProjectByApiKey(apiKey)
 	if err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
 		return
@@ -385,12 +385,12 @@ func (app *App) OrchestrationInspectionHandler(w http.ResponseWriter, r *http.Re
 
 	orchestrationID := vars["id"]
 
-	if !app.Plane.OrchestrationBelongsToProject(orchestrationID, project.ID) {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.NotExist, errs.Code(UnknownOrchestration), "unknown orchestration: "+orchestrationID))
+	if !app.Engine.OrchestrationBelongsToProject(orchestrationID, project.ID) {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.NotExist, errs.Code(UnknownOrchestrationErr), "unknown orchestration: "+orchestrationID))
 		return
 	}
 
-	inspection, err := app.Plane.InspectOrchestration(orchestrationID)
+	inspection, err := app.Engine.InspectOrchestration(orchestrationID)
 	if err != nil {
 		app.Logger.
 			Error().
@@ -420,7 +420,7 @@ func (app *App) healthHandler(w http.ResponseWriter, _ *http.Request) {
 // ApplyGrounding apply new domain grounding spec to a project
 func (app *App) ApplyGrounding(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Context().Value(apiKeyContextKey).(string)
-	project, err := app.Plane.GetProjectByApiKey(apiKey)
+	project, err := app.Engine.GetProjectByApiKey(apiKey)
 	if err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
 		return
@@ -430,13 +430,13 @@ func (app *App) ApplyGrounding(w http.ResponseWriter, r *http.Request) {
 
 	var grounding GroundingSpec
 	if err := json.NewDecoder(r.Body).Decode(&grounding); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFail), err))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFailErr), err))
 		return
 	}
 
 	grounding.ProjectID = project.ID
 
-	if err := app.Plane.ApplyGroundingSpec(app.RootCtx, &grounding); err != nil {
+	if err := app.Engine.ApplyGroundingSpec(app.RootCtx, &grounding); err != nil {
 		var validErr ValidationError
 		if errors.As(err, &validErr) {
 			errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Parameter(validErr.Field()), validErr.Error()))
@@ -457,7 +457,7 @@ func (app *App) ApplyGrounding(w http.ResponseWriter, r *http.Request) {
 	app.Logger.Trace().Interface("Grounding", grounding).Msg("Successfully applied grounding spec")
 
 	if err := json.NewEncoder(w).Encode(grounding); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(JSONMarshalingFail), err))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(JSONMarshalingFailErr), err))
 		return
 	}
 }
@@ -465,18 +465,18 @@ func (app *App) ApplyGrounding(w http.ResponseWriter, r *http.Request) {
 // ListGrounding retrieves all domain grounding for a project
 func (app *App) ListGrounding(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Context().Value(apiKeyContextKey).(string)
-	project, err := app.Plane.GetProjectByApiKey(apiKey)
+	project, err := app.Engine.GetProjectByApiKey(apiKey)
 	if err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
 		return
 	}
 
-	groundings := app.Plane.GetGroundingSpecs(project.ID)
+	groundings := app.Engine.GetGroundingSpecs(project.ID)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(groundings); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Internal, errs.Code(JSONMarshalingFail), err))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Internal, errs.Code(JSONMarshalingFailErr), err))
 		return
 	}
 }
@@ -487,13 +487,13 @@ func (app *App) RemoveGrounding(w http.ResponseWriter, r *http.Request) {
 	name := vars["name"]
 
 	apiKey := r.Context().Value(apiKeyContextKey).(string)
-	project, err := app.Plane.GetProjectByApiKey(apiKey)
+	project, err := app.Engine.GetProjectByApiKey(apiKey)
 	if err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
 		return
 	}
 
-	if err := app.Plane.RemoveGroundingSpecByName(project.ID, name); err != nil {
+	if err := app.Engine.RemoveGroundingSpecByName(project.ID, name); err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
 		return
 	}
@@ -504,13 +504,13 @@ func (app *App) RemoveGrounding(w http.ResponseWriter, r *http.Request) {
 // RemoveAllGrounding removes domain grounding for a specific project
 func (app *App) RemoveAllGrounding(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Context().Value(apiKeyContextKey).(string)
-	project, err := app.Plane.GetProjectByApiKey(apiKey)
+	project, err := app.Engine.GetProjectByApiKey(apiKey)
 	if err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
 		return
 	}
 
-	if err := app.Plane.RemoveProjectGrounding(project.ID); err != nil {
+	if err := app.Engine.RemoveProjectGrounding(project.ID); err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
 		return
 	}

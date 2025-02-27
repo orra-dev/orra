@@ -36,7 +36,7 @@ const (
 	CompensationPartialLogType    = "compensation_partial"
 	CompensationFailureLogType    = "compensation_failure"
 	CompensationExpiredLogType    = "compensation_expired"
-	VersionHeader                 = "X-Orra-CP-Version"
+	VersionHeader                 = "X-Orra-PlaneEngine-Version"
 	PauseExecutionCode            = "PAUSE_EXECUTION"
 	LLMOpenAIProvider             = "openai"
 	LLMGroqProvider               = "groq"
@@ -46,14 +46,14 @@ const (
 )
 
 const (
-	JSONMarshalingFail           = "Orra:JSONMarshalingFail"
-	ProjectRegistrationFailed    = "Orra:ProjectRegistrationFailed"
-	ProjectAPIKeyAdditionFailed  = "Orra:ProjectAPIKeyAdditionFailed"
-	ProjectWebhookAdditionFailed = "Orra:ProjectWebhookAdditionFailed"
-	UnknownOrchestration         = "Orra:UnknownOrchestration"
-	ActionNotActionable          = "Orra:ActionNotActionable"
-	ActionCannotExecute          = "Orra:ActionCannotExecute"
-	ControlPlaneShuttingDown     = "Orra:ControlPlaneShuttingDown"
+	JSONMarshalingFailErr           = "Orra:JSONMarshalingFail"
+	ProjectRegistrationFailedErr    = "Orra:ProjectRegistrationFailed"
+	ProjectAPIKeyAdditionFailedErr  = "Orra:ProjectAPIKeyAdditionFailed"
+	ProjectWebhookAdditionFailedErr = "Orra:ProjectWebhookAdditionFailed"
+	UnknownOrchestrationErr         = "Orra:UnknownOrchestration"
+	ActionNotActionableErr          = "Orra:ActionNotActionable"
+	ActionCannotExecuteErr          = "Orra:ActionCannotExecute"
+	PlanEngineShuttingDownErr       = "Orra:PlanEngineShuttingDown"
 )
 
 var (
