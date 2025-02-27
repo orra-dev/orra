@@ -46,14 +46,14 @@ const (
 )
 
 const (
-	JSONMarshalingFailErr           = "Orra:JSONMarshalingFail"
-	ProjectRegistrationFailedErr    = "Orra:ProjectRegistrationFailed"
-	ProjectAPIKeyAdditionFailedErr  = "Orra:ProjectAPIKeyAdditionFailed"
-	ProjectWebhookAdditionFailedErr = "Orra:ProjectWebhookAdditionFailed"
-	UnknownOrchestrationErr         = "Orra:UnknownOrchestration"
-	ActionNotActionableErr          = "Orra:ActionNotActionable"
-	ActionCannotExecuteErr          = "Orra:ActionCannotExecute"
-	PlanEngineShuttingDownErr       = "Orra:PlanEngineShuttingDown"
+	JSONMarshalingFailErrCode           = "Orra:JSONMarshalingFail"
+	ProjectRegistrationFailedErrCode    = "Orra:ProjectRegistrationFailed"
+	ProjectAPIKeyAdditionFailedErrCode  = "Orra:ProjectAPIKeyAdditionFailed"
+	ProjectWebhookAdditionFailedErrCode = "Orra:ProjectWebhookAdditionFailed"
+	UnknownOrchestrationErrCode         = "Orra:UnknownOrchestration"
+	ActionNotActionableErrCode          = "Orra:ActionNotActionable"
+	ActionCannotExecuteErrCode          = "Orra:ActionCannotExecute"
+	PlanEngineShuttingDownErrCode       = "Orra:PlanEngineShuttingDown"
 )
 
 var (

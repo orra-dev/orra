@@ -162,7 +162,7 @@ func (app *App) gracefulShutdown(srv *http.Server, ctx context.Context) {
 func (app *App) RegisterProject(w http.ResponseWriter, r *http.Request) {
 	var project Project
 	if err := json.NewDecoder(r.Body).Decode(&project); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFailErr), err))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFailErrCode), err))
 		return
 	}
 
@@ -170,13 +170,13 @@ func (app *App) RegisterProject(w http.ResponseWriter, r *http.Request) {
 	project.APIKey = app.Engine.GenerateAPIKey()
 
 	if err := app.Engine.AddProject(&project); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(ProjectRegistrationFailedErr), err))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(ProjectRegistrationFailedErrCode), err))
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(project); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(JSONMarshalingFailErr), err))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(JSONMarshalingFailErrCode), err))
 		return
 	}
 }
@@ -191,7 +191,7 @@ func (app *App) RegisterServiceOrAgent(w http.ResponseWriter, r *http.Request, s
 
 	var service ServiceInfo
 	if err := json.NewDecoder(r.Body).Decode(&service); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFailErr), err))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFailErrCode), err))
 		return
 	}
 
@@ -233,7 +233,7 @@ func (app *App) OrchestrationsHandler(w http.ResponseWriter, r *http.Request) {
 
 	var orchestration Orchestration
 	if err := json.NewDecoder(r.Body).Decode(&orchestration); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFailErr), err))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFailErrCode), err))
 		return
 	}
 
@@ -247,9 +247,9 @@ func (app *App) OrchestrationsHandler(w http.ResponseWriter, r *http.Request) {
 			Msgf("Action cannot be executed")
 
 		if orchestration.Status == NotActionable {
-			errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(ActionNotActionableErr), err))
+			errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(ActionNotActionableErrCode), err))
 		} else {
-			errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(ActionCannotExecuteErr), err))
+			errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(ActionCannotExecuteErrCode), err))
 		}
 		return
 	}
@@ -261,7 +261,7 @@ func (app *App) OrchestrationsHandler(w http.ResponseWriter, r *http.Request) {
 	data, err := json.Marshal(orchestration)
 	if err != nil {
 		app.Logger.Error().Err(err).Interface("orchestration", orchestration).Msg("")
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(JSONMarshalingFailErr), err))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(JSONMarshalingFailErrCode), err))
 		return
 	}
 
@@ -307,7 +307,7 @@ func (app *App) CreateAdditionalApiKey(w http.ResponseWriter, r *http.Request) {
 
 	newApiKey := app.Engine.GenerateAPIKey()
 	if err := app.Engine.AddProjectAPIKey(project.ID, newApiKey); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(ProjectAPIKeyAdditionFailedErr), err))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(ProjectAPIKeyAdditionFailedErrCode), err))
 		return
 	}
 
@@ -332,7 +332,7 @@ func (app *App) AddWebhook(w http.ResponseWriter, r *http.Request) {
 		Url string `json:"url"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&webhook); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFailErr), err))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFailErrCode), err))
 		return
 	}
 
@@ -342,7 +342,7 @@ func (app *App) AddWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := app.Engine.AddProjectWebhook(project.ID, webhook.Url); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(ProjectWebhookAdditionFailedErr), err))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(ProjectWebhookAdditionFailedErrCode), err))
 		return
 	}
 
@@ -386,7 +386,7 @@ func (app *App) OrchestrationInspectionHandler(w http.ResponseWriter, r *http.Re
 	orchestrationID := vars["id"]
 
 	if !app.Engine.OrchestrationBelongsToProject(orchestrationID, project.ID) {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.NotExist, errs.Code(UnknownOrchestrationErr), "unknown orchestration: "+orchestrationID))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.NotExist, errs.Code(UnknownOrchestrationErrCode), "unknown orchestration: "+orchestrationID))
 		return
 	}
 
@@ -430,7 +430,7 @@ func (app *App) ApplyGrounding(w http.ResponseWriter, r *http.Request) {
 
 	var grounding GroundingSpec
 	if err := json.NewDecoder(r.Body).Decode(&grounding); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFailErr), err))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFailErrCode), err))
 		return
 	}
 
@@ -457,7 +457,7 @@ func (app *App) ApplyGrounding(w http.ResponseWriter, r *http.Request) {
 	app.Logger.Trace().Interface("Grounding", grounding).Msg("Successfully applied grounding spec")
 
 	if err := json.NewEncoder(w).Encode(grounding); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(JSONMarshalingFailErr), err))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, errs.Code(JSONMarshalingFailErrCode), err))
 		return
 	}
 }
@@ -476,7 +476,7 @@ func (app *App) ListGrounding(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(groundings); err != nil {
-		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Internal, errs.Code(JSONMarshalingFailErr), err))
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Internal, errs.Code(JSONMarshalingFailErrCode), err))
 		return
 	}
 }

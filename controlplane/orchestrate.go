@@ -398,9 +398,9 @@ func (p *PlanEngine) CancelAnyActiveOrchestrations() error {
 	}
 
 	var errs []error
-	reason, _ := json.Marshal(PlanEngineShuttingDownErr)
+	reason, _ := json.Marshal(PlanEngineShuttingDownErrCode)
 	for _, o := range candidates {
-		p.LogManager.MarkOrchestration(o.ID, Cancelled, []byte(PlanEngineShuttingDownErr))
+		p.LogManager.MarkOrchestration(o.ID, Cancelled, []byte(PlanEngineShuttingDownErrCode))
 
 		if err := p.CancelOrchestration(o.ID, reason); err != nil {
 			errs = append(errs, err)
