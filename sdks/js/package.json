@@ -1,8 +1,8 @@
 {
   "name": "@orra.dev/sdk",
-  "version": "0.2.0-manta-ray",
+  "version": "0.2.1",
   "type": "module",
-  "description": "JS SDK for Orra - Build reliable AI applications that handle complex service interactions. Automatic error recovery and state management. Requires Orra control plane",
+  "description": "JS SDK for Orra - Build reliable multi-agent applications that handle complex real-world interactions.",
   "main": "./dist/index.js",
   "publishConfig": {
     "access": "public"
@@ -18,7 +18,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ezodude/orra.git"
+    "url": "git+https://github.com/orra-dev/orra.git"
   },
   "keywords": [
     "orra",
