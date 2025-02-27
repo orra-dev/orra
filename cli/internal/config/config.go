@@ -27,11 +27,11 @@ type Config struct {
 }
 
 const (
-	defaultControlPlaneServer = "http://localhost:8005"
-	defaultConfigDir          = ".orra"
-	defaultConfigFile         = "config.json"
-	dirPerm                   = 0755 // rwxr-xr-x
-	filePerm                  = 0666
+	defaultPlanEngineServer = "http://localhost:8005"
+	defaultConfigDir        = ".orra"
+	defaultConfigFile       = "config.json"
+	dirPerm                 = 0755 // rwxr-xr-x
+	filePerm                = 0666
 )
 
 func getDefaultConfigPath() (string, error) {
@@ -99,7 +99,7 @@ func GetProject(config *Config, projectName string) (*ProjectConfig, string, err
 	return nil, "", fmt.Errorf("current project %s not found", config.CurrentProject)
 }
 
-func SaveNewProject(configPath, projectName, projectID, cliAPIKey, serverAddr string) error {
+func AddNewProject(configPath, projectName, projectID, cliAPIKey, serverAddr string) error {
 	if configPath == "" {
 		var err error
 		configPath, err = getDefaultConfigPath()
@@ -114,7 +114,7 @@ func SaveNewProject(configPath, projectName, projectID, cliAPIKey, serverAddr st
 	}
 
 	if serverAddr == "" {
-		serverAddr = defaultControlPlaneServer
+		serverAddr = defaultPlanEngineServer
 	}
 
 	config.Projects[projectName] = ProjectConfig{

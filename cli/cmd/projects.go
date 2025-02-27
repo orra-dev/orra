@@ -44,7 +44,7 @@ func newProjectCreateCmd(opts *CliOpts) *cobra.Command {
 			}
 
 			if serverAddr == "" {
-				serverAddr = DefaultControlPlaneServerAddr
+				serverAddr = DefaultPlanEngineServerAddr
 			}
 
 			if _, exists := opts.Config.Projects[projectName]; exists {
@@ -61,7 +61,7 @@ func newProjectCreateCmd(opts *CliOpts) *cobra.Command {
 				return fmt.Errorf("failed to add project - %w", err)
 			}
 
-			if err := config.SaveNewProject(opts.ConfigPath, projectName, project.ID, project.CliAPIKey, serverAddr); err != nil {
+			if err := config.AddNewProject(opts.ConfigPath, projectName, project.ID, project.CliAPIKey, serverAddr); err != nil {
 				return fmt.Errorf("failed to save new project config: %w", err)
 			}
 
