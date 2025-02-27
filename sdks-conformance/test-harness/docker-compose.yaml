@@ -3,7 +3,7 @@ services:
     image: orra-control-plane-sdk-valid
     container_name: orra-cp-sdk-valid
     build:
-      context: ../../controlplane
+      context: ../../planengine
       dockerfile: Dockerfile
       target: final
     environment:
