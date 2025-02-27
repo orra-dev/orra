@@ -30,8 +30,8 @@ func newConfigCmd(opts *CliOpts) *cobra.Command {
 func newResetConfigCmd(opts *CliOpts) *cobra.Command {
 	return &cobra.Command{
 		Use:   "reset",
-		Short: "Reset existing config",
-		Long:  "Reset config after control plane restart",
+		Short: "Reset existing orra config",
+		Long:  "Hard reset of all orra config",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := config.ResetConfig(opts.ConfigPath); err != nil {
 				return fmt.Errorf("failed to save config: %w", err)

@@ -30,7 +30,7 @@ type Webhook struct {
 	Url string `json:"url"`
 }
 
-// Client manages communication with the control plane API
+// Client manages communication with the plan engine API
 type Client struct {
 	baseURL    string
 	apiKey     string
@@ -260,7 +260,7 @@ func (c *Client) GetTimeout() time.Duration {
 	return c.httpClient.Timeout
 }
 
-func (c *Client) CreateProject(ctx context.Context, name string) (*Project, error) {
+func (c *Client) AddProject(ctx context.Context, name string) (*Project, error) {
 	var project Project
 	var apiErr ErrorResponse
 
