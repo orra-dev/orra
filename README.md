@@ -82,11 +82,11 @@ Download the latest CLI binary for your platform from our [releases page](https:
 
 ```shell
 # macOS
-curl -L https://github.com/orra-dev/orra/releases/download/v0.2.1/orra-darwin-arm64 -o /usr/local/bin/orra
+curl -L https://github.com/orra-dev/orra/releases/download/v0.2.2/orra-darwin-arm64 -o /usr/local/bin/orra
 chmod +x /usr/local/bin/orra
 
 # Linux
-curl -L https://github.com/ezodude/orra/releases/download/v0.2.1/orra-linux-amd64 -o /usr/local/bin/orra
+curl -L https://github.com/ezodude/orra/releases/download/v0.2.2/orra-linux-amd64 -o /usr/local/bin/orra
 chmod +x /usr/local/bin/orra
 
 # Verify installation
