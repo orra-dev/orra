@@ -3,17 +3,17 @@ name: Release Management
 on:
   push:
     tags:
-      - 'cli-v*.*.*-*'      # e.g. cli-v0.1.0-narwhal
-      - 'cp-v*.*.*-*'       # e.g. cp-v0.1.0-narwhal
-      - 'sdk-v*.*.*-*'      # e.g. sdk-v0.1.0-narwhal
-      - 'v*.*.*-*'         # e.g. v0.1.0-narwhal
+      - 'cli-v*.*.*-*'      # e.g. cli-v0.1.0
+      - 'peng-v*.*.*-*'       # e.g. peng-v0.1.0
+      - 'sdk-v*.*.*-*'      # e.g. sdk-v0.1.0
+      - 'v*.*.*-*'         # e.g. v0.1.0
 
   workflow_dispatch: # This is crucial for manual runs
     inputs:
       test_tag:
-        description: 'Tag to simulate (e.g., v0.1.0-narwhal)'
+        description: 'Tag to simulate (e.g., v0.1.0)'
         required: true
-        default: 'v0.1.0-narwhal'
+        default: 'v0.1.0'
       debug:
         description: 'Enable debug logging'
         required: false
@@ -63,9 +63,9 @@ jobs:
             if [[ $TEST_TAG == cli-v* ]]; then
               echo "type=cli" >> $GITHUB_OUTPUT
               echo "version=${TEST_TAG#cli-v}" >> $GITHUB_OUTPUT
-            elif [[ $TEST_TAG == cp-v* ]]; then
+            elif [[ $TEST_TAG == peng-v* ]]; then
               echo "type=controlplane" >> $GITHUB_OUTPUT
-              echo "version=${TEST_TAG#cp-v}" >> $GITHUB_OUTPUT
+              echo "version=${TEST_TAG#peng-v}" >> $GITHUB_OUTPUT
             elif [[ $TEST_TAG == sdk-v* ]]; then
               echo "type=sdk" >> $GITHUB_OUTPUT
               echo "version=${TEST_TAG#sdk-v}" >> $GITHUB_OUTPUT
@@ -79,9 +79,9 @@ jobs:
             if [[ $TAG == cli-v* ]]; then
               echo "type=cli" >> $GITHUB_OUTPUT
               echo "version=${TAG#cli-v}" >> $GITHUB_OUTPUT
-            elif [[ $TAG == cp-v* ]]; then
+            elif [[ $TAG == peng-v* ]]; then
               echo "type=controlplane" >> $GITHUB_OUTPUT
-              echo "version=${TAG#cp-v}" >> $GITHUB_OUTPUT
+              echo "version=${TAG#peng-v}" >> $GITHUB_OUTPUT
             elif [[ $TAG == sdk-v* ]]; then
               echo "type=sdk" >> $GITHUB_OUTPUT
               echo "version=${TAG#sdk-v}" >> $GITHUB_OUTPUT
