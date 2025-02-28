@@ -189,7 +189,7 @@ service.onRevert(async (task, result) => {
 
 ### Persistence Configuration
 
-Orra maintains service/agent identity across restarts using persistence. This is crucial for:
+Orra's Plan Engine maintains service/agent identity across restarts using persistence. This is crucial for:
 - Maintaining service/agent history
 - Ensuring consistent service/agent identification
 - Supporting service/agent upgrades
