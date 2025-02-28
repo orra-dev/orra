@@ -233,6 +233,7 @@ The Plan Engine ensures:
 - [What is an Agent in Orra?](docs/what-is-agent.md)
 - [Orchestrating Actions with Orra](docs/actions.md)
 - [Domain Grounding Execution](docs/grounding.md)
+- [Execution Plan Caching](docs/plan-caching.md)
 - [Core Topics & Internals](docs/core.md)
 
 ## Self Hosting
