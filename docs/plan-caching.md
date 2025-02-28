@@ -36,6 +36,45 @@ The caching system includes several key features for efficient management:
 3. **Size-Limited Cache**: The cache has a maximum size per project to prevent memory issues.
 4. **Automatic Cleanup**: A background process periodically removes expired entries.
 
+## Sequence Diagram: Plan Caching Workflow
+
+The following diagram illustrates the key aspects of how plan caching works in Orra:
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Orra as Orra Orchestration
+    participant Cache as Plan Cache
+    participant LLM as LLM API
+    
+    Client->>Orra: Submit Action + Parameters
+    Note over Orra: Process Action & Parameters
+    
+    Orra->>Cache: Check for Similar Actions
+    
+    alt Cache Miss - First Time Action
+        Cache-->>Orra: No Similar Plan Found
+        Orra->>LLM: Generate Plan (API Call)
+        LLM-->>Orra: Execution Plan 
+        Orra->>Orra: Process & Validate Plan
+        Orra->>Cache: Store Plan with Action Signature
+        Orra->>Orra: Execute Plan
+    else Cache Hit - Similar Action
+        Cache-->>Orra: Return Cached Plan
+        Note over Orra: Adapt Plan with New Parameters
+        Orra->>Orra: Execute Adapted Plan
+    end
+    
+    Orra-->>Client: Return Orchestration Results
+    
+    rect rgb(240, 248, 255)
+    Note over Client,LLM: Benefits
+    Note over Client,LLM: ✓ Reduced API Costs
+    Note over Client,LLM: ✓ Faster Response Times
+    Note over Client,LLM: ✓ Consistent Behavior
+    end
+```
+
 ## Cost Savings with Plan Caching
 
 ### LLM Cost Reduction
