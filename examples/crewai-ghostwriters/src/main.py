@@ -5,7 +5,7 @@
 """
 
 import asyncio
-from orra import OrraAgent, Task, RevertSource, CompensationResult, CompensationStatus, PartialCompensation
+from orra import OrraAgent, Task, RevertSource, CompensationResult, CompensationStatus
 from pydantic import BaseModel
 
 from editor import kickoff_editing_crew
