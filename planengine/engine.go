@@ -39,8 +39,8 @@ func (e SpecVersionError) Error() string {
 	return fmt.Sprintf("%v", e.err)
 }
 
-func NewControlPlane() *ControlPlane {
-	plane := &ControlPlane{
+func NewPlanEngine() *PlanEngine {
+	plane := &PlanEngine{
 		projects:           make(map[string]*Project),
 		services:           make(map[string]map[string]*ServiceInfo),
 		orchestrationStore: make(map[string]*Orchestration),
@@ -50,7 +50,7 @@ func NewControlPlane() *ControlPlane {
 	return plane
 }
 
-func (p *ControlPlane) Initialise(
+func (p *PlanEngine) Initialise(
 	ctx context.Context,
 	pStorage ProjectStorage,
 	svcStorage ServiceStorage,
@@ -135,7 +135,7 @@ func (p *ControlPlane) Initialise(
 	}
 }
 
-func (p *ControlPlane) RegisterOrUpdateService(service *ServiceInfo) error {
+func (p *PlanEngine) RegisterOrUpdateService(service *ServiceInfo) error {
 	if errs := v.Validate(service.Validation()); len(errs) > 0 {
 		err := fmt.Errorf("service validation error: %w", errs)
 		p.Logger.Error().
@@ -194,10 +194,10 @@ func (p *ControlPlane) RegisterOrUpdateService(service *ServiceInfo) error {
 	return nil
 }
 
-func (p *ControlPlane) GetServiceByID(serviceID string) (*ServiceInfo, error) {
+func (p *PlanEngine) GetServiceByID(serviceID string) (*ServiceInfo, error) {
 	projectID, err := p.GetProjectIDForService(serviceID)
 	if err != nil {
-		p.Logger.Error().Err(err).Str("serviceID", serviceID).Msg("Failed to get project ID from control plane")
+		p.Logger.Error().Err(err).Str("serviceID", serviceID).Msg("Failed to get project ID from plan engine")
 		return nil, err
 	}
 
@@ -213,7 +213,7 @@ func (p *ControlPlane) GetServiceByID(serviceID string) (*ServiceInfo, error) {
 	return service, nil
 }
 
-func (p *ControlPlane) GetService(projectID string, serviceID string) (*ServiceInfo, error) {
+func (p *PlanEngine) GetService(projectID string, serviceID string) (*ServiceInfo, error) {
 	p.servicesMu.RLock()
 	defer p.servicesMu.RUnlock()
 
@@ -225,7 +225,7 @@ func (p *ControlPlane) GetService(projectID string, serviceID string) (*ServiceI
 	return svc, nil
 }
 
-func (p *ControlPlane) GetGroundingSpec(projectID string, name, version string) (*GroundingSpec, error) {
+func (p *PlanEngine) GetGroundingSpec(projectID string, name, version string) (*GroundingSpec, error) {
 	p.groundingsMu.RLock()
 	defer p.groundingsMu.RUnlock()
 
@@ -250,7 +250,7 @@ func (p *ControlPlane) GetGroundingSpec(projectID string, name, version string) 
 	return spec, nil
 }
 
-func (p *ControlPlane) GetServiceName(projectID string, serviceID string) (string, error) {
+func (p *PlanEngine) GetServiceName(projectID string, serviceID string) (string, error) {
 	service, err := p.GetService(projectID, serviceID)
 	if err != nil {
 		return "", err
@@ -259,7 +259,7 @@ func (p *ControlPlane) GetServiceName(projectID string, serviceID string) (strin
 }
 
 // ApplyGroundingSpec adds domain grounding to a project after validation
-func (p *ControlPlane) ApplyGroundingSpec(ctx context.Context, spec *GroundingSpec) error {
+func (p *PlanEngine) ApplyGroundingSpec(ctx context.Context, spec *GroundingSpec) error {
 	projectID := spec.ProjectID
 
 	start := time.Now()
@@ -319,7 +319,7 @@ func (p *ControlPlane) ApplyGroundingSpec(ctx context.Context, spec *GroundingSp
 }
 
 // GetGroundingSpecs retrieves all domain groundings for a project
-func (p *ControlPlane) GetGroundingSpecs(projectID string) []GroundingSpec {
+func (p *PlanEngine) GetGroundingSpecs(projectID string) []GroundingSpec {
 	p.groundingsMu.RLock()
 	defer p.groundingsMu.RUnlock()
 
@@ -354,7 +354,7 @@ func (p *ControlPlane) GetGroundingSpecs(projectID string) []GroundingSpec {
 }
 
 // RemoveGroundingSpecByName removes a specific domain grounding from a project by its name
-func (p *ControlPlane) RemoveGroundingSpecByName(projectID string, name string) error {
+func (p *PlanEngine) RemoveGroundingSpecByName(projectID string, name string) error {
 	// Remove from persistent storage first
 	if err := p.groundingStorage.RemoveGrounding(projectID, name); err != nil {
 		p.Logger.Error().
@@ -393,7 +393,7 @@ func (p *ControlPlane) RemoveGroundingSpecByName(projectID string, name string) 
 }
 
 // RemoveProjectGrounding removes all domain grounding for a project
-func (p *ControlPlane) RemoveProjectGrounding(projectID string) error {
+func (p *PlanEngine) RemoveProjectGrounding(projectID string) error {
 	// Remove from persistent storage first
 	if err := p.groundingStorage.RemoveProjectGroundings(projectID); err != nil {
 		p.Logger.Error().
@@ -420,7 +420,7 @@ func (p *ControlPlane) RemoveProjectGrounding(projectID string) error {
 	return nil
 }
 
-func (p *ControlPlane) GetProjectByApiKey(key string) (*Project, error) {
+func (p *PlanEngine) GetProjectByApiKey(key string) (*Project, error) {
 	// Try storage first
 	if project, err := p.pStorage.LoadProjectByAPIKey(key); err == nil {
 		return project, nil
@@ -436,7 +436,7 @@ func (p *ControlPlane) GetProjectByApiKey(key string) (*Project, error) {
 	return nil, fmt.Errorf("no project found with the given API key: %s", key)
 }
 
-func (p *ControlPlane) AddProject(project *Project) error {
+func (p *PlanEngine) AddProject(project *Project) error {
 	if err := p.pStorage.StoreProject(project); err != nil {
 		return fmt.Errorf("failed to store project: %w", err)
 	}
@@ -445,7 +445,7 @@ func (p *ControlPlane) AddProject(project *Project) error {
 	return nil
 }
 
-func (p *ControlPlane) AddProjectAPIKey(projectID string, apiKey string) error {
+func (p *PlanEngine) AddProjectAPIKey(projectID string, apiKey string) error {
 	if err := p.pStorage.AddProjectAPIKey(projectID, apiKey); err != nil {
 		return fmt.Errorf("failed to add API key: %w", err)
 	}
@@ -458,7 +458,7 @@ func (p *ControlPlane) AddProjectAPIKey(projectID string, apiKey string) error {
 	return nil
 }
 
-func (p *ControlPlane) AddProjectWebhook(projectID string, webhook string) error {
+func (p *PlanEngine) AddProjectWebhook(projectID string, webhook string) error {
 	if err := p.pStorage.AddProjectWebhook(projectID, webhook); err != nil {
 		return fmt.Errorf("failed to add webhook: %w", err)
 	}
@@ -480,7 +480,7 @@ func contains(entries []string, v string) bool {
 	return false
 }
 
-func (p *ControlPlane) ServiceBelongsToProject(svcID, projectID string) bool {
+func (p *PlanEngine) ServiceBelongsToProject(svcID, projectID string) bool {
 	p.servicesMu.RLock()
 	defer p.servicesMu.RUnlock()
 
@@ -492,7 +492,7 @@ func (p *ControlPlane) ServiceBelongsToProject(svcID, projectID string) bool {
 	return ok
 }
 
-func (p *ControlPlane) OrchestrationBelongsToProject(orchestrationID, projectID string) bool {
+func (p *PlanEngine) OrchestrationBelongsToProject(orchestrationID, projectID string) bool {
 	p.orchestrationStoreMu.RLock()
 	defer p.orchestrationStoreMu.RUnlock()
 
@@ -504,25 +504,25 @@ func (p *ControlPlane) OrchestrationBelongsToProject(orchestrationID, projectID 
 	return orchestration.ProjectID == projectID
 }
 
-func (p *ControlPlane) GenerateProjectKey() string {
+func (p *PlanEngine) GenerateProjectKey() string {
 	return fmt.Sprintf("p_%s", short.New())
 }
 
-func (p *ControlPlane) GenerateOrchestrationKey() string {
+func (p *PlanEngine) GenerateOrchestrationKey() string {
 	return fmt.Sprintf("o_%s", short.New())
 }
 
-func (p *ControlPlane) GenerateAPIKey() string {
+func (p *PlanEngine) GenerateAPIKey() string {
 	key := fmt.Sprintf("%s-%s", uuid.New(), uuid.New())
 	hexString := strings.ReplaceAll(key, "-", "")
 	return fmt.Sprintf("sk-orra-v1-%s", hexString)
 }
 
-func (p *ControlPlane) GenerateServiceKey() string {
+func (p *PlanEngine) GenerateServiceKey() string {
 	return fmt.Sprintf("s_%s", short.NewWithAlphabet("abcdefghijklmnopqrstuvwxyz"))
 }
 
-func (p *ControlPlane) GetProjectIDForService(serviceID string) (string, error) {
+func (p *PlanEngine) GetProjectIDForService(serviceID string) (string, error) {
 	p.servicesMu.RLock()
 	defer p.servicesMu.RUnlock()
 

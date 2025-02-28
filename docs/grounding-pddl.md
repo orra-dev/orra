@@ -59,17 +59,15 @@ No plan executes without passing both validations.
 ## Further Reading
 
 ### PDDL Foundations
-1. "PDDL - The Planning Domain Definition Language" (McDermott et al., 1998)
+1. [PDDL - The Planning Domain Definition Language](https://www.cs.cmu.edu/~mmv/planning/readings/98aips-PDDL.pdf) (McDermott et al., 1998)
     - Original PDDL specification
     - Formal semantics and validation guarantees
 
-2. "PDDL2.1: An Extension to PDDL for Expressing Temporal Planning Domains" (Fox & Long, 2003)
+2. [PDDL2.1: An Extension to PDDL for Expressing Temporal Planning Domains](https://arxiv.org/abs/1106.4561) (Fox & Long, 2003)
     - Temporal planning extensions
     - Relevant for distributed execution
 
 ### LLM Planning
-1. "Generating consistent PDDL domains with Large Language Models" (Smirnov et al., 2024)
-
-2. "NL2Plan: Robust LLM-Driven Planning from Minimal Text Descriptions" (Gestrin et al., 2024)
-
-3. "Generalized Planning in PDDL Domains with Pretrained Large Language Models" (Silver et al., 2023)
+1. [Generating consistent PDDL domains with Large Language Models](https://arxiv.org/abs/2404.07751) (Smirnov et al., 2024)
+2. [NL2Plan: Robust LLM-Driven Planning from Minimal Text Descriptions](https://arxiv.org/abs/2405.04215) (Gestrin et al., 2024)
+3. [Generalized Planning in PDDL Domains with Pretrained Large Language Models](https://arxiv.org/abs/2305.11014) (Silver et al., 2023)

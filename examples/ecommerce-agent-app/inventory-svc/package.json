@@ -1,8 +1,8 @@
 {
-  "name": "inventory-svc",
+  "name": "inventory-manager",
   "version": "0.0.1",
   "type": "module",
-  "description": "An example of an inventory service that retrieves and manages sales products.",
+  "description": "An example of an inventory manager tool as a service that retrieves and manages sales products.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -12,7 +12,7 @@
   "author": "Orra Team",
   "license": "MPL2.0",
   "dependencies": {
-    "@orra.dev/sdk": "0.2.0-manta-ray",
+    "@orra.dev/sdk": "0.2.1",
     "dotenv": "^16.4.5",
     "express": "^4.21.1"
   }

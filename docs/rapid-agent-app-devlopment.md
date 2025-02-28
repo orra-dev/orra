@@ -38,7 +38,7 @@ formatter = OrraService(
 )
 ```
 
-Behind the scenes, Orra:
+Behind the scenes, Orra's Plan Engine:
 - Dynamically figures out how agents should interact
 - Handles all messaging and retries
 - Manages state and failure recovery
@@ -174,7 +174,7 @@ orra verify run 'Research and write an article about AI trends' \
   --data style:'technical'
 ```
 
-Orra automatically:
+Orra's Plan Engine automatically:
 - Determines the optimal execution flow
 - Handles all agent and services communication
 - Provides detailed logs of agent and services input, outputs 
@@ -204,9 +204,9 @@ Orra automatically:
 
 ## Going to Production
 
-When ready, split into separate services:
+When ready, split into separate components:
 ```plaintext
-services/
+ai-app/
   ├── researcher/
   │   └── main.py  # Just researcher code
   ├── writer/

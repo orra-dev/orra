@@ -1,6 +1,6 @@
 # Orra JS SDK Documentation
 
-The JS SDK for Orra lets you transform your AI agents and services into reliable, production-ready Node.js components.
+The JS SDK for Orra lets you transform your AI agents, tools as services and services into reliable, production-ready Node.js components.
 
 ## Installation
 
@@ -14,56 +14,56 @@ npm install -S @orra.dev/sdk
 
 ## Quick Integration Example
 
-The Orra SDK is designed to wrap your existing service logic with minimal changes. Here's a simple example showing how to integrate an existing chat service:
+The Orra SDK is designed to wrap your existing logic with minimal changes. Here's a simple example showing how to integrate an existing customer chat service:
 
 ```javascript
 import { initService } from '@orra.dev/sdk';
 import { myService } from './existing-service';  // Your existing logic
 
 // Initialize the Orra client
-const customerSvc = initService({
-  name: 'customer-chat-service',
-  orraUrl: process.env.ORRA_URL,
-  orraKey: process.env.ORRA_API_KEY
+const customerChatSvc = initService({
+	name: 'customer-chat-service',
+	orraUrl: process.env.ORRA_URL,
+	orraKey: process.env.ORRA_API_KEY
 });
 
 // Register your service
-await customerSvc.register({
-  description: 'Handles customer chat interactions',
-  schema: {
-    input: {
-      type: 'object',
-      properties: {
-        customerId: { type: 'string' },
-        message: { type: 'string' }
-      },
-      required: ['customerId', 'message']
-    },
-    output: {
-      type: 'object',
-      properties: {
-        response: { type: 'string' }
-      }
-    }
-  }
+await customerChatSvc.register({
+	description: 'Handles customer chat interactions',
+	schema: {
+		input: {
+			type: 'object',
+			properties: {
+				customerId: { type: 'string' },
+				message: { type: 'string' }
+			},
+			required: [ 'customerId', 'message' ]
+		},
+		output: {
+			type: 'object',
+			properties: {
+				response: { type: 'string' }
+			}
+		}
+	}
 });
 
 // Wrap your existing business logic
-customerSvc.start(async (task) => {
-  try {
-    const { customerId, message } = task.input;
-    
-    // Use your existing service function
-    // Your function handles its own retries and error recovery
-    // and Orra reacts accordingly.
-    const response = await myService(customerId, message);
-    
-    return { response };
-  } catch (error) {
-    // Once you determine the task should fail, throw the error.
-    // Orra will handle failure propagation to the control plane.
-    throw error;
-  }
+customerChatSvc.start(async (task) => {
+	try {
+		const { customerId, message } = task.input;
+		
+		// Use your existing service function
+		// Your function handles its own retries and error recovery
+		// and Orra reacts accordingly.
+		const response = await myService(customerId, message);
+		
+		return { response };
+	} catch (error) {
+		// Once you determine the task should fail, throw the error.
+		// Orra will handle failure propagation to the control plane.
+		throw error;
+	}
 });
 ```
 
@@ -71,15 +71,15 @@ customerSvc.start(async (task) => {
 
 The Orra SDK follows patterns similar to serverless functions or job processors, making it familiar for AI Engineers. Your services become event-driven handlers that:
 
-1. Register capabilities with Orra (what they can do)
+1. Register capabilities with Orra's Plan Engine (what they can do)
 2. Process tasks when called (actual execution)
 3. Return results for orchestration
 
 ### Key Concepts
 
-- **Services vs Agents**: Both use the same SDK but are registered differently
-    - Services: Stateless, function-like handlers (e.g., data processors, notification services, etc...)
-    - Agents: Stateless or stateful, sometimes long-running processes, see [What is an AI Agent](../../README.md#what-is-an-ai-agent)
+- **Services and Tasks as Services vs Agents**: Both use the same SDK but are registered differently
+    - Services and Tasks as Services: Stateless, function-like handlers (e.g., data processors, notification services, etc...)
+    - Agents: Stateless or stateful, sometimes long-running processes, see [What is an AI Agent](../what-is-agent.md)
 
 - **Schema Definition**: Similar to OpenAPI/GraphQL schemas, defines inputs/outputs
 - **Handler Functions**: Like serverless functions, process single tasks
@@ -189,7 +189,7 @@ service.onRevert(async (task, result) => {
 
 ### Persistence Configuration
 
-Orra maintains service/agent identity across restarts using persistence. This is crucial for:
+Orra's Plan Engine maintains service/agent identity across restarts using persistence. This is crucial for:
 - Maintaining service/agent history
 - Ensuring consistent service/agent identification
 - Supporting service/agent upgrades
@@ -301,6 +301,13 @@ imageAgent.start(async (task) => {
     // After your error handling is complete, let Orra know about the failure
     throw error;
   }
+});
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+	console.log('SIGTERM received, shutting down gracefully');
+	imageAgent.shutdown();
+	process.exit(0);
 });
 ```
 

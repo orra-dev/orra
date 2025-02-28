@@ -187,7 +187,7 @@ func (w *CompensationWorker) tryExecuteCompensation(ctx context.Context, candida
 		Str("Service", service.Name).
 		Logger()
 
-	serviceHealthy := w.LogManager.controlPlane.WebSocketManager.IsServiceHealthy(service.ID)
+	serviceHealthy := w.LogManager.planEngine.WebSocketManager.IsServiceHealthy(service.ID)
 	if !serviceHealthy {
 		logger.Warn().Msg("Attempt compensation despite unhealthy service")
 	}
@@ -247,7 +247,7 @@ func (w *CompensationWorker) tryExecuteCompensation(ctx context.Context, candida
 		return nil, err
 	}
 
-	if err := w.LogManager.controlPlane.WebSocketManager.SendTask(service.ID, task); err != nil {
+	if err := w.LogManager.planEngine.WebSocketManager.SendTask(service.ID, task); err != nil {
 		logger.Error().Err(err).Msg("Failed to send compensation task")
 		return nil, err
 	}

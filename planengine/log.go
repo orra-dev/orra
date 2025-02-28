@@ -19,13 +19,13 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func NewLogManager(_ context.Context, storage LogStore, retention time.Duration, controlPlane *ControlPlane) (*LogManager, error) {
+func NewLogManager(_ context.Context, storage LogStore, retention time.Duration, engine *PlanEngine) (*LogManager, error) {
 	lm := &LogManager{
 		logs:           make(map[string]*Log),
 		orchestrations: make(map[string]*OrchestrationState),
 		retention:      retention,
 		cleanupTicker:  time.NewTicker(5 * time.Minute),
-		controlPlane:   controlPlane,
+		planEngine:     engine,
 		storage:        storage,
 	}
 
@@ -383,7 +383,7 @@ func (lm *LogManager) FinalizeOrchestration(
 	reason, result json.RawMessage,
 	skipWebhook bool,
 ) error {
-	if err := lm.controlPlane.FinalizeOrchestration(orchestrationID, status, reason, []json.RawMessage{result}, skipWebhook); err != nil {
+	if err := lm.planEngine.FinalizeOrchestration(orchestrationID, status, reason, []json.RawMessage{result}, skipWebhook); err != nil {
 		return fmt.Errorf("failed to finalize orchestration: %w", err)
 	}
 
@@ -400,7 +400,7 @@ func (lm *LogManager) FinalizeOrchestration(
 			continue
 		}
 
-		svc, err := lm.controlPlane.GetServiceByID(entry.ProducerID)
+		svc, err := lm.planEngine.GetServiceByID(entry.ProducerID)
 		if err != nil {
 			return err
 		}

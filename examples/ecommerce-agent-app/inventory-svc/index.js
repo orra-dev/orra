@@ -16,8 +16,8 @@ const port = process.env.PORT || 3300;
 const shouldDemoRevertFail = process?.env?.DEMO_REVERT_FAIL;
 
 // Initialize the Orra client with environment-aware persistence
-const invSvc = initService({
-	name: 'inventory-service',
+const invToolAsSvc = initService({
+	name: 'inventory-manager',
 	orraUrl: process.env.ORRA_URL,
 	orraKey: process.env.ORRA_API_KEY,
 	persistenceOpts: getPersistenceConfig()
@@ -30,15 +30,15 @@ app.get('/health', (req, res) => {
 
 async function startService() {
 	try {
-		// Register the inventory service with Orra
-		await invSvc.register({
-			description: 'An inventory service that looks up and manages ecommerce products availability. ' +
+		// Register the inventory manager tool as a service with Orra
+		await invToolAsSvc.register({
+			description: 'An inventory manager that looks up and manages ecommerce products availability. ' +
 				'Including, updating inventory in real-time as orders are placed',
 			revertible: true,
 			schema
 		});
 		
-		invSvc.onRevert(async (task, result) => {
+		invToolAsSvc.onRevert(async (task, result) => {
 			if(shouldDemoRevertFail === 'true') {
 				console.log('Configured to demonstrate revert failure.');
 				throw Error('Failed to revert inventory product hold from: ' + result?.hold + ' to: ' + false);
@@ -47,7 +47,7 @@ async function startService() {
 			console.log('Reverting inventory product hold from:', result?.hold, 'to:', false);
 		})
 		
-		invSvc.start(async (task) => {
+		invToolAsSvc.start(async (task) => {
 			console.log('Processing inventory product for task:', task.id);
 			return {
 				productId: '697d1744-88dd-4139-beeb-b307dfb1a2f9',
@@ -58,14 +58,14 @@ async function startService() {
 			};
 		});
 		
-		console.log('Inventory Service started successfully');
+		console.log('Inventory Manager started successfully');
 	} catch (error) {
-		console.error('Failed to start Inventory Service:', error);
+		console.error('Failed to start Inventory Manager:', error);
 		process.exit(1);
 	}
 }
 
-// Start the Express server and the service
+// Start the Express server and the inventory manager
 app.listen(port, () => {
 	console.log(`Server listening on port ${port}`);
 	startService().catch(console.error);
@@ -74,7 +74,7 @@ app.listen(port, () => {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
 	console.log('SIGTERM received, shutting down gracefully');
-	invSvc.shutdown();
+	invToolAsSvc.shutdown();
 	process.exit(0);
 });
 

@@ -1,6 +1,6 @@
 # Orra Python SDK Documentation
 
-The Python SDK for Orra lets you transform your AI agents and services into reliable, production-ready components.
+The Python SDK for Orra lets you transform your AI agents, tools as services and services into reliable, production-ready components.
 
 ## Installation
 
@@ -16,6 +16,7 @@ pip install orra-sdk
 The Orra SDK is designed to wrap your existing service logic with minimal changes. Here's a simple example showing how to integrate an existing chat service:
 
 ```python
+import asyncio
 from orra import OrraService, Task
 from pydantic import BaseModel
 from existing_service import my_service  # Your existing logic
@@ -28,48 +29,55 @@ class ChatInput(BaseModel):
 class ChatOutput(BaseModel):
     response: str
 
-# Initialize the Orra service
-service = OrraService(
-    name="customer-chat-service",
-    description="Handles customer chat interactions",
-    url="https://api.orra.dev",
-    api_key="sk-orra-..."
-)
+async def main():
+    # Initialize the Orra service
+    cust_chat_svc = OrraService(
+        name="customer-chat-service",
+        description="Handles customer chat interactions",
+        url="https://api.orra.dev",
+        api_key="sk-orra-..."
+    )
 
-# Register your handler
-@service.handler()
-async def handle_chat(task: Task[ChatInput]) -> ChatOutput:
+    # Register your handler
+    @cust_chat_svc.handler()
+    async def handle_chat(task: Task[ChatInput]) -> ChatOutput:
+        try:
+            # Use your existing service function
+            # Your function handles its own retries and error recovery
+            # and Orra reacts accordingly.
+            response = await my_service(task.input.customer_id, task.input.message)
+            return ChatOutput(response=response)
+        except Exception as e:
+            # Once you determine the task should fail, throw the error.
+            # Orra will handle failure propagation to the control plane.
+            raise
+    
+    await asyncio.gather(cust_chat_svc.start())
+
     try:
-        # Use your existing service function
-        # Your function handles its own retries and error recovery
-        # and Orra reacts accordingly.
-        response = await my_service(task.input.customer_id, task.input.message)
-        return ChatOutput(response=response)
-    except Exception as e:
-        # Once you determine the task should fail, throw the error.
-        # Orra will handle failure propagation to the control plane.
-        raise
+        await asyncio.get_running_loop().create_future()
+    except KeyboardInterrupt:
+        await asyncio.gather( cust_chat_svc.shutdown() )
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(service.start())
+    asyncio.run(main())
 ```
 
 ## Understanding the SDK
 
 The Orra SDK follows patterns similar to serverless functions or job processors, making it familiar for AI Engineers. Your services become event-driven handlers that:
 
-1. Register capabilities with Orra (what they can do)
+1. Register capabilities with Orra's Plan Engine (what they can do)
 2. Process tasks when called (actual execution)
 3. Return results for orchestration
 
 ### Key Concepts
 
-- **Services vs Agents**: Both use the same SDK but are registered differently
-    - Services: Stateless, function-like handlers (e.g., data processors, notification services, etc...)
-    - Agents: Stateless or stateful, sometimes long-running processes, see [What is an AI Agent](../../README.md#what-is-an-ai-agent)
+- **Services and Tasks as Services vs Agents**: Both use the same SDK but are registered differently
+    - Services and Tasks as Services: Stateless, function-like handlers (e.g., data processors, notification services, etc...)
+    - Agents: Stateless or stateful, sometimes long-running processes, see [What is an AI Agent](../what-is-agent.md)
 
-- **Schema Definition**: Leverages Pydantic models for type-safe schemas
+- **Schema Definition**: Similar to OpenAPI/GraphQL schemas, defines inputs/outputs
 - **Handler Functions**: Like serverless functions, process single tasks
 - **Health Monitoring**: Automatic health checking and reporting
 - **Service Identity**: Maintained across restarts and updates
@@ -181,7 +189,7 @@ async def revert_stuff(source: RevertSource[InputModel, OutputModel]) -> Compens
 
 ### Persistence Configuration
 
-Orra maintains service/agent identity across restarts using persistence. This is crucial for:
+Orra's Plan Engine maintains service/agent identity across restarts using persistence. This is crucial for:
 - Maintaining service/agent history
 - Ensuring consistent service/agent identification
 - Supporting service/agent upgrades
@@ -270,15 +278,16 @@ agent = OrraAgent(
     api_key="sk-orra-..."
 )
 
-@agent.handler()
-async def handle_analysis(task: Task[ImageInput]) -> ImageOutput:
-    try:
-        # Your function handles its own retries
-        result = await analyze_image(task.input.image_url)
-        return ImageOutput(**result)
-    except Exception as e:
-        # After your error handling is complete, let Orra know about the failure
-        raise
+async def main():
+    @agent.handler()
+    async def handle_analysis(task: Task[ImageInput]) -> ImageOutput:
+        try:
+            # Your function handles its own retries
+            result = await analyze_image(task.input.image_url)
+            return ImageOutput(**result)
+        except Exception as e:
+            # After your error handling is complete, let Orra know about the failure
+            raise
 ```
 
 ## Next Steps

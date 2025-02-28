@@ -47,12 +47,12 @@ func setupTestApp(t *testing.T) (*App, *Project, func()) {
 		assert.NoError(t, err)
 	}
 
-	plane := NewControlPlane()
+	plane := NewPlanEngine()
 	plane.Initialise(context.Background(), db, db, db, db, nil, nil, nil, &fakePddlValidator{}, nil, logger)
 
 	app := &App{
 		Router: mux.NewRouter(),
-		Plane:  plane,
+		Engine: plane,
 		Logger: logger,
 	}
 
@@ -63,7 +63,7 @@ func setupTestApp(t *testing.T) (*App, *Project, func()) {
 		ID:     "project-id",
 		APIKey: "project-api-key",
 	}
-	app.Plane.projects[project.ID] = project
+	app.Engine.projects[project.ID] = project
 
 	return app, project, dbCleanup
 }
@@ -123,7 +123,7 @@ func TestGroundingAPI(t *testing.T) {
 			t.Fatalf("Failed to decode actual: %v", err)
 		}
 
-		groundings := app.Plane.groundings[project.ID]
+		groundings := app.Engine.groundings[project.ID]
 		if len(groundings) != 1 {
 			t.Errorf("Expected the plane to have 1 domain expected, got %d", len(groundings))
 		}
@@ -170,7 +170,7 @@ func TestGroundingAPI(t *testing.T) {
 		}
 
 		// Verify expected was removed
-		specs := app.Plane.GetGroundingSpecs(project.ID)
+		specs := app.Engine.GetGroundingSpecs(project.ID)
 		if len(specs) != 0 {
 			t.Errorf("Expected 0 specs after deletion, got %d", len(specs))
 		}
@@ -187,7 +187,7 @@ func TestGroundingAPI(t *testing.T) {
 			t.Errorf("Expected status code %d, got %d", http.StatusNoContent, w.Code)
 		}
 
-		examples := app.Plane.GetGroundingSpecs(project.ID)
+		examples := app.Engine.GetGroundingSpecs(project.ID)
 		if len(examples) != 0 {
 			t.Errorf("Expected 0 examples after deletion, got %d", len(examples))
 		}
@@ -219,7 +219,7 @@ func TestGroundingAPIAuth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := app.Plane.ApplyGroundingSpec(context.Background(), example); err != nil {
+			if err := app.Engine.ApplyGroundingSpec(context.Background(), example); err != nil {
 				t.Fatalf("Failed to add example: %v", err)
 			}
 			req := httptest.NewRequest(http.MethodGet, "/groundings", nil)
@@ -234,7 +234,7 @@ func TestGroundingAPIAuth(t *testing.T) {
 				t.Errorf("Expected status code %d, got %d", tt.wantStatus, w.Code)
 			}
 
-			if err := app.Plane.RemoveProjectGrounding(project.ID); err != nil {
+			if err := app.Engine.RemoveProjectGrounding(project.ID); err != nil {
 				t.Fatalf("Failed to remove groundings: %v", err)
 			}
 		})

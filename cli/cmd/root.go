@@ -17,9 +17,9 @@ import (
 )
 
 const (
-	DefaultControlPlaneServerAddr = "http://localhost:8005"
-	CurrentMarker                 = "*"
-	ListMarker                    = "-"
+	DefaultPlanEngineServerAddr = "http://localhost:8005"
+	CurrentMarker               = "*"
+	ListMarker                  = "-"
 )
 
 type CliOpts struct {

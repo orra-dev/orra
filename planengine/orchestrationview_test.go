@@ -21,7 +21,7 @@ import (
 
 // TestState helps track and build test state
 type TestState struct {
-	plane           *ControlPlane
+	plane           *PlanEngine
 	orchestrationID string
 	baseTime        time.Time
 	attempts        int
@@ -44,8 +44,8 @@ func (ts *TestState) setupBase() func() {
 		_ = db.Close()
 		_ = os.RemoveAll(tmpDir)
 	}
-	// Create control plane
-	ts.plane = NewControlPlane()
+	// Create plan engine
+	ts.plane = NewPlanEngine()
 
 	// Register project
 	ts.plane.projects["p_test"] = &Project{

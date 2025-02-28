@@ -5,7 +5,6 @@ on:
     types: [opened, synchronize, reopened]
     branches:
       - main
-      - manta-ray
 
 jobs:
   test:
@@ -18,28 +17,28 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.21'
+        go-version: '1.22'
         check-latest: true
         cache: true
     
     - name: Install dependencies
       run: |
-        cd controlplane
+        cd planengine
         go mod download
         
     - name: Run tests
       run: |
-        cd controlplane
+        cd planengine
         make test
         
     - name: Run static analysis
       run: |
-        cd controlplane
+        cd planengine
         make vet
         
     - name: Check formatting
       run: |
-        cd controlplane
+        cd planengine
         make fmt
         if [ -n "$(git status --porcelain)" ]; then
           echo "Code is not properly formatted. Please run 'make fmt' locally and commit changes."
@@ -56,12 +55,12 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.21'
+        go-version: '1.22'
         cache: true
     
     - name: golangci-lint
       run: |
-        cd controlplane
+        cd planengine
         make lint
 
   build:
@@ -75,10 +74,10 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.21'
+        go-version: '1.22'
         cache: true
     
     - name: Build
       run: |
-        cd controlplane
+        cd planengine
         make build

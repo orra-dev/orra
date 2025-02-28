@@ -91,7 +91,7 @@ type taskLookupMaps struct {
 
 type task0Values map[string]interface{}
 
-func (p *ControlPlane) GetOrchestrationList(projectID string) OrchestrationListView {
+func (p *PlanEngine) GetOrchestrationList(projectID string) OrchestrationListView {
 	// Get orchestrations for this project
 	orchestrations := p.getProjectOrchestrations(projectID)
 
@@ -132,7 +132,7 @@ func (p *ControlPlane) GetOrchestrationList(projectID string) OrchestrationListV
 	}
 }
 
-func (p *ControlPlane) processCompensationSummary(entries []LogEntry, plan *ExecutionPlan) *CompensationSummary {
+func (p *PlanEngine) processCompensationSummary(entries []LogEntry, plan *ExecutionPlan) *CompensationSummary {
 	if plan == nil {
 		return nil
 	}
@@ -198,7 +198,7 @@ func (p *ControlPlane) processCompensationSummary(entries []LogEntry, plan *Exec
 	return summary
 }
 
-func (p *ControlPlane) getProjectOrchestrations(projectID string) []*Orchestration {
+func (p *PlanEngine) getProjectOrchestrations(projectID string) []*Orchestration {
 	p.orchestrationStoreMu.RLock()
 	defer p.orchestrationStoreMu.RUnlock()
 
@@ -218,7 +218,7 @@ func (p *ControlPlane) getProjectOrchestrations(projectID string) []*Orchestrati
 	return result
 }
 
-func (p *ControlPlane) InspectOrchestration(orchestrationID string) (*OrchestrationInspectResponse, error) {
+func (p *PlanEngine) InspectOrchestration(orchestrationID string) (*OrchestrationInspectResponse, error) {
 	// Get orchestration with appropriate locking
 	orchestration, err := p.getOrchestration(orchestrationID)
 	if err != nil {
@@ -288,7 +288,7 @@ func (p *ControlPlane) InspectOrchestration(orchestrationID string) (*Orchestrat
 	}, nil
 }
 
-func (p *ControlPlane) getOrchestration(orchestrationID string) (*Orchestration, error) {
+func (p *PlanEngine) getOrchestration(orchestrationID string) (*Orchestration, error) {
 	p.orchestrationStoreMu.RLock()
 	defer p.orchestrationStoreMu.RUnlock()
 
@@ -299,7 +299,7 @@ func (p *ControlPlane) getOrchestration(orchestrationID string) (*Orchestration,
 	return orchestration, nil
 }
 
-func (p *ControlPlane) buildLookupMaps(orchestrationID string, orchestration *Orchestration) (*taskLookupMaps, error) {
+func (p *PlanEngine) buildLookupMaps(orchestrationID string, orchestration *Orchestration) (*taskLookupMaps, error) {
 	// Get service names
 	serviceNames, err := p.getServiceNames(orchestration)
 	if err != nil {
@@ -322,7 +322,7 @@ func (p *ControlPlane) buildLookupMaps(orchestrationID string, orchestration *Or
 	}, nil
 }
 
-func (p *ControlPlane) getServiceNames(orchestration *Orchestration) (map[string]string, error) {
+func (p *PlanEngine) getServiceNames(orchestration *Orchestration) (map[string]string, error) {
 	serviceNames := make(map[string]string)
 	for _, task := range orchestration.Plan.Tasks {
 		if task.ID == "task0" {
@@ -335,7 +335,7 @@ func (p *ControlPlane) getServiceNames(orchestration *Orchestration) (map[string
 	return serviceNames, nil
 }
 
-func (p *ControlPlane) processLogEntries(log *Log) (map[string]json.RawMessage, map[string][]TaskStatusEvent) {
+func (p *PlanEngine) processLogEntries(log *Log) (map[string]json.RawMessage, map[string][]TaskStatusEvent) {
 	taskOutputs := make(map[string]json.RawMessage)
 	taskStatuses := make(map[string][]TaskStatusEvent)
 
@@ -402,7 +402,7 @@ func insertStatusEvent(events []TaskStatusEvent, event TaskStatusEvent, idx int)
 	)...)
 }
 
-func (p *ControlPlane) buildTaskResponses(orchestration *Orchestration, lookupMaps *taskLookupMaps) ([]TaskInspectResponse, error) {
+func (p *PlanEngine) buildTaskResponses(orchestration *Orchestration, lookupMaps *taskLookupMaps) ([]TaskInspectResponse, error) {
 	var tasks []TaskInspectResponse
 
 	for _, task := range orchestration.Plan.Tasks {
@@ -421,7 +421,7 @@ func (p *ControlPlane) buildTaskResponses(orchestration *Orchestration, lookupMa
 	return tasks, nil
 }
 
-func (p *ControlPlane) buildSingleTaskResponse(
+func (p *PlanEngine) buildSingleTaskResponse(
 	orchestration *Orchestration,
 	task *SubTask,
 	lookupMaps *taskLookupMaps,
@@ -515,7 +515,7 @@ func (p *ControlPlane) buildSingleTaskResponse(
 	return taskResp, nil
 }
 
-func (p *ControlPlane) processCompensationHistory(entries []LogEntry, taskID string) []CompensationStatusEvent {
+func (p *PlanEngine) processCompensationHistory(entries []LogEntry, taskID string) []CompensationStatusEvent {
 	var history []CompensationStatusEvent
 
 	for _, entry := range entries {

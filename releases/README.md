@@ -12,7 +12,7 @@ releases/
 │   └── versions/
 │       ├── 0.1.0.md
 │       └── 0.1.1.md
-├── controlplane/
+├── planengine/
 │   ├── CHANGELOG.md
 │   └── versions/
 │       └── 0.1.0.md
@@ -32,7 +32,7 @@ Orra supports both individual component releases and full releases:
 
 ### Individual Component Releases
 - CLI: Use tag format `cli-v*.*.*` (e.g., `cli-v0.1.0`)
-- Control Plane: Use tag format `cp-v*.*.*` (e.g., `cp-v0.1.0`)
+- Plan Engine: Use tag format `peng-v*.*.*` (e.g., `peng-v0.1.0`)
 - SDK: Use tag format `sdk-v*.*.*` (e.g., `sdk-v0.1.0`)
 
 ### Full Releases
@@ -102,7 +102,7 @@ Orra supports both individual component releases and full releases:
     - Windows (amd64)
 - SHA256 checksums for each binary
 
-### Control Plane Releases
+### Plan Engine Releases
 - Docker Compose configuration updates
 - Documentation for deployment changes
 

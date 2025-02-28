@@ -224,8 +224,8 @@ The Plan Engine ensures:
 
 - 🛒 [E-commerce AI Assistant (JavaScript)](examples/ecommerce-agent-app) - E-commerce customer service with a delivery specialized agent
 - 👻 [Ghostwriters (Python)](examples/crewai-ghostwriters) - Content generation example showcasing how to use Orra with [CrewAI](https://www.crewai.com) 🆕🎉
-- 📣 [Echo Service (JavaScript)](examples/echo-js) - Simple example showing core concepts using JS
-- 📣 [Echo Service (Python)](examples/echo-python) - Simple example showing core concepts using Python
+- 📣 [Echo Tools as Service (JavaScript)](examples/echo-js) - Simple example showing core concepts using JS
+- 📣 [Echo Tools as Service (Python)](examples/echo-python) - Simple example showing core concepts using Python
 
 ### Docs and Guides
 
@@ -252,7 +252,7 @@ The Plan Engine ensures:
 **Connect With Us:**
 
 - [GitHub Discussions](https://github.com/orra-dev/orra/discussions) - Share your experience and ideas
-- Office Hours - Weekly calls with the team
+- [Office Hours](https://cal.com/orra-dev/office-hours) - Weekly calls with the team every Friday
 
 ## License
 

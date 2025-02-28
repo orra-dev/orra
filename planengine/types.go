@@ -25,7 +25,7 @@ type contextKey struct{}
 
 var apiKeyContextKey = contextKey{}
 
-type ControlPlane struct {
+type PlanEngine struct {
 	projects             map[string]*Project
 	services             map[string]map[string]*ServiceInfo
 	groundings           map[string]map[string]*GroundingSpec
@@ -128,7 +128,7 @@ type LogManager struct {
 	mu             sync.RWMutex
 	retention      time.Duration
 	cleanupTicker  *time.Ticker
-	controlPlane   *ControlPlane
+	planEngine     *PlanEngine
 	storage        LogStore
 	Logger         zerolog.Logger
 }

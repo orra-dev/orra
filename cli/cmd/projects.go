@@ -35,7 +35,7 @@ func newProjectCreateCmd(opts *CliOpts) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "add [name]",
 		Short: "Add a new project",
-		Long:  `Add a new project so the control plane can orchestrate your app.`,
+		Long:  `Add a new project so the Plan Engine can coordinate your multi-agent application.`,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			projectName := args[0]
@@ -44,29 +44,29 @@ func newProjectCreateCmd(opts *CliOpts) *cobra.Command {
 			}
 
 			if serverAddr == "" {
-				serverAddr = DefaultControlPlaneServerAddr
+				serverAddr = DefaultPlanEngineServerAddr
 			}
 
 			if _, exists := opts.Config.Projects[projectName]; exists {
 				return fmt.Errorf("project name %s already exists", projectName)
 			}
 
-			// Create project in control plane (includes initial API key)
+			// Add project to Plan Engine (includes initial API key)
 			client := opts.ApiClient.SetBaseUrl(serverAddr)
 			ctx, cancel := context.WithTimeout(cmd.Context(), client.GetTimeout())
 			defer cancel()
 
-			project, err := client.CreateProject(ctx, projectName)
+			project, err := client.AddProject(ctx, projectName)
 			if err != nil {
-				return fmt.Errorf("failed to create project - %w", err)
+				return fmt.Errorf("failed to add project - %w", err)
 			}
 
-			if err := config.SaveNewProject(opts.ConfigPath, projectName, project.ID, project.CliAPIKey, serverAddr); err != nil {
+			if err := config.AddNewProject(opts.ConfigPath, projectName, project.ID, project.CliAPIKey, serverAddr); err != nil {
 				return fmt.Errorf("failed to save new project config: %w", err)
 			}
 
-			fmt.Printf("Project %s created successfully\n\n", projectName)
-			fmt.Println("To orchestrate your app:")
+			fmt.Printf("Project %s added successfully\n\n", projectName)
+			fmt.Println("To coordinate your project:")
 			fmt.Println("  orra webhooks add [valid webhook url]")
 			fmt.Println("  orra api-keys gen [api key name]")
 			return nil

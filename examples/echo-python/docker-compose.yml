@@ -1,6 +1,6 @@
 services:
-  echo-service:
-    container_name: orra-echo-service-python
+  echo:
+    container_name: orra-echo-python
     build:
       context: .
     ports:

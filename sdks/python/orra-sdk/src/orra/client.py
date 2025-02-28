@@ -106,7 +106,7 @@ class OrraSDK:
             *,
             revertible: bool = False
     ) -> None:
-        """Register service with control plane"""
+        """Register service with plan engine"""
         # Load existing service ID if any
         self.service_id = await self._persistence.load_service_id()
 

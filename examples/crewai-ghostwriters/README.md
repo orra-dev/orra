@@ -11,31 +11,17 @@ Quick [CrewAI](https://www.crewai.com) agentic writer and editor system that dra
 
 - [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
 - [Poetry](https://python-poetry.org/docs/#installation)
-- [OpenAI API key](https://platform.openai.com/api-keys) for Orra's control plane, `writer_crew` and `editor` Agents
+- [OpenAI API key](https://platform.openai.com/api-keys) for Orra's Plan Engine `PLAN_CACHE_OPENAI_API_KEY`
+- [OpenAI API key](https://platform.openai.com/api-keys) or [Groq API key](https://console.groq.com/docs/quickstart) for Orra's Plan Engine reasoning models config
+- [OpenAI API key](https://platform.openai.com/api-keys) for the `writer_crew` and `editor` Agents
 
 ## Setup
 
-1. First, setup Orra by following the [installation instructions](../../README.md#installation):
-
-```bash
-# Clone Orra
-git clone https://github.com/ezodude/orra
-cd orra/controlplane
-
-# Set your OpenAI API key
-echo "OPENAI_API_KEY=your-key-here" > .env
-
-# Start the control plane
-docker compose up
-```
+1. First, setup Orra and the CLI by following the [installation instructions](../../README.md#installation):
 
 2. Setup your Orra project:
 
 ```bash
-# Install Orra CLI - if using Linux, otherwise download the latest CLI binary for your platform: https://github.com/orra-dev/orra/releases
-curl -L https://github.com/ezodude/orra/releases/download/v0.2.1/orra-linux-amd64 -o /usr/local/bin/orra
-chmod +x /usr/local/bin/orra
-
 # Create project, add a webhook and API key
 orra projects add my-python-project
 orra webhooks add http://host.docker.internal:8888/webhook 

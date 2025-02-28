@@ -49,7 +49,7 @@ func TestExtractDependencyID(t *testing.T) {
 // TestGenerateServiceKeyFormat repeatedly calls GenerateServiceKey (100 times)
 // and verifies that each key starts with "s_" and contains only lowercase letters.
 func TestGenerateServiceKeyFormat(t *testing.T) {
-	cp := &ControlPlane{}
+	cp := &PlanEngine{}
 	pattern := `^s_[a-z]+$`
 	regex, err := regexp.Compile(pattern)
 	assert.NoError(t, err, "failed to compile regex pattern")
@@ -63,7 +63,7 @@ func TestGenerateServiceKeyFormat(t *testing.T) {
 
 // TestGenerateServiceKeyUniqueness ensures that multiple generated keys are unique.
 func TestGenerateServiceKeyUniqueness(t *testing.T) {
-	cp := &ControlPlane{}
+	cp := &PlanEngine{}
 	keyCount := 1000
 	keys := make(map[string]struct{}, keyCount)
 

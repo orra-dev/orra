@@ -42,8 +42,8 @@ func fakeSubTask(id, service string, input map[string]any) *SubTask {
 }
 
 func TestValidateInput(t *testing.T) {
-	// Create a dummy ControlPlane to call the method.
-	cp := &ControlPlane{}
+	// Create a dummy PlanEngine to call the method.
+	cp := &PlanEngine{}
 
 	testCases := []struct {
 		name           string

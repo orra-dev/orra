@@ -1,10 +1,11 @@
-module github.com/ezodude/orra/control-plane
+module github.com/orra-dev/orra/planengine
 
 go 1.22.5
 
 require (
 	github.com/RussellLuo/validating/v3 v3.0.0
 	github.com/cenkalti/backoff/v4 v4.3.0
+	github.com/dgraph-io/badger/v4 v4.5.1
 	github.com/gilcrest/diygoapi v0.53.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
@@ -23,7 +24,6 @@ require (
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/dgraph-io/badger/v4 v4.5.1 // indirect
 	github.com/dgraph-io/ristretto/v2 v2.1.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect

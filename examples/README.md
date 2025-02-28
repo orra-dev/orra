@@ -6,14 +6,14 @@ We're starting with JavaScript and more languages are coming soon.
 
 ## Available Examples
 
-### [Echo Service (JavaScript)](echo-js)
-The "Hello World" of Orra for JS developers - perfect for learning the basics of service orchestration.
+### [Echo Tool as a Service (JavaScript)](echo-js)
+The "Hello World" of Orra for JS developers - perfect for learning the basics of Plan Engine task coordination.
 
-### [Echo Service (Python)](echo-python)
-The "Hello World" of Orra for Pythonistas - perfect for learning the basics of service orchestration.
+### [Echo Tool as a Service (Python)](echo-python)
+The "Hello World" of Orra for Pythonistas - perfect for learning the basics of Plan Engine task coordination.
 
 ### [AI E-commerce Assistant](ecommerce-agent-app)
-Complete e-commerce example with multiple services, AI agent integration, and real-time updates.
+Complete e-commerce example with an existing service, a tool as a service, AI agent, and real-time updates.
 
 ### [Ghostwriters (Python)](crewai-ghostwriters)
 Content generation example showcasing how to use Orra with [CrewAI](https://www.crewai.com). 🆕🎉

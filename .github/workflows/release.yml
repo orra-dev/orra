@@ -3,17 +3,17 @@ name: Release Management
 on:
   push:
     tags:
-      - 'cli-v*.*.*-*'      # e.g. cli-v0.1.0-narwhal
-      - 'cp-v*.*.*-*'       # e.g. cp-v0.1.0-narwhal
-      - 'sdk-v*.*.*-*'      # e.g. sdk-v0.1.0-narwhal
-      - 'v*.*.*-*'         # e.g. v0.1.0-narwhal
+      - 'cli-v*.*.*-*'      # e.g. cli-v0.1.0
+      - 'peng-v*.*.*-*'       # e.g. peng-v0.1.0
+      - 'sdk-v*.*.*-*'      # e.g. sdk-v0.1.0
+      - 'v*.*.*-*'         # e.g. v0.1.0
 
   workflow_dispatch: # This is crucial for manual runs
     inputs:
       test_tag:
-        description: 'Tag to simulate (e.g., v0.1.0-narwhal)'
+        description: 'Tag to simulate (e.g., v0.1.0)'
         required: true
-        default: 'v0.1.0-narwhal'
+        default: 'v0.1.0'
       debug:
         description: 'Enable debug logging'
         required: false
@@ -27,7 +27,7 @@ jobs:
       release_type: ${{ steps.release_type.outputs.type }}
       version: ${{ steps.release_type.outputs.version }}  # Make sure this matches
       has_cli: ${{ steps.check_changelog.outputs.has_cli }}
-      has_controlplane: ${{ steps.check_changelog.outputs.has_controlplane }}
+      has_planengine: ${{ steps.check_changelog.outputs.has_planengine }}
       has_sdk: ${{ steps.check_changelog.outputs.has_sdk }}
     steps:
       - uses: actions/checkout@v4
@@ -63,9 +63,9 @@ jobs:
             if [[ $TEST_TAG == cli-v* ]]; then
               echo "type=cli" >> $GITHUB_OUTPUT
               echo "version=${TEST_TAG#cli-v}" >> $GITHUB_OUTPUT
-            elif [[ $TEST_TAG == cp-v* ]]; then
+            elif [[ $TEST_TAG == peng-v* ]]; then
               echo "type=controlplane" >> $GITHUB_OUTPUT
-              echo "version=${TEST_TAG#cp-v}" >> $GITHUB_OUTPUT
+              echo "version=${TEST_TAG#peng-v}" >> $GITHUB_OUTPUT
             elif [[ $TEST_TAG == sdk-v* ]]; then
               echo "type=sdk" >> $GITHUB_OUTPUT
               echo "version=${TEST_TAG#sdk-v}" >> $GITHUB_OUTPUT
@@ -79,9 +79,9 @@ jobs:
             if [[ $TAG == cli-v* ]]; then
               echo "type=cli" >> $GITHUB_OUTPUT
               echo "version=${TAG#cli-v}" >> $GITHUB_OUTPUT
-            elif [[ $TAG == cp-v* ]]; then
+            elif [[ $TAG == peng-v* ]]; then
               echo "type=controlplane" >> $GITHUB_OUTPUT
-              echo "version=${TAG#cp-v}" >> $GITHUB_OUTPUT
+              echo "version=${TAG#peng-v}" >> $GITHUB_OUTPUT
             elif [[ $TAG == sdk-v* ]]; then
               echo "type=sdk" >> $GITHUB_OUTPUT
               echo "version=${TAG#sdk-v}" >> $GITHUB_OUTPUT
@@ -116,16 +116,16 @@ jobs:
             echo "No CLI changelog found"
           fi
           
-          # Check Control Plane changelog
-          echo "Checking for Control Plane changelog at: releases/controlplane/versions/${VERSION}.md"
-          if [ -f "releases/controlplane/versions/${VERSION}.md" ]; then
-            echo "has_controlplane=true" >> $GITHUB_OUTPUT
-            echo "Found Control Plane changelog"
+          # Check Plan Engine changelog
+          echo "Checking for Plan Engine changelog at: releases/planengine/versions/${VERSION}.md"
+          if [ -f "releases/planengine/versions/${VERSION}.md" ]; then
+            echo "has_planengine=true" >> $GITHUB_OUTPUT
+            echo "Found Plan Engine changelog"
             echo "Content:"
-            cat "releases/controlplane/versions/${VERSION}.md"
+            cat "releases/planengine/versions/${VERSION}.md"
           else
-            echo "has_controlplane=false" >> $GITHUB_OUTPUT
-            echo "No Control Plane changelog found"
+            echo "has_planengine=false" >> $GITHUB_OUTPUT
+            echo "No Plan Engine changelog found"
           fi
           
           # Check SDK changelog
@@ -143,7 +143,7 @@ jobs:
           # Debug output all flags
           echo "Final output flags:"
           echo "has_cli: $(cat $GITHUB_OUTPUT | grep has_cli || echo 'not set')"
-          echo "has_controlplane: $(cat $GITHUB_OUTPUT | grep has_controlplane || echo 'not set')"
+          echo "has_planengine: $(cat $GITHUB_OUTPUT | grep has_planengine || echo 'not set')"
           echo "has_sdk: $(cat $GITHUB_OUTPUT | grep has_sdk || echo 'not set')"
 
   build-cli:
@@ -279,7 +279,7 @@ jobs:
           if [ "$RELEASE_TYPE" = "full" ]; then
             # Only add notes if the component has changes
             [ "${{ needs.prepare-release.outputs.has_cli }}" = "true" ] && add_component_notes "cli" "$VERSION" || echo "Skipping CLI notes"
-            [ "${{ needs.prepare-release.outputs.has_controlplane }}" = "true" ] && add_component_notes "controlplane" "$VERSION" || echo "Skipping Control Plane notes"  # Fixed from control-plane to controlplane
+            [ "${{ needs.prepare-release.outputs.has_planengine }}" = "true" ] && add_component_notes "controlplane" "$VERSION" || echo "Skipping Plan Engine notes"  # Fixed from control-plane to controlplane
             [ "${{ needs.prepare-release.outputs.has_sdk }}" = "true" ] && add_component_notes "sdks" "$VERSION" || echo "Skipping SDK notes"
           else
             add_component_notes "$RELEASE_TYPE" "$VERSION"
@@ -333,7 +333,7 @@ jobs:
         run: |
           # Create all changelog directories
           mkdir -p releases/cli
-          mkdir -p releases/controlplane
+          mkdir -p releases/planengine
           mkdir -p releases/sdks
       
           # CLI Changelog
@@ -342,10 +342,10 @@ jobs:
           find "releases/cli/versions" -name "*.md" -type f -print0 | sort -zr | xargs -0 -I {} bash -c 'cat {} >> releases/cli/CHANGELOG.md; echo "" >> releases/cli/CHANGELOG.md'
           fi
       
-          # Control Plane Changelog
-          echo "# Control Plane Changelog" > releases/controlplane/CHANGELOG.md
-          if [ -d "releases/controlplane/versions" ]; then
-          find "releases/controlplane/versions" -name "*.md" -type f -print0 | sort -zr | xargs -0 -I {} bash -c 'cat {} >> releases/controlplane/CHANGELOG.md; echo "" >> releases/controlplane/CHANGELOG.md'
+          # Plan Engine Changelog
+          echo "# Plan Engine Changelog" > releases/planengine/CHANGELOG.md
+          if [ -d "releases/planengine/versions" ]; then
+          find "releases/planengine/versions" -name "*.md" -type f -print0 | sort -zr | xargs -0 -I {} bash -c 'cat {} >> releases/planengine/CHANGELOG.md; echo "" >> releases/planengine/CHANGELOG.md'
           fi
       
           # SDK Changelog

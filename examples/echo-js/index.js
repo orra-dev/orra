@@ -16,7 +16,7 @@ const port = process.env.PORT || 3400;
 
 // Initialize the Orra client with environment-aware persistence
 const echoSvc = initService({
-	name: 'echo-service',
+	name: 'echo',
 	orraUrl: process.env.ORRA_URL,
 	orraKey: process.env.ORRA_API_KEY,
 	persistenceOpts: getPersistenceConfig()
@@ -31,7 +31,7 @@ async function startService() {
 	try {
 		// Register the echo service with Orra
 		await echoSvc.register({
-			description: 'A simple service that echoes back the first input value it receives.',
+			description: 'An echo provider that echoes back the first input value it receives.',
 			revertible: true,
 			revertTTL: 24 * 60 * 60 * 1000,
 			schema

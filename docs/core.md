@@ -48,8 +48,7 @@ When you submit an action, Orra's AI analyzes your intent and creates an executi
 
 Key features:
 - `task0` holds your original parameters
-- Services and agents reference data using `$task.field` syntax
-- `parallel_groups` maximizes performance by running independent tasks together
+- Services, Tasks as Services and Agents reference data using `$task.field` syntax
 
 ### Grounding and Execution Plan Validation
 

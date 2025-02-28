@@ -1,6 +1,6 @@
 services:
-  inventory-service:
-    container_name: orra-inventory-service
+  inventory-mgr:
+    container_name: orra-inventory-mgr
     build:
       context: .
     ports:

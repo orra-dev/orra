@@ -3,10 +3,10 @@
 #   file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 """
-Echo Service Example using Orra SDK
+Echo Tool as a Service Example using Orra SDK
 
-A simple echo service that demonstrates Orra service orchestration
-with proper lifecycle management and graceful shutdown.
+A simple echo tool as a service that demonstrates Plan Engine service coordination
+and execution with proper lifecycle management and graceful shutdown.
 """
 
 import os
@@ -27,24 +27,24 @@ load_dotenv()
 
 # -------------- Service Setup --------------
 
-async def create_orra_service() -> OrraService:
-    """Initialize and configure the Orra service"""
-    service = OrraService(
-        name="echo-service",
-        description="A simple service that echoes back messages",
+async def create_orra_tool_service() -> OrraService:
+    """Initialize and configure the Echo tool as a service"""
+    tool_svc = OrraService(
+        name="echo",
+        description="An echo provider that echoes back messages",
         url=os.getenv("ORRA_URL", "http://localhost:8005"),
         api_key=os.getenv("ORRA_API_KEY"),
         log_level="DEBUG",
         **get_persistence_config()
     )
 
-    @service.handler()
+    @tool_svc.handler()
     async def handle_echo(task: Task[EchoInput]) -> EchoOutput:
         """Handle echo requests by returning the input message"""
         print(f"Echoing input: {task.input.message}")
         return EchoOutput(echo=task.input.message)
 
-    return service
+    return tool_svc
 
 # -------------- FastAPI Lifecycle --------------
 
@@ -55,15 +55,15 @@ async def lifespan(app: FastAPI):
     Handles startup and shutdown of the Orra service.
     """
     # Create and start Orra service
-    orra_service = await create_orra_service()
-    await orra_service.start()
-    print("Echo Service started successfully")
+    orra_tool_service = await create_orra_tool_service()
+    await orra_tool_service.start()
+    print("Echo started successfully")
 
     yield
 
     # Shutdown service
-    print("Shutting down Echo Service...")
-    await orra_service.shutdown()
+    print("Shutting down Echo...")
+    await orra_tool_service.shutdown()
 
 # Initialize FastAPI with lifespan
 app = FastAPI(lifespan=lifespan)
@@ -95,12 +95,12 @@ async def start_services():
 def main():
     """Main entry point with proper error handling"""
     try:
-        print("Starting Echo Service...")
+        print("Starting Echo...")
         asyncio.run(start_services())
     except KeyboardInterrupt:
         print("\nShutdown requested via keyboard interrupt")
     except Exception as e:
-        print(f"Error running service: {e}")
+        print(f"Error running Echo: {e}")
         raise
 
 if __name__ == "__main__":
