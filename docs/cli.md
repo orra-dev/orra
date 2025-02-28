@@ -4,7 +4,7 @@ The Orra CLI helps you manage your multi-agent apps in development and productio
 
 ## Installation
 
-Download the latest binary for your platform from our [releases page](https://github.com/orra/releases/tag/v0.1.0-narwhal):
+Download the latest binary for your platform from our [releases page](https://github.com/orra-dev/orra/releases/tag/v0.2.2):
 
 ```bash
 # macOS/Linux: Move to your PATH
@@ -13,8 +13,34 @@ chmod +x /usr/local/bin/orra
 
 # Verify installation
 orra version
-# Client Version: v0.1.0-narwhal
+# Client Version: v0.2.2
 ```
+
+## CLI Commands Reference
+
+| Command | Description | Example |
+| --- | --- | --- |
+| `orra projects add` | Add a new project | `orra projects add my-ai-app` |
+| `orra projects ls` | List all projects | `orra projects ls` |
+| `orra projects use` | Set the current project | `orra projects use my-ai-app` |
+| `orra webhooks add` | Add a webhook to the project | `orra webhooks add http://localhost:3000/webhook` |
+| `orra webhooks ls` | List all webhooks for a project | `orra webhooks ls` |
+| `orra api-keys gen` | Generate an API key for a project | `orra api-keys gen production-key` |
+| `orra api-keys ls` | List all API keys for a project | `orra api-keys ls` |
+| `orra verify run` | Orchestrate an action with data parameters | `orra verify run "Process order" -d orderId:1234` |
+| `orra verify webhooks start` | Start a webhook server for testing | `orra verify webhooks start http://localhost:3000/webhook` |
+| `orra ps` | List orchestrated actions for a project | `orra ps` |
+| `orra inspect` | Get detailed information about an orchestration | `orra inspect o_abc123` |
+| `orra grounding apply` | Apply a grounding spec to a project | `orra grounding apply -f customer-support.yaml` |
+| `orra grounding ls` | List all groundings in a project | `orra grounding ls` |
+| `orra grounding rm` | Remove grounding from a project | `orra grounding rm customer-support` |
+| `orra config reset` | Reset existing Orra configuration | `orra config reset` |
+| `orra version` | Print the client and server version | `orra version` |
+
+**CLI flags**:
+
+* `--project`, `-p`: Override the current project for a single command
+* `--config`: Specify an alternate config file path
 
 ## Quick Start
 
@@ -85,55 +111,49 @@ orra inspect o_abc123
 
 Now your services are integrated with Orra and ready for orchestration!
 
-## Essential Commands
+## Detailed Command Reference
 
 ### Managing Projects
 
+Projects are containers for orchestration of your multi-agent applications.
+
 ```bash
-# List projects
+# Create a new project
+orra projects add my-ai-app
+
+# List all projects
 orra projects ls
 # * my-ai-app           Current project
 #   customer-service    ID: p_xyz123
 
-# Switch projects
+# Switch to another project
 orra projects use customer-service
 ```
 
-### Working with Actions
+### Webhooks Management
+
+Webhooks allow Orra to send orchestration results back to your applications.
 
 ```bash
-# Submit an action
-orra verify run "Process refund for order" \
-  -d orderId:ORD123 \
-  -d amount:99.99
+# Add a webhook to receive results
+orra webhooks add http://localhost:3000/webhook
 
-# List recent actions
-orra ps
-# ◎ o_abc123  Process refund    processing  2m ago
-# ● o_xyz789  Update inventory  completed   5m ago
-# ✕ o_def456  Charge card      failed      8m ago
+# List all configured webhooks
+orra webhooks ls
 
-# Detailed action inspection
-orra inspect -d o_abc123
+# Start a local webhook server for testing
+orra verify webhooks start http://localhost:3000/webhook
 ```
 
-### Development Tools
+### API Keys Management
+
+API keys are used to authenticate your services with Orra.
 
 ```bash
-# Start a local webhook server
-orra verify webhooks start http://localhost:3000/webhooks/results
-
-# Test your webhook
-orra verify run "Test notification" -d type:test
-```
-
-### API Key Management
-
-```bash
-# Generate new API key
+# Generate a new API key
 orra api-keys gen staging-key
 
-# List keys
+# List all API keys
 orra api-keys ls
 # - production-key
 #   KEY: sk-orra-v1-abc...
@@ -141,38 +161,52 @@ orra api-keys ls
 #   KEY: sk-orra-v1-xyz...
 ```
 
-## Common Workflows
+### Orchestration Actions
 
-### Local Development Setup
+Manage and monitor the running of your multi-agent orchestrations.
 
 ```bash
-# 1. Create project
-orra projects add dev-project
+# Submit an action with data
+orra verify run "Process refund for order" \
+  -d orderId:ORD123 \
+  -d amount:99.99
 
-# 2. Start webhook server
-orra verify webhooks start http://localhost:3000/webhook
+# List all orchestrations
+orra ps
+# ◎ o_abc123  Process refund    processing  2m ago
+# ● o_xyz789  Update inventory  completed   5m ago
+# ✕ o_def456  Charge card      failed      8m ago
 
-# 3. Create API key
-orra api-keys gen local-key
+# Get detailed information about an orchestration
+orra inspect o_abc123
 
-# 4. Update your .env files with the key
-ORRA_API_KEY=sk-orra-v1-...
-
-# 5. Test your setup
-orra verify run "Test setup" -d test:true
+# Get comprehensive details with inputs/outputs
+orra inspect -d o_abc123
 ```
 
-### Production Monitoring
+### Grounding Management
+
+Grounding helps define domain-specific behaviors for your Orra applications.
 
 ```bash
-# Watch active orchestrations
-orra ps
+# Apply a grounding spec from a YAML file
+orra grounding apply -f customer-support.grounding.yaml
 
-# Inspect failed actions
-orra inspect -d o_failed123
+# List all applied groundings
+orra grounding ls
 
-# Check service health
-orra inspect o_recent456
+# Remove a specific grounding
+orra grounding rm customer-support
+
+# Remove all groundings
+orra grounding rm --all
+```
+
+### Configuration Management
+
+```bash
+# Reset the CLI configuration
+orra config reset
 ```
 
 ## Status Icons
@@ -205,14 +239,14 @@ orra inspect -d o_failed123
 # Shows full task history, inputs, and outputs
 ```
 
-3. **Multiple Projects**
+3. **Multiple Projects or environments**
 ```bash
 # Switch between projects
-orra projects use staging
-orra projects use production
+orra projects use proj-staging
+orra projects use proj-production
 
 # Or use -p flag for one-off commands
-orra ps -p production
+orra ps -p proj-production
 ```
 
 ## Configuration
@@ -252,3 +286,5 @@ orra config reset
    ```bash
    orra ps
    ```
+
+3. Visit our documentation: [https://orra.dev/docs](https://orra.dev/docs)
