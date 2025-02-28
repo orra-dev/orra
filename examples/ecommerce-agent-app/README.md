@@ -1,6 +1,6 @@
 # AI E-commerce Assistant Example
 
-This example demonstrates how to build an AI-powered e-commerce assistant using Orra for reliable multi-agent orchestration.
+This example demonstrates how to build an LLM powered e-commerce assistant using Orra for reliable multi-agent orchestration.
 
 It uses a chat UI to simulate a WhatsApp sales experience.
 
@@ -12,7 +12,7 @@ It uses a chat UI to simulate a WhatsApp sales experience.
 - 🏪 Real-time product availability checks and holds
 - 👤 Customer profile integration
 - 📱 Real-time chat UI (simulating WhatsApp)
-- ⚡  Parallel service orchestration
+- ⚡  Parallel agent, tool as service and service task coordination
 - 🔄 Real-time status updates
 - 🛡️ Error handling and recovery
 - ↩️ Canceling product holds when an unrecoverable error occurs
@@ -21,29 +21,16 @@ It uses a chat UI to simulate a WhatsApp sales experience.
 
 - [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
 - [Mistral API key](https://mistral.ai/api/) for the Delivery Agent
-- [OpenAI API key](https://platform.openai.com/api-keys) for Orra's control plane
+- [OpenAI API key](https://platform.openai.com/api-keys) for Orra's Plan Engine `PLAN_CACHE_OPENAI_API_KEY`
+- [OpenAI API key](https://platform.openai.com/api-keys) or [Groq API key](https://console.groq.com/docs/quickstart) for Orra's Plan Engine reasoning models config
+
 
 ## Setup
 
 1. First, setup Orra by following the [Installation instructions](../../README.md#installation):
-```bash
-# Clone Orra
-git clone https://github.com/ezodude/orra
-cd orra/controlplane
-
-# Set your OpenAI API key
-echo "OPENAI_API_KEY=your-key-here" > .env
-
-# Start the control plane
-docker compose up
-```
 
 2. Setup your Orra project:
 ```bash
-# Install Orra CLI 
-curl -L https://github.com/ezodude/orra/releases/download/v0.2.1/orra-darwin-arm64 -o /usr/local/bin/orra
-chmod +x /usr/local/bin/orra
-
 # Create project and configure a webhook
 orra projects add my-ai-app
 orra webhooks add http://host.docker.internal:3000/api/webhook
@@ -60,7 +47,7 @@ cd ../customer-svc
 # Create .env file with your keys for
 echo "ORRA_API_KEY=key-from-step-2" > .env
 
-cd ../inventory-svc
+cd ../inventory-mgr
 # Create .env file with your keys for
 echo "ORRA_API_KEY=key-from-step-2" > .env
 
@@ -83,7 +70,7 @@ cd customer-svc
 docker compose up
 
 # Start Inventory Service
-cd inventory-svc
+cd inventory-mgr
 docker compose up
 
 # Start Delivery Agent
@@ -174,7 +161,7 @@ The example consists of:
 - **Customer Service**: Handles customer data
 - **Inventory Service**: Manages product availability
 - **Delivery Agent**: Uses Mistral AI for delivery estimations
-- **Orra Control Plane**: Orchestrates everything reliably
+- **Orra's Plane Engine**: Intelligently coordinates everything reliably
 
 ## Learn More
 
