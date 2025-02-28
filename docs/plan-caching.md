@@ -102,13 +102,13 @@ You can monitor cache performance through:
 
 ## Cache Configuration Parameters
 
-Orra's caching system can be configured through:
+Orra's caching system operates within these parameters:
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
+| Parameter | Description | Value    |
+|-----------|-------------|----------|
 | `CACHE_TTL` | Time to live for cached plans | 24 hours |
-| `CACHE_MAX_SIZE` | Maximum number of plans to cache per project | 100 |
-| `CACHE_SIMILARITY_THRESHOLD` | Minimum similarity score for a cache hit | 0.95 |
+| `CACHE_MAX_SIZE` | Maximum number of plans to cache per project | 100      |
+| `CACHE_SIMILARITY_THRESHOLD` | Minimum similarity score for a cache hit | 0.95     |
 
 ## Conclusion
 
