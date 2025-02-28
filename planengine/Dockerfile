@@ -23,7 +23,7 @@ ARG TARGETARCH
 # source code into the container.
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=bind,target=. \
-    CGO_ENABLED=0 GOARCH=$TARGETARCH go build -o /bin/control-plane .
+    CGO_ENABLED=0 GOARCH=$TARGETARCH go build -o /bin/plan-engine .
 
 # Create a stage for building the VAL binary
 FROM alpine:latest AS val-builder
@@ -102,10 +102,10 @@ RUN adduser \
 USER appuser
 
 # Copy the executable from the "build" stage.
-COPY --from=build /bin/control-plane /bin/
+COPY --from=build /bin/plan-engine /bin/
 
 # Expose the port that the application listens on.
 EXPOSE 8005
 
 # What the container should run when it is started.
-ENTRYPOINT [ "/bin/control-plane", "-log-level", "trace" ]
+ENTRYPOINT [ "/bin/plan-engine", "-log-level", "trace" ]
