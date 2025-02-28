@@ -1,8 +1,8 @@
 {
-  "name": "echo-service",
+  "name": "echo",
   "version": "0.0.1",
   "type": "module",
-  "description": "A simple example that uses the Orra JS SDK to orchestrate a service using Orra.",
+  "description": "A simple example that uses the Orra JS SDK to orchestrate a tool as a service using Orra.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",

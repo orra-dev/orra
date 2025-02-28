@@ -1,4 +1,4 @@
-# Echo Service Example (JavaScript)
+# Echo Tool as a Service Example (JavaScript)
 
 A minimal example demonstrating how to build and coordinate a tool as a service using Orra's Plan Engine. It's Orra Hello World!
 
@@ -31,7 +31,6 @@ sequenceDiagram
 - [OpenAI API key](https://platform.openai.com/api-keys) or [Groq API key](https://console.groq.com/docs/quickstart) for Orra's Plan Engine reasoning models config
 - [OpenAI API key](https://platform.openai.com/api-keys) for the `writer_crew` and `editor` Agents
 
-
 ## Setup
 
 1. First, setup Orra and the CLI by following the [installation instructions](../../README.md#installation):
@@ -44,9 +43,9 @@ orra webhooks add http://host.docker.internal:8888/webhook
 orra api-keys gen echo-key
 ```
 
-3. Configure the Echo service:
+3. Configure the Echo tool as service:
 ```bash
-cd examples/echo
+cd examples/echo-js
 echo "ORRA_API_KEY=echo-key-from-step-2" > .env
 ```
 
@@ -98,7 +97,7 @@ async function startService() {
 	try {
 		// Register the echo service with Orra
 		await echoToolSvc.register({
-			description: 'A simple service that echoes back the first input value it receives.',
+			description: 'An echo provider that echoes back the first input value it receives.',
 			schema
 		});
 			
@@ -120,7 +119,7 @@ app.listen(port, () => {
 });
 ```
 
-In this! Orra provides:
+That's it! Orra provides:
 - Service discovery
 - Health monitoring
 - Reliable task execution

@@ -1,58 +1,53 @@
-# Echo Service Example (Python)
+# Echo Tool as a Service Example (Python)
 
-A minimal example demonstrating how to build and orchestrate a service using Orra's Python SDK.
+A minimal example demonstrating how to build and coordinate a tool as a service using Orra's Plan Engine. It's Orra Hello World!
 
 ```mermaid
 sequenceDiagram
     participant CLI as Orra CLI
-    participant CP as Control Plane
-    participant ES as Echo Service
+    participant PE as Plan Engine
+    participant ES as Echo Tool as Service
     participant WH as Webhook Server
 
-    CLI->>CP: Send action
-    CP->>ES: Orchestrate task
-    ES->>CP: Return echo
-    CP->>WH: Send result
+    CLI->>PE: Send action
+    PE->>ES: Orchestrate task
+    ES->>PE: Return echo
+    PE->>WH: Send result
     Note over WH: See result in terminal
 ```
+
+## ✨ Features
+
+- 🔄 Basic service registration and coordination
+- 📡 Real-time WebSocket communication
+- ⚡ Reliable message delivery
+- 🛡️ Built-in health monitoring
+- 🚀 Simple but production-ready patterns
 
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
 - [Poetry](https://python-poetry.org/docs/#installation)
-- [OpenAI API key](https://platform.openai.com/api-keys) for Orra's control plane
+- [OpenAI API key](https://platform.openai.com/api-keys) for Orra's Plan Engine `PLAN_CACHE_OPENAI_API_KEY`
+- [OpenAI API key](https://platform.openai.com/api-keys) or [Groq API key](https://console.groq.com/docs/quickstart) for Orra's Plan Engine reasoning models config
+- [OpenAI API key](https://platform.openai.com/api-keys) for the `writer_crew` and `editor` Agents
 
 ## Setup
 
-1. First, setup Orra by following the [Installation instructions](../../README.md#installation):
-```bash
-# Clone Orra
-git clone https://github.com/ezodude/orra
-cd orra/controlplane
-
-# Set your OpenAI API key
-echo "OPENAI_API_KEY=your-key-here" > .env
-
-# Start the control plane
-docker compose up
-```
+1. First, setup Orra and the CLI by following the [installation instructions](../../README.md#installation):
 
 2. Setup your Orra project:
 ```bash
-# Install Orra CLI 
-curl -L https://github.com/ezodude/orra/releases/download/v0.2.1/orra-darwin-arm64 -o /usr/local/bin/orra
-chmod +x /usr/local/bin/orra
-
 # Create project, add a webhook and API key
 orra projects add my-echo-app
 orra webhooks add http://host.docker.internal:8888/webhook
 orra api-keys gen echo-key
 ```
 
-3. Configure the Echo service:
+3. Configure the Echo tool as service
 ```bash
 cd examples/echo-python
-echo "ORRA_API_KEY=key-from-step-2" > .env
+echo "ORRA_API_KEY=echo-key-from-step-2" > .env
 ```
 
 ## Running the Example
@@ -66,7 +61,7 @@ orra verify webhooks start http://localhost:8888/webhook
 2. Start and register the Echo service:
 ```bash
 # With Docker
-docker compose up --build
+docker compose up
 
 # Or locally with Poetry
 poetry install
@@ -122,8 +117,8 @@ class EchoOutput(BaseModel):
     echo: str
 
 service = OrraService(
-    name="echo-service",
-    description="A simple echo service",
+    name="echo",
+    description="Use echo to echo back messages",
     url=os.getenv("ORRA_URL"),
     api_key=os.getenv("ORRA_API_KEY")
 )
