@@ -2,7 +2,7 @@
 
 ## Understanding Actions
 
-Actions are high-level instructions that Orra's control plane decomposes into tasks that execute against selected services and agents to complete a job. Think of actions as user/machine jobs that need to be fulfilled by your system.
+Actions are high-level instructions that Orra's Plan Engine decomposes into tasks that execute against selected services, tools as services and agents to complete a job. Think of actions as user/machine jobs that need to be fulfilled by your system.
 
 ## Submitting Actions
 
@@ -19,7 +19,7 @@ orra verify run "Estimate order delivery and notify customer" \
   -d orderId:ORD456 \
   -d customerId:ABC123
 
-# Specify webhook for results (assumes the control plane is running with docker compose)
+# Specify webhook for results (assumes the Plane Engine is running with docker compose)
 orra verify run "Process refund request ensuring it is not fraudulent" \
   -w http://host.docker.internal:3000/webhooks/results \ 
   -d orderId:ORD789
@@ -199,10 +199,10 @@ orra inspect o_fdhdhjhashah
 }
 ```
 
-This orchestration might involve multiple services:
+This orchestration might involve multiple services, tools as a service and agents:
 - Payment processing service
-- Inventory management service
+- Inventory management tool as a service
 - Delivery scheduling agent
-- Customer notification service
+- Customer notification tool as a service
 
-Orra handles the complexity of coordinating these services while you focus on implementing their core logic.
+Orra handles the complexity of coordinating these components while you focus on implementing their core logic.
