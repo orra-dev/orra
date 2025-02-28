@@ -14,8 +14,10 @@ Services and agents can be marked as "revertible" during registration. This indi
 
 ```javascript
 // JavaScript Example
+//...
+//...
 await service.register({
-   description: "Inventory management service",
+   description: "Inventory management ...",
    revertible: true,  // Enable compensations
    schema: {...}
 });
@@ -149,6 +151,8 @@ const invService = initService({
   name: 'inventory-service',
   revertible: true
 });
+
+// register...
 
 // Handle normal operations
 invService.start(async (task) => {
