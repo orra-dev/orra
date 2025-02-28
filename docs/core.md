@@ -50,6 +50,8 @@ Key features:
 - `task0` holds your original parameters
 - Services, Tasks as Services and Agents reference data using `$task.field` syntax
 
+Execution plans are also [intelligently cached](plan-caching.md). 
+
 ### Grounding and Execution Plan Validation
 
 Orra's grounding system enforces strict production safety through comprehensive validation of execution plans. This isn't just type checking - it's a complete semantic validation of your application's runtime behavior:
