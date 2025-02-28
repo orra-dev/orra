@@ -199,7 +199,7 @@ orra inspect o_fdhdhjhashah
 }
 ```
 
-This orchestration might involve multiple services, tools as a service and agents:
+This orchestration might involve multiple services, tools as services and agents:
 - Payment processing service
 - Inventory management tool as a service
 - Delivery scheduling agent
