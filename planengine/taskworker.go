@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	back "github.com/cenkalti/backoff/v4"
@@ -276,6 +277,34 @@ func (w *TaskWorker) triggerPauseExecution(err error) bool {
 	return true
 }
 
+func (w *TaskWorker) processInterimTaskResults(orchestrationID string, outputs []json.RawMessage) {
+	for _, output := range outputs {
+		var resultPayload TaskResultPayload
+		if err := json.Unmarshal(output, &resultPayload); err != nil {
+			w.LogManager.Logger.
+				Error().
+				Err(err).
+				Str("OrchestrationID", orchestrationID).
+				Str("TaskID", w.TaskID).
+				Str("Service", w.Service.Name).
+				Interface("ResultPayload", resultPayload).
+				Msg("Failed to unmarshal interim task result payload")
+		}
+
+		// Log the interim update but don't mark as complete
+		interimID := fmt.Sprintf("interim_%s_%s", strings.ToLower(w.TaskID), short.New())
+
+		w.LogManager.AppendToLog(
+			orchestrationID,
+			"task_interim_output",
+			interimID,
+			resultPayload.Task,
+			w.Service.ID,
+			w.consecutiveErrs,
+		)
+	}
+}
+
 func (w *TaskWorker) processTaskResult(orchestrationID string, output json.RawMessage) error {
 	var resultPayload TaskResultPayload
 	if err := json.Unmarshal(output, &resultPayload); err != nil {
@@ -482,10 +511,10 @@ func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string, ke
 		logger.Error().Err(err).Msg("Failed to append processing status after paused status")
 	}
 
-	return w.waitForResult(ctx, key, executionID)
+	return w.waitForResult(ctx, orchestrationID, key, executionID)
 }
 
-func (w *TaskWorker) waitForResult(ctx context.Context, key IdempotencyKey, executionID string) (json.RawMessage, error) {
+func (w *TaskWorker) waitForResult(ctx context.Context, orchestrationID string, key IdempotencyKey, executionID string) (json.RawMessage, error) {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -493,6 +522,7 @@ func (w *TaskWorker) waitForResult(ctx context.Context, key IdempotencyKey, exec
 
 	logger := w.LogManager.Logger.With().
 		Str("Operation", "waitForResult").
+		Str("OrchestrationID", orchestrationID).
 		Str("TaskID", w.TaskID).
 		Str("IdempotencyKey", string(key)).
 		Str("ExecutionID", executionID).
@@ -535,7 +565,12 @@ func (w *TaskWorker) waitForResult(ctx context.Context, key IdempotencyKey, exec
 				logger.Trace().Str("State", "ExecutionPaused").Msg("PAUSED - Trigger Pause")
 				return nil, RetryableError{Err: errors.New(PauseExecutionCode)}
 			case result.State == ExecutionInProgress:
-				logger.Trace().Str("State", "ExecutionInProgress").Msg("DO NOTHING")
+				interimResults := w.Service.IdempotencyStore.PopAnyInterimResults(key)
+				logger.Trace().
+					Str("State", "ExecutionInProgress").
+					Int("InterimResultsCount", len(interimResults)).
+					Msg("Add any interim results")
+				w.processInterimTaskResults(orchestrationID, interimResults)
 			}
 		}
 	}
