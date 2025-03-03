@@ -111,6 +111,55 @@ class OrraSDK {
 		return this.#registerServiceOrAgent(name, "agent", opts);
 	}
 	
+	pushUpdate(taskId, executionId, idempotencyKey, updateData) {
+		if (!taskId || !executionId || !idempotencyKey) {
+			this.logger.error('Cannot push update: taskId, executionId and idempotencyKey are all required', {
+				taskId,
+				executionId,
+				idempotencyKey
+			});
+			return Promise.reject(new Error('Both taskId, executionId and idempotencyKey are required for pushing updates'));
+		}
+		
+		if (!this.serviceId) {
+			this.logger.error('Cannot push update: service not registered', {
+				taskId,
+				executionId,
+				idempotencyKey
+			});
+			return Promise.reject(new Error('Service must be registered before pushing updates'));
+		}
+		
+		if (this.#userInitiatedClose) {
+			this.logger.error('Cannot push update: SDK is shutting down', {
+				taskId,
+				executionId,
+				idempotencyKey
+			});
+			return Promise.reject(new Error('SDK is shutting down'));
+		}
+		
+		return new Promise((resolve, reject) => {
+			try {
+				// Wrap the update data in the expected format
+				const payload = {
+					task: updateData
+				};
+				
+				this.#sendInterimTaskResult(taskId, executionId, this.serviceId, idempotencyKey, payload);
+				resolve();
+			} catch (error) {
+				this.logger.error('Failed to push update', {
+					taskId,
+					executionId,
+					idempotencyKey,
+					error: error.message
+				});
+				reject(error);
+			}
+		});
+	}
+	
 	async #registerServiceOrAgent(name, kind, opts = {
 		description: undefined,
 		revertible: undefined,
@@ -315,6 +364,10 @@ class OrraSDK {
 	
 	#handleTask(task) {
 		const { id: taskId, executionId, idempotencyKey } = task;
+		
+		task.pushUpdate = (updateData) => {
+			return this.pushUpdate(taskId, executionId, idempotencyKey, updateData);
+		};
 		
 		this.logger.trace('Task handling initiated', {
 			taskId,
@@ -584,6 +637,18 @@ class OrraSDK {
 			serviceId,
 			idempotencyKey,
 			status,
+		};
+		this.#sendMessage(message);
+	}
+	
+	#sendInterimTaskResult(taskId, executionId, serviceId, idempotencyKey, result) {
+		const message = {
+			type: 'task_interim_result',
+			taskId,
+			executionId,
+			serviceId,
+			idempotencyKey,
+			result
 		};
 		this.#sendMessage(message);
 	}
