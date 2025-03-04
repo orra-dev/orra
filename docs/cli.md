@@ -88,6 +88,21 @@ await svc.register({
 // Start handling tasks
 svc.start(async (task) => {
   // Your service logic here
+  
+  // Report progress during long-running tasks
+  await task.pushUpdate({
+    progress: 25,
+    message: "Processing customer data..."
+  });
+  
+  // Continue processing and report more progress
+  await task.pushUpdate({
+    progress: 50,
+    message: "Analyzing request..."
+  });
+  
+  // Complete the task with final result
+  return { success: true, data: { /* your result */ } };
 });
 ```
 
@@ -182,6 +197,12 @@ orra inspect o_abc123
 
 # Get comprehensive details with inputs/outputs
 orra inspect -d o_abc123
+
+# View progress updates for tasks
+orra inspect -d o_abc123 --updates
+
+# View complete progress details for long-running tasks
+orra inspect -d o_abc123 --long-updates
 ```
 
 ### Grounding Management
@@ -237,6 +258,10 @@ orra ps
 orra inspect -d o_failed123
 
 # Shows full task history, inputs, and outputs
+orra inspect -d o_failed123 --updates
+
+# View all progress updates for problematic tasks
+orra inspect -d o_failed123 --long-updates
 ```
 
 3. **Multiple Projects or environments**
@@ -282,9 +307,14 @@ orra config reset
    orra inspect -d <action-id>
    ```
 
-2. View recent actions:
+2. View task progress and updates:
+   ```bash
+   orra inspect -d <action-id> --updates
+   ```
+
+3. View recent actions:
    ```bash
    orra ps
    ```
 
-3. Visit our documentation: [https://orra.dev/docs](https://orra.dev/docs)
+4. Visit our documentation: [https://orra.dev/docs](https://orra.dev/docs)
