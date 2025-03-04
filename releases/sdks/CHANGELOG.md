@@ -1,3 +1,39 @@
+## SDKs v0.2.3
+
+### Features
+- Push progress updates using the new push update feature.
+
+### Python SDK v0.2.2
+
+#### Features
+- Can now push progress updates for a task that is still processing.
+- Updated all relevant docs to explain how to use the push update feature.
+- Bumped and published latest Python versions.
+
+### Javascript SDK v0.2.2
+
+#### Features
+- Can now push progress updates for a task that is still processing.
+- Updated all relevant docs to explain how to use the push update feature.
+- Bumped and published latest Python versions.
+
+## SDKs v0.2.2
+
+### Features
+- Brought documentation up to date.
+
+### Python SDK v0.2.1
+
+#### Features
+- Minor documentation updates.
+- Bumped and published latest Python versions.
+
+### Javascript SDK v0.2.1
+
+#### Features
+- Minor documentation updates.
+- Bumped and published latest Javascript versions.
+
 ## SDKs v0.2.1
 
 ### Features

@@ -1,3 +1,15 @@
+## CLI v0.2.3
+
+### Features
+- View task progress updates using the inspect command's new `--updates` and `--long-updates` flags.
+- Updated the CLI docs to highlight the latest inspect flags.
+
+## CLI v0.2.2
+
+### Features
+- Migrated towards a Plan Engine away from a Control Plane.
+- Minor bug fixes.
+
 ## CLI v0.2.1
 
 ### Features
