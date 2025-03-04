@@ -369,12 +369,12 @@ class OrraSDK:
                 taskId=task_id
             )
 
-            input_data = task.get("input", {})
+            raw_input = task.get("input", {})
             result = await self._task_handler(
                 task_id=task_id,
                 execution_id=execution_id,
                 idempotency_key=idempotency_key,
-                input_data=input_data,
+                raw_input=raw_input,
                 sdk=self
             )
             self.logger.debug(
