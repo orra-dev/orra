@@ -176,9 +176,7 @@ func (s *IdempotencyStore) PopAnyInterimResults(key IdempotencyKey) []json.RawMe
 	var results []json.RawMessage
 	if execution, exists := s.executions[key]; exists &&
 		execution.State == ExecutionInProgress {
-		for _, result := range execution.InterimResults {
-			results = append(results, result)
-		}
+		results = append(results, execution.InterimResults...)
 		execution.InterimResults = nil
 	}
 	return results
