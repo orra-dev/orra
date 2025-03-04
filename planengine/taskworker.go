@@ -302,6 +302,12 @@ func (w *TaskWorker) processInterimTaskResults(orchestrationID string, outputs [
 			w.Service.ID,
 			w.consecutiveErrs,
 		)
+
+		w.LogManager.Logger.Trace().Str("OrchestrationID", orchestrationID).
+			Str("TaskID", w.TaskID).
+			Str("Service", w.Service.Name).
+			Interface("InterimResultPayload", resultPayload).
+			Msg("Appended interim task result payload to Log")
 	}
 }
 
@@ -566,10 +572,6 @@ func (w *TaskWorker) waitForResult(ctx context.Context, orchestrationID string, 
 				return nil, RetryableError{Err: errors.New(PauseExecutionCode)}
 			case result.State == ExecutionInProgress:
 				interimResults := w.Service.IdempotencyStore.PopAnyInterimResults(key)
-				logger.Trace().
-					Str("State", "ExecutionInProgress").
-					Int("InterimResultsCount", len(interimResults)).
-					Msg("Add any interim results")
 				w.processInterimTaskResults(orchestrationID, interimResults)
 			}
 		}
