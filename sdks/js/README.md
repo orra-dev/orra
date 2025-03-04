@@ -79,6 +79,55 @@ echoToolSvc.onRevert(async (originalTask, taskResult) => {
 });
 ```
 
+### Progress Updates for Long-Running Tasks
+
+```javascript
+// Handler with progress updates
+service.start(async (task) => {
+  try {
+    // Begin processing
+    await task.pushUpdate({
+      progress: 25,
+      status: "processing",
+      message: "Starting data processing"
+    });
+    
+    // Run time-consuming operation
+    await processFirstBatch();
+    
+    // Report halfway progress
+    await task.pushUpdate({
+      progress: 50,
+      status: "processing",
+      message: "Halfway complete"
+    });
+    
+    // Complete the processing
+    await processSecondBatch();
+    
+    // Final progress update
+    await task.pushUpdate({
+      progress: 100,
+      message: "Processing complete"
+    });
+    
+    return { success: true, data: "Task completed successfully" };
+  } catch (error) {
+    throw error;
+  }
+});
+```
+
+Progess updates allow you to send interim results to provide visibility into long-running tasks. View these updates using the CLI:
+
+```bash
+# View summarized updates (first/last)
+orra inspect -d <orchestration-id> --updates
+
+# View all detailed updates
+orra inspect -d <orchestration-id> --long-updates
+```
+
 ### Custom Persistence
 
 ```javascript
