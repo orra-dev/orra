@@ -1,6 +1,6 @@
 {
   "name": "@orra.dev/sdk",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "module",
   "description": "JS SDK for Orra - Build reliable multi-agent applications that handle complex real-world interactions.",
   "main": "./dist/index.js",

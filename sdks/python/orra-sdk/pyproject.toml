@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "orra-sdk"
-version = "0.2.1"
+version = "0.2.2"
 description = "Python SDK for Orra - Build reliable multi-agent applications that handle complex real-world interactions."
 authors = ["Orra Team"]
 license = "MPL-2.0"
