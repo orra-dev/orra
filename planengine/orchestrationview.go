@@ -518,6 +518,10 @@ func (p *PlanEngine) buildSingleTaskResponse(
 		taskResp.Error = history[len(history)-1].Error
 	}
 
+	if interimResults, ok := lookupMaps.taskInterimResults[task.ID]; ok {
+		taskResp.InterimResults = interimResults
+	}
+
 	service, err := p.GetServiceByID(task.Service)
 	if err != nil {
 		return TaskInspectResponse{}, fmt.Errorf("error getting service: %w", err)
@@ -527,10 +531,6 @@ func (p *PlanEngine) buildSingleTaskResponse(
 	log := p.LogManager.GetLog(orchestration.ID)
 	if !service.Revertible {
 		return taskResp, nil
-	}
-
-	if interimResults, ok := lookupMaps.taskInterimResults[task.ID]; ok {
-		taskResp.InterimResults = interimResults
 	}
 
 	taskResp.CompensationHistory = p.processCompensationHistory(

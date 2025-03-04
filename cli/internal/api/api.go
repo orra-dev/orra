@@ -137,6 +137,7 @@ type TaskInspectResponse struct {
 	Output              json.RawMessage           `json:"output,omitempty"`
 	Error               string                    `json:"error,omitempty"`
 	Duration            time.Duration             `json:"duration"`
+	InterimResults      []InterimTaskResult       `json:"interimResults,omitempty"`
 	Compensation        *TaskCompensationStatus   `json:"compensation,omitempty"`
 	CompensationHistory []CompensationStatusEvent `json:"compensationHistory,omitempty"`
 	IsRevertible        bool                      `json:"isRevertible"`
@@ -147,6 +148,12 @@ type TaskCompensationStatus struct {
 	Attempt     int       `json:"attempt"`      // Current attempt number (1-based)
 	MaxAttempts int       `json:"max_attempts"` // Maximum attempts allowed
 	Timestamp   time.Time `json:"timestamp"`    // When compensation started
+}
+
+type InterimTaskResult struct {
+	ID        string          `json:"id"`
+	Timestamp time.Time       `json:"timestamp"`
+	Data      json.RawMessage `json:"data"`
 }
 
 type CompensationStatusEvent struct {
