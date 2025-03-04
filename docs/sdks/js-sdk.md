@@ -187,6 +187,73 @@ service.onRevert(async (task, result) => {
 
 ## Advanced Features
 
+### Progress Updates
+
+For long-running tasks, you can send interim progress updates to the Plan Engine. This allows monitoring task execution in real-time and provides valuable information for debugging and audit logs.
+
+The update is any object with properties that make sense for the task underway.
+
+```javascript
+service.start(async (task) => {
+  try {
+    // 1. Begin processing
+    await task.pushUpdate({
+      progress: 20,
+      status: "processing",
+      message: "Starting data analysis"
+    });
+    
+    // 2. Continue with more steps
+    await someFunction();
+    await task.pushUpdate({
+      progress: 50,
+      status: "processing",
+      message: "Processing halfway complete"
+    });
+    
+    // 3. Almost done
+    await finalSteps();
+    await task.pushUpdate({
+      progress: 90,
+      status: "processing",
+      message: "Finalizing results"
+    });
+    
+    // 4. Return final result
+    return { success: true, results: [...] };
+  } catch (error) {
+    // Handle errors
+    throw error;
+  }
+});
+```
+
+#### Benefits of Progress Updates
+
+- **Visibility**: Track execution of long-running tasks in real-time
+- **Debugging**: Identify exactly where tasks slow down or fail
+- **Audit Trail**: Maintain a complete history of task execution
+- **User Experience**: Forward progress information to end-users
+
+#### Viewing Progress Updates
+
+Use the Orra CLI to view progress updates:
+
+```bash
+# View summarized progress updates
+orra inspect -d <orchestration-id> --updates
+
+# View all detailed progress updates
+orra inspect -d <orchestration-id> --long-updates
+```
+
+#### Best Practices
+
+- Send updates at meaningful milestones (not too frequent)
+- Include percentage completion when possible
+- Keep messages concise and informative
+- Use consistent status terminology
+
 ### Persistence Configuration
 
 Orra's Plan Engine maintains service/agent identity across restarts using persistence. This is crucial for:

@@ -194,7 +194,7 @@ class OrraBase:
             self._handler = func
 
             # Create internal handler with validation
-            async def internal_handler(raw_input: Dict[str, Any]) -> Dict[str, Any]:
+            async def internal_handler(task_id: str, execution_id: str, idempotency_key: str, raw_input: Dict[str, Any], sdk) -> Dict[str, Any]:
                 try:
 
                     self._sdk.logger.trace(
@@ -207,8 +207,16 @@ class OrraBase:
                     self._sdk.logger.debug("Validating input", service=self._name)
                     validated_input = self._input_model.model_validate(raw_input)
 
+                    task = Task(
+                        input=validated_input,
+                        _sdk=sdk,
+                        _task_id=task_id,
+                        _execution_id=execution_id,
+                        _idempotency_key=idempotency_key
+                    )
+
                     self._sdk.logger.debug("Executing handler", service=self._name)
-                    result = await self._handler(Task(input=validated_input))
+                    result = await self._handler(task)
 
                     # Validate output matches schema
                     if not isinstance(result, self._output_model):

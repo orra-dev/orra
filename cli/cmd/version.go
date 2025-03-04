@@ -17,7 +17,7 @@ func newVersionCmd(_ *CliOpts) *cobra.Command {
 		Use:   "version",
 		Short: "Print the client and server version information",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println("Client Version: v0.2.2")
+			fmt.Println("Client Version: v0.2.3")
 			// TODO: Implement server version check
 			return nil
 		},

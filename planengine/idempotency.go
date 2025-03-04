@@ -40,13 +40,14 @@ type IdempotencyStore struct {
 }
 
 type Execution struct {
-	ExecutionID string          `json:"executionId"`
-	Result      json.RawMessage `json:"result,omitempty"`
-	Failures    []error         `json:"error,omitempty"`
-	State       ExecutionState  `json:"state"`
-	Timestamp   time.Time       `json:"timestamp"`
-	StartedAt   time.Time       `json:"startedAt"`
-	LeaseExpiry time.Time       `json:"leaseExpiry"`
+	ExecutionID    string            `json:"executionId"`
+	Result         json.RawMessage   `json:"result,omitempty"`
+	Failures       []error           `json:"error,omitempty"`
+	InterimResults []json.RawMessage `json:"interimResults,omitempty"`
+	State          ExecutionState    `json:"state"`
+	Timestamp      time.Time         `json:"timestamp"`
+	StartedAt      time.Time         `json:"startedAt"`
+	LeaseExpiry    time.Time         `json:"leaseExpiry"`
 }
 
 func (e *Execution) pushFailure(err error) {
@@ -166,6 +167,33 @@ func (s *IdempotencyStore) ResetFailedExecution(key IdempotencyKey) (*Execution,
 		return execution, true
 	}
 	return nil, false
+}
+
+func (s *IdempotencyStore) PopAnyInterimResults(key IdempotencyKey) []json.RawMessage {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var results []json.RawMessage
+	if execution, exists := s.executions[key]; exists &&
+		execution.State == ExecutionInProgress {
+		results = append(results, execution.InterimResults...)
+		execution.InterimResults = nil
+	}
+	return results
+}
+
+func (s *IdempotencyStore) TrackInterimResult(key IdempotencyKey, interimResult json.RawMessage) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if execution, exists := s.executions[key]; exists &&
+		execution.State == ExecutionInProgress {
+		// Store the interim result but keep the execution in progress
+		execution.InterimResults = append(execution.InterimResults, interimResult)
+		execution.Timestamp = time.Now().UTC()
+		// Extend the lease to prevent timeout during long-running tasks
+		execution.LeaseExpiry = time.Now().UTC().Add(defaultLeaseDuration)
+	}
 }
 
 func (s *IdempotencyStore) UpdateExecutionResult(key IdempotencyKey, result json.RawMessage, err error) {

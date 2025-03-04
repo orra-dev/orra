@@ -5,9 +5,11 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Optional, Protocol, Callable, Awaitable, TypeVar, Dict, Any, List, Generic
+
 from pydantic import BaseModel, Field
 
 from .constants import DEFAULT_SERVICE_KEY_PATH
+from .exceptions import OrraError
 
 T_Input = TypeVar('T_Input', bound=BaseModel)
 T_Output = TypeVar('T_Output', bound=BaseModel)
@@ -114,10 +116,38 @@ class TaskResultPayload(BaseModel):
         description="Compensation data if the service is revertible"
     )
 
-@dataclass
+
 class Task(Generic[T_Input]):
-    """Wrapper for task inputs"""
-    input: T_Input
+    """
+    A task received from the plan engine.
+
+    Attributes:
+        input: The task input data
+        push_update: A method to send interim results back to the plan engine
+    """
+
+    def __init__(self, input: T_Input, _sdk=None, _task_id=None, _execution_id=None, _idempotency_key=None):
+        self.input = input
+        self._sdk = _sdk
+        self._task_id = _task_id
+        self._execution_id = _execution_id
+        self._idempotency_key = _idempotency_key
+
+    async def push_update(self, update_data: dict) -> None:
+        """
+        Push an interim result update back to the orchestration engine.
+
+        Args:
+            update_data: The interim task result data
+
+        Raises:
+            OrraError: If the SDK is not properly initialized
+        """
+        if not self._sdk or not self._task_id or not self._execution_id or not self._idempotency_key:
+            raise OrraError("Task not properly initialized for pushing updates")
+
+        await self._sdk.push_update(self._task_id, self._execution_id, self._idempotency_key, update_data)
+
 
 @dataclass
 class RevertSource(Generic[T_Input, T_Output]):

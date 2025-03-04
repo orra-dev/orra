@@ -42,10 +42,23 @@ async def main():
     @cust_chat_svc.handler()
     async def handle_chat(task: Task[ChatInput]) -> ChatOutput:
         try:
+            # Send progress update
+            await task.push_update({
+                "progress": 25,
+                "message": "Processing customer request..."
+            })
+            
             # Use your existing service function
             # Your function handles its own retries and error recovery
             # and Orra reacts accordingly.
             response = await my_service(task.input.customer_id, task.input.message)
+            
+            # Send final progress update
+            await task.push_update({
+                "progress": 100,
+                "message": "Completed response generation"
+            })
+            
             return ChatOutput(response=response)
         except Exception as e:
             # Once you determine the task should fail, throw the error.
@@ -186,6 +199,72 @@ async def revert_stuff(source: RevertSource[InputModel, OutputModel]) -> Compens
 ```
 
 ## Advanced Features
+
+### Progress Updates
+
+For long-running tasks, you can send interim progress updates to the orchestration engine. This allows monitoring task execution in real-time and provides valuable information for debugging and audit logs.
+
+The update is any object with properties that make sense for the task underway.
+
+```python
+@service.handler()
+async def handle_request(task: Task[InputModel]) -> OutputModel:
+    try:
+        # 1. Begin processing
+        await task.push_update({
+            "progress": 20,
+            "status": "processing",
+            "message": "Starting data analysis"
+        })
+        
+        # 2. Continue with more steps
+        await some_function()
+        await task.push_update({
+            "progress": 50,
+            "status": "processing",
+            "message": "Processing halfway complete"
+        })
+        
+        # 3. Almost done
+        await final_steps()
+        await task.push_update({
+            "progress": 90,
+            "status": "processing",
+            "message": "Finalizing results"
+        })
+        
+        # 4. Return final result
+        return OutputModel(response="Analysis complete", data=[...])
+    except Exception as e:
+        # Handle errors
+        raise
+```
+
+#### Benefits of Progress Updates
+
+- **Visibility**: Track execution of long-running tasks in real-time
+- **Debugging**: Identify exactly where tasks slow down or fail
+- **Audit Trail**: Maintain a complete history of task execution
+- **User Experience**: Forward progress information to end-users
+
+#### Viewing Progress Updates
+
+Use the Orra CLI to view progress updates:
+
+```bash
+# View summarized progress updates
+orra inspect -d <orchestration-id> --updates
+
+# View all detailed progress updates
+orra inspect -d <orchestration-id> --long-updates
+```
+
+#### Best Practices
+
+- Send updates at meaningful milestones (not too frequent)
+- Include percentage completion when possible
+- Keep messages concise and informative
+- Use consistent status terminology
 
 ### Persistence Configuration
 

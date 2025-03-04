@@ -86,6 +86,71 @@ async def revert_reservation(source: RevertSource[Input, Output]) -> Compensatio
     return CompensationResult(status=CompensationStatus.COMPLETED)
 ```
 
+### Progress Updates for Long-Running Tasks
+
+```python
+from orra import OrraService, Task
+from pydantic import BaseModel
+
+class Input(BaseModel):
+    file_path: str
+
+class Output(BaseModel):
+    success: bool
+    processed_rows: int
+
+service = OrraService(
+    name="data-processor",
+    description="Processes large data files",
+    url="https://api.orra.dev",
+    api_key="your-api-key"
+)
+
+@service.handler()
+async def process_file(task: Task[Input]) -> Output:
+    try:
+        # Start processing
+        await task.push_update({
+            "progress": 20,
+            "status": "processing",
+            "message": "Starting file analysis"
+        })
+        
+        # Perform initial processing
+        await analyze_file(task.input.file_path)
+        
+        # Update progress halfway
+        await task.push_update({
+            "progress": 50,
+            "status": "processing",
+            "message": "Processing data rows"
+        })
+        
+        # Complete processing
+        rows = await process_data(task.input.file_path)
+        
+        # Final progress update
+        await task.push_update({
+            "progress": 100,
+            "message": "Processing complete"
+        })
+        
+        return Output(success=True, processed_rows=rows)
+    except Exception as e:
+        # Handle errors appropriately
+        raise
+```
+
+Progress updates allow you to send interim results to provide visibility into long-running tasks. View these updates using the CLI:
+
+```bash
+# View summarized updates (first/last)
+orra inspect -d <orchestration-id> --updates
+
+# View all detailed updates
+orra inspect -d <orchestration-id> --long-updates
+```
+
 ### Custom Persistence
 
 ```python

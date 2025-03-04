@@ -2,23 +2,23 @@
 #   License, v. 2.0. If a copy of the MPL was not distributed with this
 #   file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import time
-from typing import Optional, Dict, Any, Callable, Awaitable
-from pathlib import Path
-import websockets
 import asyncio
 import json
+import time
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional, Dict, Any, Callable, Awaitable
 
 import httpx
+import websockets
 
+from .exceptions import OrraError, ServiceRegistrationError, ConnectionError
+from .logger import OrraLogger
+from .persistence import PersistenceManager
 from .types import (
     PersistenceConfig, T_Input, T_Output, CompensationStatus,
     CompensationResult
 )
-from .persistence import PersistenceManager
-from .exceptions import OrraError, ServiceRegistrationError, ConnectionError
-from .logger import OrraLogger
 
 MAX_PROCESSED_TASKS_AGE = 24 * 60 * 60  # 24 hours in seconds
 MAX_IN_PROGRESS_AGE = 30 * 60  # 30 minutes in seconds
@@ -154,6 +154,74 @@ class OrraSDK:
 
         except Exception as e:
             raise ServiceRegistrationError(f"Failed to register service: {e}") from e
+
+    async def push_update(
+            self,
+            task_id: str,
+            execution_id: str,
+            idempotency_key: str,
+            update_data: dict
+    ) -> None:
+        """
+        Push an interim result update for a task that's currently in progress.
+
+        Args:
+            task_id: The ID of the task
+            execution_id: The execution ID of the task
+            idempotency_key: The idempotency Key of the task
+            update_data: The interim task result data
+
+        Raises:
+            OrraError: If the service is not registered or required parameters are missing
+        """
+        if not task_id or not execution_id or not idempotency_key:
+            self.logger.error(
+                "Cannot push update: taskId, executionId and idempotency_key are required",
+                taskId=task_id,
+                executionId=execution_id,
+                idempotency_key=idempotency_key
+            )
+            raise OrraError("Both taskId, executionId and idempotency_key are required for pushing updates")
+
+        if not self.service_id:
+            self.logger.error(
+                "Cannot push update: service not registered",
+                taskId=task_id,
+                executionId=execution_id,
+                idempotency_key=idempotency_key
+            )
+            raise OrraError("Service must be registered before pushing updates")
+
+        if self._user_initiated_close:
+            self.logger.error(
+                "Cannot push update: SDK is shutting down",
+                taskId=task_id,
+                executionId=execution_id,
+                idempotency_key=idempotency_key
+            )
+            raise OrraError("SDK is shutting down")
+
+        try:
+            # Wrap the update data in the expected format
+            payload = {
+                "task": update_data
+            }
+
+            await self._send_interim_task_result(
+                task_id=task_id,
+                idempotency_key=idempotency_key,
+                execution_id=execution_id,
+                result=payload
+            )
+        except Exception as e:
+            self.logger.error(
+                "Failed to push update",
+                taskId=task_id,
+                executionId=execution_id,
+                idempotency_key=idempotency_key,
+                error=str(e)
+            )
+            raise
 
     async def _connect_websocket(self) -> None:
         """Establish WebSocket connection"""
@@ -301,8 +369,14 @@ class OrraSDK:
                 taskId=task_id
             )
 
-            input_data = task.get("input", {})
-            result = await self._task_handler(input_data)
+            raw_input = task.get("input", {})
+            result = await self._task_handler(
+                task_id=task_id,
+                execution_id=execution_id,
+                idempotency_key=idempotency_key,
+                raw_input=raw_input,
+                sdk=self
+            )
             self.logger.debug(
                 "Processed task handler",
                 input=result,
@@ -533,6 +607,24 @@ class OrraSDK:
             "serviceId": self.service_id,
             "status": status,
             "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        await self._send_message(message)
+
+    async def _send_interim_task_result(
+            self,
+            task_id: str,
+            idempotency_key: str,
+            execution_id: str,
+            result: Optional[Any] = None
+    ) -> None:
+        """Send task interim result"""
+        message = {
+            "type": "task_interim_result",
+            "taskId": task_id,
+            "idempotencyKey": idempotency_key,
+            "executionId": execution_id,
+            "serviceId": self.service_id,
+            "result": result
         }
         await self._send_message(message)
 

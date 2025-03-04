@@ -156,16 +156,30 @@ Orra uses an append-only log (similar to Kafka) for task coordination:
 - Immutable history for debugging
 - Basis for exactly-once execution
 - Clean recovery after failures
+- Storage for progress updates from long-running tasks
 
 Example log sequence:
 ```
 [0001] Task customer_context started
 [0002] Task order_details started
-[0003] Task customer_context completed
-[0004] Task order_details completed
-[0005] Task generate_response started
-[0006] Task generate_response completed
+[0003] Task customer_context interim_output (20% complete)
+[0004] Task customer_context interim_output (50% complete)
+[0005] Task order_details completed
+[0006] Task customer_context interim_output (90% complete)
+[0007] Task customer_context completed
+[0008] Task generate_response started
+[0009] Task generate_response completed
 ```
+
+#### Progress Updates in the Log
+
+The Plan Engine stores interim task results in the log as special entries with type `task_interim_output`. These entries:
+
+- Are appended while a task is running (before completion)
+- Maintain chronological ordering with other log entries
+- Are retrievable for debugging and monitoring purposes (e.g. inspect with the CLI `--updates` or `--long-updates`)
+
+This mechanism provides transparency into task execution without compromising the reliability of the core task processing model.
 
 ### Advanced Usage Patterns
 
@@ -221,7 +235,25 @@ orra inspect -d o_xxxxxxxxxxxxxx
 │ inventory-service (task1)
 │ ──────────────────────────────────────────────────
 │ 14:07:43  ◎ Processing
-│ 14:07:43  ● Completed
+│ 14:07:44  ● Completed
+│
+│ Progress: [====================] 100%  (1.0s elapsed)
+│ Updates: 3
+│
+│ Progress Updates ───────────────────────────────────
+│ 14:07:43  First Update
+│   {
+│     "progress": 30,
+│     "status": "processing",
+│     "message": "Checking inventory"
+│   }
+│
+│ 14:07:44  Latest Update
+│   {
+│     "progress": 100,
+│     "status": "processing",
+│     "message": "Product located"
+│   }
 │
 │ Input:
 │   {

@@ -61,9 +61,16 @@ type TaskInspectResponse struct {
 	Output              json.RawMessage           `json:"output,omitempty"`
 	Error               string                    `json:"error,omitempty"`
 	Duration            time.Duration             `json:"duration"` // Time between first Processing and last status
+	InterimResults      []TaskInterimResult       `json:"interimResults,omitempty"`
 	Compensation        *TaskCompensationStatus   `json:"compensation,omitempty"`
 	CompensationHistory []CompensationStatusEvent `json:"compensationHistory,omitempty"`
 	IsRevertible        bool                      `json:"isRevertible"`
+}
+
+type TaskInterimResult struct {
+	ID        string          `json:"id"`
+	Timestamp time.Time       `json:"timestamp"`
+	Data      json.RawMessage `json:"data"`
 }
 
 type TaskCompensationStatus struct {
@@ -84,9 +91,10 @@ type CompensationStatusEvent struct {
 }
 
 type taskLookupMaps struct {
-	serviceNames map[string]string
-	taskOutputs  map[string]json.RawMessage
-	taskStatuses map[string][]TaskStatusEvent
+	serviceNames       map[string]string
+	taskOutputs        map[string]json.RawMessage
+	taskStatuses       map[string][]TaskStatusEvent
+	taskInterimResults map[string][]TaskInterimResult
 }
 
 type task0Values map[string]interface{}
@@ -313,12 +321,13 @@ func (p *PlanEngine) buildLookupMaps(orchestrationID string, orchestration *Orch
 	}
 
 	// Process log entries to build output and status maps
-	taskOutputs, taskStatuses := p.processLogEntries(log)
+	taskOutputs, taskStatuses, taskInterimResults := p.processLogEntries(log)
 
 	return &taskLookupMaps{
-		serviceNames: serviceNames,
-		taskOutputs:  taskOutputs,
-		taskStatuses: taskStatuses,
+		serviceNames:       serviceNames,
+		taskOutputs:        taskOutputs,
+		taskStatuses:       taskStatuses,
+		taskInterimResults: taskInterimResults,
 	}, nil
 }
 
@@ -335,9 +344,10 @@ func (p *PlanEngine) getServiceNames(orchestration *Orchestration) (map[string]s
 	return serviceNames, nil
 }
 
-func (p *PlanEngine) processLogEntries(log *Log) (map[string]json.RawMessage, map[string][]TaskStatusEvent) {
+func (p *PlanEngine) processLogEntries(log *Log) (map[string]json.RawMessage, map[string][]TaskStatusEvent, map[string][]TaskInterimResult) {
 	taskOutputs := make(map[string]json.RawMessage)
 	taskStatuses := make(map[string][]TaskStatusEvent)
+	interimResults := make(map[string][]TaskInterimResult)
 
 	entries := log.ReadFrom(0)
 	p.Logger.Trace().Interface("Log Entries", entries).Msg("processing log entries for orchestration inspection")
@@ -347,10 +357,34 @@ func (p *PlanEngine) processLogEntries(log *Log) (map[string]json.RawMessage, ma
 			taskOutputs[entry.GetID()] = entry.GetValue()
 		case "task_status":
 			processStatusEntry(entry, taskStatuses, p.Logger)
+		case "task_interim_output":
+			processTaskInterimResultEntry(entry, interimResults)
 		}
 	}
 
-	return taskOutputs, taskStatuses
+	return taskOutputs, taskStatuses, interimResults
+}
+
+func processTaskInterimResultEntry(entry LogEntry, interimOutput map[string][]TaskInterimResult) {
+	parts := strings.Split(entry.GetID(), "_")
+	if len(parts) != 3 {
+		return
+	}
+
+	taskID := parts[1]
+	result := TaskInterimResult{
+		ID:        entry.GetID(),
+		Timestamp: entry.GetTimestamp(),
+		Data:      entry.GetValue(),
+	}
+	interimOutput[taskID] = append(interimOutput[taskID], result)
+
+	for taskID, results := range interimOutput {
+		sort.Slice(results, func(i, j int) bool {
+			return results[i].Timestamp.Before(results[j].Timestamp)
+		})
+		interimOutput[taskID] = results
+	}
 }
 
 func processStatusEntry(entry LogEntry, taskStatuses map[string][]TaskStatusEvent, logger zerolog.Logger) {
@@ -482,6 +516,10 @@ func (p *PlanEngine) buildSingleTaskResponse(
 	// Set error if present in last status
 	if len(history) > 0 && history[len(history)-1].Error != "" {
 		taskResp.Error = history[len(history)-1].Error
+	}
+
+	if interimResults, ok := lookupMaps.taskInterimResults[task.ID]; ok {
+		taskResp.InterimResults = interimResults
 	}
 
 	service, err := p.GetServiceByID(task.Service)

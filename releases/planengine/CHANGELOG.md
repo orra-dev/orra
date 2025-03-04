@@ -1,3 +1,23 @@
+## Plan Engine v0.2.3
+
+### Features
+- Can accept task interim results as progress updates from coordinated tasks.
+- Store task interim results in an orchestration's log.
+- Created a new message payload type `task_interim_result` dedicated to processing progress updates.
+- Bumped version to v0.2.3
+
+### Documentation
+- Updated the core features documentation with an explanation for task interim results .
+
+## Plan Engine v0.2.2
+
+### Features
+- Migrated towards a Plan Engine away from a Control Plane.
+
+### Documentation
+- General README updates across the project.
+- General documentation updates and consolidation.
+
 ## Control Plane v0.2.1
 
 ### Features
