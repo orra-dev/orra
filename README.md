@@ -1,4 +1,4 @@
-# 🪡 Orra (✨Alpha✨)
+# 🪡 orra (✨Alpha✨)
 
 Move beyond simple Crews and Agents. Use Orra to build production-ready multi-agent applications that handle complex real-world interactions.
 
@@ -15,7 +15,7 @@ Orra coordinates tasks across your existing stack, agents and any tools run as s
 * 🔮 Real-time status tracking
 * 🪝 Webhook result delivery
 
-Read the [launch blog post](https://outgoing-icecream-a85.notion.site/The-Missing-Glue-Layer-for-Multi-Agent-Applications-1a0605f92f9c80ca83acef5402a334dd).
+[Learn why we built orra →](https://tinyurl.com/orra-launch-blog-post)
 
 ### Coming Soon
 
