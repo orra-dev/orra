@@ -15,7 +15,7 @@ Orra coordinates tasks across your existing stack, agents and any tools run as s
 * 🔮 Real-time status tracking
 * 🪝 Webhook result delivery
 
-[Learn why we built orra →](https://tinyurl.com/orra-launch-blog-post).
+[Learn why we built orra →](https://tinyurl.com/orra-launch-blog-post)
 
 ### Coming Soon
 
