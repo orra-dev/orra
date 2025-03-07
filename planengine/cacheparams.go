@@ -14,27 +14,61 @@ import (
 
 // extractParamMappings discovers which Task0 input fields were derived from action parameters
 func extractParamMappings(actionParams ActionParams, task0Input map[string]interface{}) ([]TaskZeroCacheMapping, error) {
-	// Create value to field lookup from action params
-	valueToField := make(map[any]string)
+	// Maps for different value types
+	stringValues := make(map[string]string) // For string values
+	jsonValues := make(map[string]string)   // For JSON representations of complex types
+
+	// Process action parameters to build lookup maps
 	for _, param := range actionParams {
-		valueToField[param.Value] = param.Field
+		field := param.Field
+
+		// For primitive types
+		if isPrimitive(param.Value) {
+			// Store string representation for primitive types
+			stringValues[fmt.Sprintf("%v", param.Value)] = field
+		} else {
+			// For complex types (arrays, objects), use JSON representation
+			jsonBytes, err := json.Marshal(param.Value)
+			if err == nil {
+				jsonValues[string(jsonBytes)] = field
+			}
+		}
 	}
 
 	var mappings []TaskZeroCacheMapping
 
 	// Find Task0 input values that match action param values
 	for task0Field, task0Value := range task0Input {
-		strValue, ok := task0Value.(string)
-		if !ok {
-			continue // Skip non-string values
+		matched := false
+		actionField := ""
+		valueToStore := ""
+
+		// For primitive task0 values, try string match
+		if isPrimitive(task0Value) {
+			strVal := fmt.Sprintf("%v", task0Value)
+			if field, ok := stringValues[strVal]; ok {
+				matched = true
+				actionField = field
+				valueToStore = strVal
+			}
+		} else {
+			// For complex types, try JSON match
+			jsonBytes, err := json.Marshal(task0Value)
+			if err == nil {
+				jsonStr := string(jsonBytes)
+				if field, ok := jsonValues[jsonStr]; ok {
+					matched = true
+					actionField = field
+					valueToStore = jsonStr // This is already a valid JSON string
+				}
+			}
 		}
 
-		// If we find a matching value in action params
-		if actionField, exists := valueToField[strValue]; exists {
+		if matched {
 			mappings = append(mappings, TaskZeroCacheMapping{
 				Field:       task0Field,
 				ActionField: actionField,
-				Value:       strValue,
+				Value:       valueToStore,
 			})
 		}
 	}
@@ -47,14 +81,27 @@ func extractParamMappings(actionParams ActionParams, task0Input map[string]inter
 	return mappings, nil
 }
 
-// applyParamMappings creates a new Task0 input using stored mappings and new action params
+// isPrimitive checks if a value is a primitive type (string, number, boolean, nil)
+func isPrimitive(value interface{}) bool {
+	if value == nil {
+		return true
+	}
+
+	switch value.(type) {
+	case string, int, int32, int64, float32, float64, bool, uint, uint64, uint32:
+		return true
+	default:
+		return false
+	}
+}
+
 func applyParamMappings(
 	originalTask0Input map[string]interface{},
 	actionParams ActionParams,
 	mappings []TaskZeroCacheMapping,
 ) (map[string]interface{}, error) {
 	// Create lookup for new action param values
-	actionParamLookup := make(map[string]any)
+	actionParamLookup := make(map[string]interface{})
 	for _, param := range actionParams {
 		actionParamLookup[param.Field] = param.Value
 	}
@@ -71,6 +118,8 @@ func applyParamMappings(
 		if !exists {
 			return nil, fmt.Errorf("missing required action parameter: %s", mapping.ActionField)
 		}
+
+		// Always use the new value directly from action params
 		newTask0Input[mapping.Field] = newValue
 	}
 
