@@ -15,7 +15,7 @@ import (
 // extractParamMappings discovers which Task0 input fields were derived from action parameters
 func extractParamMappings(actionParams ActionParams, task0Input map[string]interface{}) ([]TaskZeroCacheMapping, error) {
 	// Create value to field lookup from action params
-	valueToField := make(map[string]string)
+	valueToField := make(map[any]string)
 	for _, param := range actionParams {
 		valueToField[param.Value] = param.Field
 	}
@@ -54,7 +54,7 @@ func applyParamMappings(
 	mappings []TaskZeroCacheMapping,
 ) (map[string]interface{}, error) {
 	// Create lookup for new action param values
-	actionParamLookup := make(map[string]string)
+	actionParamLookup := make(map[string]any)
 	for _, param := range actionParams {
 		actionParamLookup[param.Field] = param.Value
 	}

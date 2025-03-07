@@ -331,7 +331,7 @@ type ActionParams []ActionParam
 
 type ActionParam struct {
 	Field string `json:"field"`
-	Value string `json:"value"`
+	Value any    `json:"value"`
 }
 
 // ExecutionPlan represents the execution plan for services and agents
