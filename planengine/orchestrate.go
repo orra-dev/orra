@@ -98,6 +98,12 @@ func (p *PlanEngine) PrepareOrchestration(ctx context.Context, projectID string,
 	}
 
 	// Non-retryable validations
+	if err := p.validateActionParams(orchestration.Params); err != nil {
+		err = fmt.Errorf("invalid orchestration: %w", err)
+		p.prepForError(orchestration, err, Failed)
+		return err
+	}
+
 	if err := p.validateWebhook(orchestration.ProjectID, orchestration.Webhook); err != nil {
 		err = fmt.Errorf("invalid orchestration: %w", err)
 		p.prepForError(orchestration, err, Failed)
@@ -500,6 +506,18 @@ func (p *PlanEngine) decomposeAction(ctx context.Context, orchestration *Orchest
 	result.GroundingHit = orchestration.GroundingHit
 
 	return result, cacheResult.ID, cacheResult.Hit, nil
+}
+
+func (p *PlanEngine) validateActionParams(params ActionParams) error {
+	if len(params) == 0 {
+		return nil
+	}
+
+	if err := ValidateActionParams(params); err != nil {
+		return fmt.Errorf("action parameters invalid: %w", err)
+	}
+
+	return nil
 }
 
 func (p *PlanEngine) validateWebhook(projectID string, webhookUrl string) error {
