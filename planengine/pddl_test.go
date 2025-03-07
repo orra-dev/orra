@@ -22,8 +22,6 @@ type FakeMatcher struct {
 	// Configured responses for testing
 	matchResponse       bool
 	matchScore          float64
-	matchCount          int
-	totalCount          int
 	matchError          error
 	embeddings          []float32
 	embeddingsError     error
@@ -180,7 +178,7 @@ func TestPddlDomainGenerator_GenerateDomain(t *testing.T) {
 
 	// Verify action
 	assert.Contains(t, domain, "(:action execute-service")
-	assert.Contains(t, domain, ":parameters (?s - service ?orderId - order-id ?amount - number)")
+	assert.Contains(t, domain, ":parameters (?s - service ?amount - number ?orderId - order-id)")
 }
 
 func TestPddlDomainGenerator_ValidateServiceCapabilities(t *testing.T) {
