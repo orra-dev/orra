@@ -98,6 +98,12 @@ func (p *PlanEngine) PrepareOrchestration(ctx context.Context, projectID string,
 	}
 
 	// Non-retryable validations
+	if err := p.validateActionParams(orchestration.Params); err != nil {
+		err = fmt.Errorf("invalid orchestration: %w", err)
+		p.prepForError(orchestration, err, Failed)
+		return err
+	}
+
 	if err := p.validateWebhook(orchestration.ProjectID, orchestration.Webhook); err != nil {
 		err = fmt.Errorf("invalid orchestration: %w", err)
 		p.prepForError(orchestration, err, Failed)
@@ -502,6 +508,18 @@ func (p *PlanEngine) decomposeAction(ctx context.Context, orchestration *Orchest
 	return result, cacheResult.ID, cacheResult.Hit, nil
 }
 
+func (p *PlanEngine) validateActionParams(params ActionParams) error {
+	if len(params) == 0 {
+		return nil
+	}
+
+	if err := ValidateActionParams(params); err != nil {
+		return fmt.Errorf("action parameters invalid: %w", err)
+	}
+
+	return nil
+}
+
 func (p *PlanEngine) validateWebhook(projectID string, webhookUrl string) error {
 	if len(strings.TrimSpace(webhookUrl)) == 0 {
 		return fmt.Errorf("a webhook url is required to return orchestration results")
@@ -848,7 +866,7 @@ func (o *Orchestration) MatchingGroundingAgainstAction(ctx context.Context, matc
 			normalizedPlanAction := normalizeActionPattern(o.Action.Content)
 			normalizedUseCase := normalizeActionPattern(useCase.Action)
 
-			hasMatch, score, err := matcher.MatchTexts(ctx, normalizedPlanAction, normalizedUseCase, 0.85)
+			hasMatch, score, err := matcher.MatchTexts(ctx, normalizedPlanAction, normalizedUseCase, 0.75)
 			if err != nil {
 				return nil, 0, fmt.Errorf("failed to match action: %w", err)
 			}

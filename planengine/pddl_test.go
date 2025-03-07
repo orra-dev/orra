@@ -8,6 +8,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -21,8 +22,6 @@ type FakeMatcher struct {
 	// Configured responses for testing
 	matchResponse       bool
 	matchScore          float64
-	matchCount          int
-	totalCount          int
 	matchError          error
 	embeddings          []float32
 	embeddingsError     error
@@ -39,17 +38,20 @@ func NewFakeMatcher() *FakeMatcher {
 }
 
 // In the same file, update the FakeMatcher MatchTexts method:
-func (f *FakeMatcher) MatchTexts(_ context.Context, _, _ string, _ float64) (bool, float64, error) {
+func (f *FakeMatcher) MatchTexts(_ context.Context, text1, _ string, _ float64) (bool, float64, error) {
 	if f.matchError != nil {
 		return false, 0, f.matchError
 	}
 
-	// For specific capability testing (like the 88.24% case)
-	if f.matchCount >= 0 && f.totalCount > 0 {
-		f.matchCount++
-		// Only match the first 88.24% of capabilities
-		match := f.matchCount <= int(float64(f.totalCount)*0.8824)
-		return match, f.matchScore, nil
+	// Special case for 88.24% test - use a deterministic approach instead of a counter
+	if f.capabilitiesToMatch != nil && strings.HasPrefix(text1, "Cap") {
+		// Extract capability number (e.g., "Cap5" -> 5)
+		var capNum int
+		_, _ = fmt.Sscanf(text1, "Cap%d", &capNum)
+
+		// Match first ~88.24% of capabilities (15 out of 17)
+		shouldMatch := capNum <= 15
+		return shouldMatch, f.matchScore, nil
 	}
 
 	// Default behavior for other test cases
@@ -176,7 +178,7 @@ func TestPddlDomainGenerator_GenerateDomain(t *testing.T) {
 
 	// Verify action
 	assert.Contains(t, domain, "(:action execute-service")
-	assert.Contains(t, domain, ":parameters (?s - service ?orderId - order-id ?amount - number)")
+	assert.Contains(t, domain, ":parameters (?s - service ?amount - number ?orderId - order-id)")
 }
 
 func TestPddlDomainGenerator_ValidateServiceCapabilities(t *testing.T) {
@@ -310,9 +312,7 @@ func TestPddlDomainGenerator_ValidateServiceCapabilities(t *testing.T) {
 
 			// For the 88.24% test case, set up specific matches
 			if tt.name == "88.24% capabilities matched (below threshold)" {
-				// Add these two lines here:
-				matcher.matchCount = 0
-				matcher.totalCount = len(tt.useCase.Capabilities)
+				matcher.capabilitiesToMatch = map[string]any{"enabled": true}
 			}
 
 			// Create generator with test configuration

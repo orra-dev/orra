@@ -26,8 +26,8 @@ func extractVariables(action string) []string {
 	return vars
 }
 
-// validateActionParams checks if params match action variables
-func validateActionParams(action string, params map[string]string) error {
+// validateGroundingActionParams checks if params match action variables
+func validateGroundingActionParams(action string, params map[string]string) error {
 	variables := extractVariables(action)
 	if len(variables) == 0 {
 		return nil // No variables in action, params not required
@@ -74,7 +74,7 @@ func (e *GroundingUseCase) Validate() error {
 	}
 
 	// Validate params against action variables
-	if err := validateActionParams(e.Action, e.Params); err != nil {
+	if err := validateGroundingActionParams(e.Action, e.Params); err != nil {
 		return fmt.Errorf("params: %v", err)
 	}
 

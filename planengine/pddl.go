@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/rs/zerolog"
@@ -143,7 +144,15 @@ func (g *PddlGenerator) addActions(domain *strings.Builder) error {
 
 	// Add parameters section with service and all Task0 parameters
 	domain.WriteString("   :parameters (?s - service")
+
+	// Sort parameter names for consistent order
+	var paramNames []string
 	for paramName := range params {
+		paramNames = append(paramNames, paramName)
+	}
+	sort.Strings(paramNames)
+
+	for _, paramName := range paramNames {
 		paramType := g.inferTypeFromParamName(paramName)
 		domain.WriteString(fmt.Sprintf(" ?%s - %s", paramName, paramType))
 	}

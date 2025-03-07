@@ -70,7 +70,7 @@ execute the required project services`,
 				return fmt.Errorf("unknown webhook for project %s", projectName)
 			}
 
-			actionParams, err := convertToActionParams(data)
+			actionParams, err := parseActionParamsJSON(data)
 			if err != nil {
 				return err
 			}
@@ -120,7 +120,8 @@ execute the required project services`,
 		},
 	}
 
-	cmd.Flags().StringSliceVarP(&data, "data", "d", []string{}, "Data to supplement action in format param:value")
+	//cmd.Flags().StringSliceVarP(&data, "data", "d", []string{}, "Data to supplement action in format param:value")
+	cmd.Flags().StringArrayVarP(&data, "data", "d", []string{}, "Data to supplement action in format param:value or param:json")
 	cmd.Flags().StringVarP(&webhookUrl, "webhook", "w", "", `Webhook url to accept results 
 (defaults to first configured webhook)`)
 	cmd.Flags().StringVarP(&timeout, "timeout", "t", "", `Set execution timeout duration per service/agent
@@ -133,18 +134,50 @@ execute the required project services`,
 	return cmd
 }
 
-func convertToActionParams(params []string) ([]map[string]string, error) {
-	var actionParams []map[string]string
+func parseActionParamsJSON(params []string) ([]map[string]interface{}, error) {
+	var actionParams []map[string]interface{}
+
 	for _, param := range params {
 		parts := strings.SplitN(param, ":", 2)
 		if len(parts) != 2 {
 			return nil, fmt.Errorf("invalid parameter format: %s (should be name:value)", param)
 		}
-		actionParams = append(actionParams, map[string]string{
-			"field": parts[0],
-			"value": parts[1],
-		})
+
+		field := parts[0]
+		valueStr := parts[1]
+
+		// Check for array-like format with commas but no brackets (easier CLI input)
+		if strings.Contains(valueStr, ",") && !strings.HasPrefix(valueStr, "[") {
+			// Split by comma and create a string array
+			values := strings.Split(valueStr, ",")
+			// Trim spaces
+			for i, v := range values {
+				values[i] = strings.TrimSpace(v)
+			}
+			actionParams = append(actionParams, map[string]interface{}{
+				"field": field,
+				"value": values, // This will be serialized as a JSON array
+			})
+		} else if (strings.HasPrefix(valueStr, "[") && strings.HasSuffix(valueStr, "]")) ||
+			(strings.HasPrefix(valueStr, "{") && strings.HasSuffix(valueStr, "}")) {
+			// Standard JSON parsing
+			var jsonValue interface{}
+			if err := json.Unmarshal([]byte(valueStr), &jsonValue); err != nil {
+				return nil, fmt.Errorf("invalid JSON for parameter %s: %w", field, err)
+			}
+			actionParams = append(actionParams, map[string]interface{}{
+				"field": field,
+				"value": jsonValue,
+			})
+		} else {
+			// Regular string value
+			actionParams = append(actionParams, map[string]interface{}{
+				"field": field,
+				"value": valueStr,
+			})
+		}
 	}
+
 	return actionParams, nil
 }
 
