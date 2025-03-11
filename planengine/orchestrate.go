@@ -15,6 +15,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"reflect"
 	"regexp"
 	"slices"
 	"sort"
@@ -774,12 +775,87 @@ func (p *PlanEngine) callingPlanMinusTaskZero(callingPlan *ExecutionPlan) (*SubT
 	var taskZero *SubTask
 	var serviceTasks []*SubTask
 
+	// First pass: Find TaskZero and service tasks
 	for _, subTask := range callingPlan.Tasks {
 		if strings.EqualFold(subTask.ID, TaskZero) {
 			taskZero = subTask
 			continue
 		}
 		serviceTasks = append(serviceTasks, subTask)
+	}
+
+	// If no TaskZero found, return early
+	if taskZero == nil {
+		return nil, &ExecutionPlan{
+			ProjectID:      callingPlan.ProjectID,
+			Tasks:          serviceTasks,
+			ParallelGroups: callingPlan.ParallelGroups,
+		}
+	}
+
+	// Ensure TaskZero has an Input map
+	if taskZero.Input == nil {
+		taskZero.Input = make(map[string]any)
+	}
+
+	// Track which keys we've seen and their corresponding values in taskZero
+	keyCounter := make(map[string]int)
+
+	// Process each service task looking for direct values
+	for _, task := range serviceTasks {
+		for inputKey, inputVal := range task.Input {
+			// Skip if it's already a reference
+			strVal, isString := inputVal.(string)
+			if isString && strings.HasPrefix(strVal, "$") {
+				continue
+			}
+
+			// Check if we've already seen this key
+			baseKey := inputKey
+
+			// If this key already exists in TaskZero with different value,
+			// we need to use a numbered variant
+			//needsUniqueKey := false
+
+			// First occurrence - use the key as is
+			if keyCounter[baseKey] == 0 {
+				taskZero.Input[baseKey] = inputVal
+				keyCounter[baseKey] = 1
+				task.Input[inputKey] = fmt.Sprintf("$%s.%s", TaskZero, baseKey)
+			} else {
+				// Check if any existing value in taskZero matches this value
+				foundMatch := false
+				var matchingKey string
+
+				// Look for a matching value in taskZero
+				for tKey, tVal := range taskZero.Input {
+					// Only check keys with the same base
+					if tKey == baseKey || strings.HasPrefix(tKey, baseKey+"_") {
+						// If values are equal, we can reuse this key
+						if reflect.DeepEqual(tVal, inputVal) {
+							foundMatch = true
+							matchingKey = tKey
+							break
+						}
+					}
+				}
+
+				if foundMatch {
+					// Reference the existing key in taskZero
+					task.Input[inputKey] = fmt.Sprintf("$%s.%s", TaskZero, matchingKey)
+				} else {
+					// Create a new unique key
+					keyCounter[baseKey]++
+					uniqueKey := fmt.Sprintf("%s_%d", baseKey, keyCounter[baseKey])
+
+					// Add to TaskZero with the unique key
+					taskZero.Input[uniqueKey] = inputVal
+
+					// Update task to reference the unique key
+					task.Input[inputKey] = fmt.Sprintf("$%s.%s", TaskZero, uniqueKey)
+				}
+			}
+		}
 	}
 
 	return taskZero, &ExecutionPlan{

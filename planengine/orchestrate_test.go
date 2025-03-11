@@ -7,12 +7,15 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // fakeService creates a ServiceInfo with the given ID and required input keys.
@@ -226,4 +229,257 @@ func TestSanitizeJSONOutput(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCallingPlanMinusTaskZero_DirectValuesMovedToTaskZero(t *testing.T) {
+	// Create a test plan engine
+	p := &PlanEngine{
+		Logger: zerolog.Nop(), // Silent logger for tests
+	}
+
+	// Create a plan with TaskZero and task1 with a direct "action" value
+	plan := &ExecutionPlan{
+		Tasks: []*SubTask{
+			{
+				ID: TaskZero,
+				Input: map[string]any{
+					"productId": "laptop-1",
+					"userId":    "user-1",
+				},
+			},
+			{
+				ID:      "task1",
+				Service: "service1",
+				Input: map[string]any{
+					"action":    "checkAvailability", // Direct value
+					"productId": "$task0.productId",  // Already a reference
+				},
+			},
+		},
+	}
+
+	// Execute the function
+	taskZero, newPlan := p.callingPlanMinusTaskZero(plan)
+
+	// Verify TaskZero now has the "action" field
+	assert.Equal(t, "checkAvailability", taskZero.Input["action"], "TaskZero should have action field with value 'checkAvailability'")
+
+	// Verify task1 now references TaskZero for "action"
+	task1 := newPlan.Tasks[0]
+	assert.Equal(t, "$task0.action", task1.Input["action"], "task1 should reference TaskZero for action")
+
+	// Verify other fields remain unchanged
+	assert.Equal(t, "$task0.productId", task1.Input["productId"], "task1.productId should remain as reference to TaskZero")
+}
+
+func TestCallingPlanMinusTaskZero_MultipleTasksSameKey(t *testing.T) {
+	// Create a test plan engine
+	p := &PlanEngine{
+		Logger: zerolog.Nop(), // Silent logger for tests
+	}
+
+	// Create a plan with TaskZero and two tasks with the same direct key
+	plan := &ExecutionPlan{
+		Tasks: []*SubTask{
+			{
+				ID: TaskZero,
+				Input: map[string]any{
+					"productId": "laptop-1",
+				},
+			},
+			{
+				ID:      "task1",
+				Service: "service1",
+				Input: map[string]any{
+					"action":    "checkAvailability", // Direct value
+					"productId": "$task0.productId",  // Already a reference
+				},
+			},
+			{
+				ID:      "task2",
+				Service: "service2",
+				Input: map[string]any{
+					"action":    "checkAvailability", // Same direct value as task1
+					"userId":    "user-1",            // Another direct value
+					"productId": "$task0.productId",  // Already a reference
+				},
+			},
+		},
+	}
+
+	// Execute the function
+	taskZero, newPlan := p.callingPlanMinusTaskZero(plan)
+
+	// Verify TaskZero has both the "action" and "userId" fields
+	assert.Equal(t, "checkAvailability", taskZero.Input["action"], "TaskZero should have action field with value 'checkAvailability'")
+	assert.Equal(t, "user-1", taskZero.Input["userId"], "TaskZero should have userId field with value 'user-1'")
+
+	// Verify both tasks now reference TaskZero for "action"
+	task1 := newPlan.Tasks[0]
+	task2 := newPlan.Tasks[1]
+
+	assert.Equal(t, "$task0.action", task1.Input["action"], "task1 should reference TaskZero for action")
+	assert.Equal(t, "$task0.action", task2.Input["action"], "task2 should reference TaskZero for action")
+
+	// Verify task2 now references TaskZero for "userId"
+	assert.Equal(t, "$task0.userId", task2.Input["userId"], "task2 should reference TaskZero for userId")
+}
+
+func TestCallingPlanMinusTaskZero_ComplexExecutionPlanExample(t *testing.T) {
+	// Create a test plan engine
+	p := &PlanEngine{
+		Logger: zerolog.Nop(), // Silent logger for tests
+	}
+
+	// Create a plan based on the example in the question
+	planJSON := `{
+		"tasks": [
+			{
+				"id": "task0",
+				"input": {
+					"productId": "laptop-1",
+					"userId": "user-1"
+				}
+			},
+			{
+				"id": "task1",
+				"service": "s_bsygtgcnsszpijinlxorkfgqmnfb",
+				"input": {
+					"action": "checkAvailability",
+					"productId": "$task0.productId"
+				}
+			},
+			{
+				"id": "task2",
+				"service": "s_avmoeyyudffierttltpsdjstpjxe",
+				"input": {
+					"inStock": "$task1.inStock",
+					"productId": "$task0.productId",
+					"userId": "$task0.userId"
+				}
+			}
+		],
+		"parallel_groups": [
+			["task1"],
+			["task2"]
+		]
+	}`
+
+	var plan ExecutionPlan
+	err := json.Unmarshal([]byte(planJSON), &plan)
+	require.NoError(t, err, "Failed to unmarshal test plan")
+
+	// Execute the function
+	taskZero, newPlan := p.callingPlanMinusTaskZero(&plan)
+
+	// Verify TaskZero now has the "action" field
+	assert.Equal(t, "checkAvailability", taskZero.Input["action"], "TaskZero should have action field with value 'checkAvailability'")
+
+	// Find task1 in the new plan
+	var task1 *SubTask
+	for _, task := range newPlan.Tasks {
+		if task.ID == "task1" {
+			task1 = task
+			break
+		}
+	}
+
+	require.NotNil(t, task1, "task1 not found in the new plan")
+
+	// Verify task1 now references TaskZero for "action"
+	assert.Equal(t, "$task0.action", task1.Input["action"], "task1 should reference TaskZero for action")
+
+	// Verify parallel groups are maintained
+	expectedGroups := []ParallelGroup{{"task1"}, {"task2"}}
+	assert.Equal(t, expectedGroups, newPlan.ParallelGroups, "Parallel groups should be maintained")
+}
+
+func TestCallingPlanMinusTaskZero_SameKeyDifferentValues(t *testing.T) {
+	// Create a test plan engine
+	p := &PlanEngine{
+		Logger: zerolog.Nop(), // Silent logger for tests
+	}
+
+	// Create a plan with TaskZero and two tasks with the same key but different values
+	planJSON := `{
+		"tasks": [
+			{
+				"id": "task0",
+				"input": {
+					"productId": "laptop-1",
+					"userId": "user-1"
+				}
+			},
+			{
+				"id": "task1",
+				"service": "s_byohsjbzdqmldroxueutktsnelgf",
+				"input": {
+					"action": "checkAvailability",
+					"productId": "$task0.productId"
+				}
+			},
+			{
+				"id": "task2",
+				"service": "s_byohsjbzdqmldroxueutktsnelgf",
+				"input": {
+					"action": "reserveProduct",
+					"productId": "$task0.productId"
+				}
+			}
+		],
+		"parallel_groups": [
+			["task1"],
+			["task2"]
+		]
+	}`
+
+	var plan ExecutionPlan
+	err := json.Unmarshal([]byte(planJSON), &plan)
+	require.NoError(t, err, "Failed to unmarshal test plan")
+
+	// Execute the function
+	taskZero, newPlan := p.callingPlanMinusTaskZero(&plan)
+
+	// Find task1 and task2 in the new plan
+	var task1, task2 *SubTask
+	for _, task := range newPlan.Tasks {
+		if task.ID == "task1" {
+			task1 = task
+		} else if task.ID == "task2" {
+			task2 = task
+		}
+	}
+
+	require.NotNil(t, task1, "task1 not found in the new plan")
+	require.NotNil(t, task2, "task2 not found in the new plan")
+
+	// Verify TaskZero has both action values with different keys
+	// The first one should be just "action"
+	assert.Equal(t, "checkAvailability", taskZero.Input["action"],
+		"TaskZero should have action field with value 'checkAvailability'")
+
+	// The second one should have a unique name like "action_2"
+	var secondActionKey string
+	var foundSecondAction bool
+
+	for key, val := range taskZero.Input {
+		if key != "action" && key != "productId" && key != "userId" {
+			if strVal, ok := val.(string); ok && strVal == "reserveProduct" {
+				secondActionKey = key
+				foundSecondAction = true
+				break
+			}
+		}
+	}
+
+	assert.True(t, foundSecondAction, "Should find a second action key in TaskZero")
+	assert.Contains(t, secondActionKey, "action", "Second action key should contain 'action'")
+	assert.Equal(t, "reserveProduct", taskZero.Input[secondActionKey],
+		"Second action key should have value 'reserveProduct'")
+
+	// Verify each task references the correct field in TaskZero
+	assert.Equal(t, "$task0.action", task1.Input["action"],
+		"task1 should reference TaskZero.action")
+	assert.Equal(t, fmt.Sprintf("$task0.%s", secondActionKey), task2.Input["action"],
+		"task2 should reference the unique action field in TaskZero")
 }
