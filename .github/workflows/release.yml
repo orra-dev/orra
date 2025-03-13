@@ -3,10 +3,10 @@ name: Release Management
 on:
   push:
     tags:
-      - 'cli-v*.*.*-*'      # e.g. cli-v0.1.0
-      - 'peng-v*.*.*-*'       # e.g. peng-v0.1.0
-      - 'sdk-v*.*.*-*'      # e.g. sdk-v0.1.0
-      - 'v*.*.*-*'         # e.g. v0.1.0
+      - 'cli-v*.*.*'      # e.g. cli-v0.1.0
+      - 'peng-v*.*.*'     # e.g. peng-v0.1.0
+      - 'sdk-v*.*.*'      # e.g. sdk-v0.1.0
+      - 'v*.*.*'          # e.g. v0.1.0
 
   workflow_dispatch: # This is crucial for manual runs
     inputs:
