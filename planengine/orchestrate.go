@@ -942,7 +942,7 @@ func (o *Orchestration) MatchingGroundingAgainstAction(ctx context.Context, matc
 			normalizedPlanAction := normalizeActionPattern(o.Action.Content)
 			normalizedUseCase := normalizeActionPattern(useCase.Action)
 
-			hasMatch, score, err := matcher.MatchTexts(ctx, normalizedPlanAction, normalizedUseCase, 0.75)
+			hasMatch, score, err := matcher.MatchTexts(ctx, normalizedPlanAction, normalizedUseCase, GroundingThreshold)
 			if err != nil {
 				return nil, 0, fmt.Errorf("failed to match action: %w", err)
 			}

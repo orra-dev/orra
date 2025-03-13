@@ -30,6 +30,7 @@ const (
 	WSPong                        = "pong"
 	HealthCheckGracePeriod        = 30 * time.Minute
 	TaskTimeout                   = 30 * time.Second
+	GroundingThreshold            = 0.90
 	CompensationDataStoredLogType = "compensation_stored"
 	CompensationAttemptedLogType  = "compensation_attempted"
 	CompensationCompleteLogType   = "compensation_complete"
