@@ -40,7 +40,7 @@ for `ORRA_API_KEY`.
 
 ## Running the Example
 
-1. Ensure the control plane is running, then start the webhook server (in a separate terminal):
+1. Ensure the orra Plan Engine is running, then start the webhook server (in a separate terminal):
 
 ```bash
 # Start the webhook server using the verify subcommand
@@ -86,10 +86,10 @@ In this context the timeout was configured using the CLI's `verify` command usin
 Sometimes the `writer` Crew get stuck writing and re-writing infinitely. This is a
 known [ReACT prompt](https://www.promptingguide.ai/techniques/react) issue, where the prompt repetitively invokes the same function over and over.
 
-Here, Orra is very patient because timeout has been increased to `5m`. But it does kill the orchestration after a while.
-However, feel free to kill the Agent running process and start it again WITHOUT stopping the control plane.
+Here, the Plan Engine is very patient because timeout has been increased to `5m`. But it does kill the orchestration after a while.
+However, feel free to kill the Agent running process and start it again WITHOUT stopping the Plan Engine.
 
-Generally, you can keep the control plane running, while you work and update the CrewAI Agent code. Then simply,
+Generally, you can keep the Plan Engine running, while you work and update the CrewAI Agent code. Then simply,
 
 - `ctrl+c` to stop the running agents
 - Then, run the agents again using `poetry run python src/main.py`.

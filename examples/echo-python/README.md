@@ -82,7 +82,7 @@ You should see the result both in the webhook server terminal and through the in
 
 ```bash
 # This curl command is equivalent to orra verify run performs internally  
-## Send an echo orchestration request to the control plane
+## Send an echo orchestration request to the orra Plan Engine
 
 curl -X POST http://localhost:8005/orchestrations \
   -H "Authorization: Bearer $ORRA_API_KEY" \

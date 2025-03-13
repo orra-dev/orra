@@ -50,7 +50,7 @@ orra version
 # Create a new project
 orra projects add my-ai-app
 
-# Add a webhook to receive results (assumes the control plane is running with docker compose)
+# Add a webhook to receive results (assumes the orra Plan Engine is running with docker compose)
 orra webhooks add http://host.docker.internal:3000/webhooks/results
 
 # Generate an API key for your services

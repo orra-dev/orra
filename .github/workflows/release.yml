@@ -64,7 +64,7 @@ jobs:
               echo "type=cli" >> $GITHUB_OUTPUT
               echo "version=${TEST_TAG#cli-v}" >> $GITHUB_OUTPUT
             elif [[ $TEST_TAG == peng-v* ]]; then
-              echo "type=controlplane" >> $GITHUB_OUTPUT
+              echo "type=planengine" >> $GITHUB_OUTPUT
               echo "version=${TEST_TAG#peng-v}" >> $GITHUB_OUTPUT
             elif [[ $TEST_TAG == sdk-v* ]]; then
               echo "type=sdk" >> $GITHUB_OUTPUT
@@ -80,7 +80,7 @@ jobs:
               echo "type=cli" >> $GITHUB_OUTPUT
               echo "version=${TAG#cli-v}" >> $GITHUB_OUTPUT
             elif [[ $TAG == peng-v* ]]; then
-              echo "type=controlplane" >> $GITHUB_OUTPUT
+              echo "type=planengine" >> $GITHUB_OUTPUT
               echo "version=${TAG#peng-v}" >> $GITHUB_OUTPUT
             elif [[ $TAG == sdk-v* ]]; then
               echo "type=sdk" >> $GITHUB_OUTPUT
@@ -279,7 +279,7 @@ jobs:
           if [ "$RELEASE_TYPE" = "full" ]; then
             # Only add notes if the component has changes
             [ "${{ needs.prepare-release.outputs.has_cli }}" = "true" ] && add_component_notes "cli" "$VERSION" || echo "Skipping CLI notes"
-            [ "${{ needs.prepare-release.outputs.has_planengine }}" = "true" ] && add_component_notes "controlplane" "$VERSION" || echo "Skipping Plan Engine notes"  # Fixed from control-plane to controlplane
+            [ "${{ needs.prepare-release.outputs.has_planengine }}" = "true" ] && add_component_notes "planengine" "$VERSION" || echo "Skipping Plan Engine notes"
             [ "${{ needs.prepare-release.outputs.has_sdk }}" = "true" ] && add_component_notes "sdks" "$VERSION" || echo "Skipping SDK notes"
           else
             add_component_notes "$RELEASE_TYPE" "$VERSION"

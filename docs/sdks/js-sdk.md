@@ -61,7 +61,7 @@ customerChatSvc.start(async (task) => {
 		return { response };
 	} catch (error) {
 		// Once you determine the task should fail, throw the error.
-		// Orra will handle failure propagation to the control plane.
+		// Orra will handle failure propagation to the Plan Engine.
 		throw error;
 	}
 });

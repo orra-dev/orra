@@ -62,7 +62,7 @@ async def main():
             return ChatOutput(response=response)
         except Exception as e:
             # Once you determine the task should fail, throw the error.
-            # Orra will handle failure propagation to the control plane.
+            # orra will handle failure propagation to the Plan Engine.
             raise
     
     await asyncio.gather(cust_chat_svc.start())
