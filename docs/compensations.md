@@ -108,7 +108,7 @@ Compensations can have four outcomes:
 
 3. **Handling failures**
    - If a compensation fails, throw or raise the failure as an error from the revert handler.
-   - The Orra control plane will capture the error and deal with it accordingly.
+   - The orra Plan Engine will capture the error and deal with it accordingly.
 
 4. **Monitoring**
    - Track compensation attempts and failures

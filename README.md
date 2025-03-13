@@ -35,7 +35,7 @@ Orra coordinates tasks across your existing stack, agents and any tools run as s
 
 ### Prerequisites
 
-- [Docker](https://docs.docker.com/desktop/) and [Docker Compose](https://docs.docker.com/compose/install/) - For running the control plane server (powers the Plan Engine)
+- [Docker](https://docs.docker.com/desktop/) and [Docker Compose](https://docs.docker.com/compose/install/) - For running the Plan Engine
 - Set up Reasoning and Embedding Models to power task planning and execution plan caching/validation
 
 #### Setup Reasoning Models
@@ -95,15 +95,15 @@ orra version
 
 → [Full CLI documentation](docs/cli.md)
 
-### 2. Get Orra Running
+### 2. Get Orra Plan Engine Running
 
-Clone the repository and start the control plane:
+Clone the repository and start the Plan Engine:
 
 ```shell
 git clone https://github.com/ezodude/orra.git
-cd orra/controlplane
+cd orra/planengine
 
-# Start the control plane
+# Start the Plan Engine
 docker compose up --build
 ```
 
