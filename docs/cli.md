@@ -4,7 +4,7 @@ The Orra CLI helps you manage your multi-agent apps in development and productio
 
 ## Installation
 
-Download the latest binary for your platform from our [releases page](https://github.com/orra-dev/orra/releases/tag/v0.2.2):
+Download the latest binary for your platform from our [releases page](https://github.com/orra-dev/orra/releases):
 
 ```bash
 # macOS/Linux: Move to your PATH
@@ -13,7 +13,7 @@ chmod +x /usr/local/bin/orra
 
 # Verify installation
 orra version
-# Client Version: v0.2.2
+# Client Version: v0.2.3
 ```
 
 ## CLI Commands Reference
