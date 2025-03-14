@@ -1,10 +1,10 @@
 # 🪡 orra (✨Alpha✨)
 
-Move beyond simple Crews and Agents. Use Orra to build production-ready multi-agent applications that handle complex real-world interactions.
+Move beyond simple Crews and Agents. Use orra to build production-ready multi-agent applications that handle complex real-world interactions.
 
 ![](images/orra-diagram.png)
 
-Orra coordinates tasks across your existing stack, agents and any tools run as services using intelligent reasoning — across any language, agent framework or deployment platform.
+orra coordinates tasks across your existing stack, agents and any tools run as services using intelligent reasoning — across any language, agent framework or deployment platform.
 
 * 🧠 Smart pre-evaluated execution plans
 * 🎯 Domain grounded
@@ -27,6 +27,9 @@ Orra coordinates tasks across your existing stack, agents and any tools run as s
 
 - [Installation](#installation)
 - [How The Plan Engine Works](#how-the-plan-engine-works)
+- [Guides](#guides)
+- [Explore Examples](#explore-examples)
+- [Docs](#docs)
 - [Self Hosting](#self-hosting)
 - [Join Our Alpha Testing Community](#join-our-alpha-testing-community)
 - [License](#license)
@@ -76,7 +79,7 @@ Update the .env file with:
 PLAN_CACHE_OPENAI_API_KEY=xxxx
 ```
 
-### 1. Install Orra CLI
+### 1. Install orra CLI
 
 Download the latest CLI binary for your platform from our [releases page](https://github.com/orra-dev/orra/releases):
 
@@ -95,7 +98,7 @@ orra version
 
 → [Full CLI documentation](docs/cli.md)
 
-### 2. Get Orra Plan Engine Running
+### 2. Get orra Plan Engine Running
 
 Clone the repository and start the Plan Engine:
 
@@ -115,7 +118,7 @@ The Plan Engine powers your multi-agent applications through intelligent plannin
 
 #### 1. Base Planning
 
-Your agents stay clean and simple (wrapped in the Orra SDK):
+Your agents stay clean and simple (wrapped in the orra SDK):
 
 **Python**
 ```python
@@ -220,18 +223,22 @@ The Plan Engine ensures:
 * Real-time status updates
 * Webhook result delivery
 
-### Explore Examples
+## Guides
+
+- [From Fragile to Production-Ready Multi-Agent App](https://github.com/orra-dev/agent-fragile-to-prod-guide)
+
+## Explore Examples
 
 - 🛒 [E-commerce AI Assistant (JavaScript)](examples/ecommerce-agent-app) - E-commerce customer service with a delivery specialized agent
-- 👻 [Ghostwriters (Python)](examples/crewai-ghostwriters) - Content generation example showcasing how to use Orra with [CrewAI](https://www.crewai.com) 🆕🎉
+- 👻 [Ghostwriters (Python)](examples/crewai-ghostwriters) - Content generation example showcasing how to use orra with [CrewAI](https://www.crewai.com) 🆕🎉
 - 📣 [Echo Tools as Service (JavaScript)](examples/echo-js) - Simple example showing core concepts using JS
 - 📣 [Echo Tools as Service (Python)](examples/echo-python) - Simple example showing core concepts using Python
 
-### Docs and Guides
+## Docs
 
-- [Rapid Multi-Agent App Development with Orra](docs/rapid-agent-app-devlopment.md)
-- [What is an Agent in Orra?](docs/what-is-agent.md)
-- [Orchestrating Actions with Orra](docs/actions.md)
+- [Rapid Multi-Agent App Development with orra](docs/rapid-agent-app-devlopment.md)
+- [What is an Agent in orra?](docs/what-is-agent.md)
+- [Orchestrating Actions with orra](docs/actions.md)
 - [Domain Grounding Execution](docs/grounding.md)
 - [Execution Plan Caching](docs/plan-caching.md)
 - [Core Topics & Internals](docs/core.md)
@@ -239,14 +246,14 @@ The Plan Engine ensures:
 ## Self Hosting
 
 1. **Storage**: We use BadgerDB to persist all state
-2. **Deployment**: Single-instance only, designed for development and self-hosted deployments
+2. **Deployment**: Single-instance only, using containers designed for development and self-hosted deployments
 
 ## Join Our Alpha Testing Community
 
 **We're looking for developers who:**
 
 - Are building multi-agent applications
-- Want to help shape Orra's development
+- Want to help shape orra's development
 - Are comfortable working with Alpha software
 - Can provide feedback on real-world use cases
 
