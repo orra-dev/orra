@@ -2,6 +2,24 @@
 
 The Orra CLI helps you manage your multi-agent apps in development and production.
 
+## Table of Contents
+
+* [Installation](#installation)
+* [CLI Commands Reference](#cli-commands-reference)
+* [Quick Start](#quick-start)
+* [Detailed Command Reference](#detailed-command-reference)
+  * [Managing Projects](#managing-projects)
+  * [Webhooks Management](#webhooks-management)
+  * [API Keys Management](#api-keys-management)
+  * [Orchestration Actions](#orchestration-actions)
+  * [Reasoning Traces with inspect](#reasoning-traces-with-inspect)
+  * [Grounding Management](#grounding-management)
+  * [Configuration Management](#configuration-management)
+* [Status Icons](#status-icons)
+* [Tips for Success](#tips-for-success)
+* [Configuration](#configuration)
+* [Need Help?](#need-help)
+
 ## Installation
 
 Download the latest binary for your platform from our [releases page](https://github.com/orra-dev/orra/releases):
@@ -203,6 +221,88 @@ orra inspect -d o_abc123 --updates
 
 # View complete progress details for long-running tasks
 orra inspect -d o_abc123 --long-updates
+```
+
+### Reasoning Traces with inspect
+
+Here's a sample inspection using `orra inspect -d ...`, built to help with reasoning traces.
+
+```shell
+$ orra inspect -d o_MdB26xtW9PpbRDbZiqvPTg
+Project: assistant
+Server:  http://localhost:8005
+
+┌─ Orchestration Details
+│ ID:      o_MdB26xtW9PpbRDbZiqvPTg
+│ Status:  ● Completed
+│ Action:  Can I get it delivered by next week?
+│ Created: 141.6h ago
+└─────
+
+┌─ Tasks
+│ ID       SERVICE                  STATUS         COMPENSATION         DURATION   LAST ERROR
+│ ────────────────────────────────────────────────────────────────────────────────────────────────────
+│ task1    inventory-service        ● Completed    ─                    101ms      ─
+│ task2    delivery-agent.          ● Completed    ─                    11.2s      ─
+└─────
+
+┌─ Task Execution Details
+│
+│ inventory-service (task1)
+│ ──────────────────────────────────────────────────
+│ 16:09:46  ◎ Processing
+│ 16:09:46  ● Completed
+│
+│ Input:
+│   {
+│     "action": "checkAvailability",
+│     "productId": "laptop-1"
+│   }
+│
+│ Output:
+│   {
+│     "action": "checkAvailability",
+│     "productId": "laptop-1",
+│     "status": "product-available",
+│     "success": true,
+│     "inStock": 1,
+│     "message": "Product in stock"
+│   }
+│
+│ · · · · · · · · · · · · · · · · · · · · · · · · ·
+│
+│ delivery-agent (task2)
+│ ──────────────────────────────────────────────────
+│ 16:09:46  ◎ Processing
+│ 16:09:57  ● Completed
+│
+│ Input:
+│   {
+│     "inStock": "$task1.inStock",
+│     "productId": "laptop-1",
+│     "userId": "user-1"
+│   }
+│
+│ Output:
+│   {
+│     "status": "delivery-estimated",
+│     "success": true,
+│     "estimatedDays": 3,
+│     "deliveryDate": "2025-03-13",
+│     "explanation": "The delivery estimate is calculated based on the current traffic and weather conditions across the route. The best-case scenario assumes optimal speeds with only minor slowdowns, accounting for light traffic on A90, normal conditions with a slight delay on M90 due to roadworks, and the impact of an accident on A1 causing a moderate delay near Darlington. The overall distance is approximately 440 km, and with the high availability of vehicles and light van capacity, a van would be ideal for this delivery. Considering these factors and the current light rain in the Northeast, I anticipate slight slowing but mostly manageable conditions. The worst-case scenario factors in all possible delays reaching their full extent, particularly the 25-minute delay from the accident on A1 and any compounded effects from the widespread light rain, leading to significant, albeit predictable, delays. Given the current conditions and comprehensive data assessment, we can confidently provide these delivery estimates."
+│   }
+└─────
+
+┌─ Final Results
+│
+│   {
+│     "status": "delivery-estimated",
+│     "success": true,
+│     "estimatedDays": 3,
+│     "deliveryDate": "2025-03-13",
+│     "explanation": "The delivery estimate is calculated based on the current traffic and weather conditions across the route. The best-case scenario assumes optimal speeds with only minor slowdowns, accounting for light traffic on A90, normal conditions with a slight delay on M90 due to roadworks, and the impact of an accident on A1 causing a moderate delay near Darlington. The overall distance is approximately 440 km, and with the high availability of vehicles and light van capacity, a van would be ideal for this delivery. Considering these factors and the current light rain in the Northeast, I anticipate slight slowing but mostly manageable conditions. The worst-case scenario factors in all possible delays reaching their full extent, particularly the 25-minute delay from the accident on A1 and any compounded effects from the widespread light rain, leading to significant, albeit predictable, delays. Given the current conditions and comprehensive data assessment, we can confidently provide these delivery estimates."
+│   }
+└─────
 ```
 
 ### Grounding Management
