@@ -1,0 +1,83 @@
+name: 🐞 Bug Report or Feature Request
+description: Report a bug or suggest an enhancement for orra
+title: "[BUG/FEATURE]: "
+labels: ["needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this issue for orra!
+        
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: Issue Type
+      description: What type of issue are you reporting?
+      options:
+        - Bug Report
+        - Feature Request
+        - Documentation Issue
+        - Performance Issue
+        - Other
+    validations:
+      required: true
+      
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: For bugs, describe what happened and what you expected to happen
+      placeholder: |
+        Steps to reproduce:
+        1. 
+        2. 
+        3. 
+        
+        Expected result:
+        
+        Actual result:
+    validations:
+      required: true
+      
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Please provide details about your environment
+      placeholder: |
+        - OS: [e.g., macOS, Windows, Linux]
+        - orra Version: [e.g., v0.1.0]
+        - Node.js Version: [e.g., 16.13.0]
+        - Python Version: [e.g., 3.11.9]
+        - Deployment Context: [e.g., local development, production]
+      render: markdown
+      
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs or Output
+      description: Please copy and paste any relevant logs or command output
+      render: shell
+      
+  - type: textarea
+    id: feature-request
+    attributes:
+      label: Feature Request Details
+      description: For feature requests, please describe the functionality you'd like to see
+      placeholder: |
+        What problem would this feature solve?
+        
+        Describe your proposed solution:
+        
+        Are there any alternatives you've considered?
+      
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our project's code of conduct
+      options:
+        - label: I've used the CLI's inspect command to check for relevant information in the orchestration audit log
+          required: false
+        - label: I've searched for similar issues before creating this one
+          required: true
