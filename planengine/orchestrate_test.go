@@ -483,3 +483,372 @@ func TestCallingPlanMinusTaskZero_SameKeyDifferentValues(t *testing.T) {
 	assert.Equal(t, fmt.Sprintf("$task0.%s", secondActionKey), task2.Input["action"],
 		"task2 should reference the unique action field in TaskZero")
 }
+
+func TestCallingPlanMinusTaskZero_NestedArrays(t *testing.T) {
+	// Create a test plan engine
+	p := &PlanEngine{
+		Logger: zerolog.Nop(), // Silent logger for tests
+	}
+
+	// Create a plan with TaskZero and a task with arrays
+	planJSON := `{
+		"tasks": [
+			{
+				"id": "task0",
+				"input": {
+					"productId": "laptop-1"
+				}
+			},
+			{
+				"id": "task1",
+				"service": "s_byohsjbzdqmldroxueutktsnelgf",
+				"input": {
+					"productId": "$task0.productId",
+					"tags": ["electronics", "laptop", "sale"],
+					"options": [
+						{
+							"name": "color",
+							"values": ["black", "silver", "gold"]
+						},
+						{
+							"name": "memory",
+							"values": [8, 16, 32]
+						}
+					]
+				}
+			}
+		]
+	}`
+
+	var plan ExecutionPlan
+	err := json.Unmarshal([]byte(planJSON), &plan)
+	require.NoError(t, err, "Failed to unmarshal test plan")
+
+	// Execute the function
+	taskZero, newPlan := p.callingPlanMinusTaskZero(&plan)
+
+	// Verify TaskZero now has the array values
+	assert.Contains(t, taskZero.Input, "tags_0", "TaskZero should have the first tag")
+	assert.Equal(t, "electronics", taskZero.Input["tags_0"], "TaskZero should have correct first tag value")
+
+	assert.Contains(t, taskZero.Input, "tags_1", "TaskZero should have the second tag")
+	assert.Equal(t, "laptop", taskZero.Input["tags_1"], "TaskZero should have correct second tag value")
+
+	assert.Contains(t, taskZero.Input, "tags_2", "TaskZero should have the third tag")
+	assert.Equal(t, "sale", taskZero.Input["tags_2"], "TaskZero should have correct third tag value")
+
+	// Check nested array values
+	assert.Contains(t, taskZero.Input, "options_0_name", "TaskZero should have the first option name")
+	assert.Equal(t, "color", taskZero.Input["options_0_name"], "TaskZero should have correct first option name")
+
+	// Check deeply nested array values
+	assert.Contains(t, taskZero.Input, "options_0_values_0", "TaskZero should have the first color value")
+	assert.Equal(t, "black", taskZero.Input["options_0_values_0"], "TaskZero should have correct first color value")
+
+	assert.Contains(t, taskZero.Input, "options_1_name", "TaskZero should have the second option name")
+	assert.Equal(t, "memory", taskZero.Input["options_1_name"], "TaskZero should have correct second option name")
+
+	assert.Contains(t, taskZero.Input, "options_1_values_0", "TaskZero should have the first memory value")
+	// Numbers in JSON are unmarshaled as float64 in Go
+	assert.Equal(t, float64(8), taskZero.Input["options_1_values_0"], "TaskZero should have correct first memory value")
+
+	// Find task1 in the new plan
+	task1 := newPlan.Tasks[0]
+	require.NotNil(t, task1, "task1 not found in the new plan")
+
+	// Verify task1 now references TaskZero for array values
+	tags := task1.Input["tags"].([]any)
+	assert.Equal(t, "$task0.tags_0", tags[0], "First tag should reference TaskZero")
+	assert.Equal(t, "$task0.tags_1", tags[1], "Second tag should reference TaskZero")
+	assert.Equal(t, "$task0.tags_2", tags[2], "Third tag should reference TaskZero")
+
+	// Verify nested array references
+	options := task1.Input["options"].([]any)
+	firstOption := options[0].(map[string]any)
+	assert.Equal(t, "$task0.options_0_name", firstOption["name"], "First option name should reference TaskZero")
+
+	// Verify deeply nested array references
+	firstOptionValues := firstOption["values"].([]any)
+	assert.Equal(t, "$task0.options_0_values_0", firstOptionValues[0], "First color should reference TaskZero")
+}
+
+func TestCallingPlanMinusTaskZero_DuplicateNestedValues(t *testing.T) {
+	// Create a test plan engine
+	p := &PlanEngine{
+		Logger: zerolog.Nop(), // Silent logger for tests
+	}
+
+	// Create a plan with TaskZero and tasks with duplicate nested values
+	planJSON := `{
+		"tasks": [
+			{
+				"id": "task0",
+				"input": {
+					"productId": "laptop-1"
+				}
+			},
+			{
+				"id": "task1",
+				"service": "s_byohsjbzdqmldroxueutktsnelgf",
+				"input": {
+					"product": {
+						"id": "$task0.productId",
+						"config": {
+							"color": "black",
+							"memory": 16
+						}
+					}
+				}
+			},
+			{
+				"id": "task2",
+				"service": "s_avmoeyyudffierttltpsdjstpjxe",
+				"input": {
+					"order": {
+						"productId": "$task0.productId",
+						"config": {
+							"color": "black",
+							"memory": 32
+						}
+					}
+				}
+			}
+		]
+	}`
+
+	var plan ExecutionPlan
+	err := json.Unmarshal([]byte(planJSON), &plan)
+	require.NoError(t, err, "Failed to unmarshal test plan")
+
+	// Execute the function
+	taskZero, newPlan := p.callingPlanMinusTaskZero(&plan)
+
+	// Find task1 and task2 in the new plan
+	var task1, task2 *SubTask
+	for _, task := range newPlan.Tasks {
+		if task.ID == "task1" {
+			task1 = task
+		} else if task.ID == "task2" {
+			task2 = task
+		}
+	}
+
+	require.NotNil(t, task1, "task1 not found in the new plan")
+	require.NotNil(t, task2, "task2 not found in the new plan")
+
+	// Verify TaskZero has both the color values - one should be reused
+	assert.Contains(t, taskZero.Input, "product_config_color", "TaskZero should have the color field")
+	assert.Equal(t, "black", taskZero.Input["product_config_color"], "TaskZero should have correct color value")
+
+	// Memory values are different, so we should have two different keys
+	// Find the keys for memory 16 and 32
+	var memory16Key, memory32Key string
+	for key, val := range taskZero.Input {
+		// JSON numbers are unmarshaled as float64
+		if floatVal, ok := val.(float64); ok {
+			if floatVal == 16 {
+				memory16Key = key
+			} else if floatVal == 32 {
+				memory32Key = key
+			}
+		}
+	}
+
+	assert.NotEmpty(t, memory16Key, "Should find a key for memory 16 in TaskZero")
+	assert.NotEmpty(t, memory32Key, "Should find a key for memory 32 in TaskZero")
+	assert.NotEqual(t, memory16Key, memory32Key, "Memory keys should be different")
+
+	// Verify task1 references
+	product1 := task1.Input["product"].(map[string]any)
+	config1 := product1["config"].(map[string]any)
+
+	assert.Equal(t, "$task0.product_config_color", config1["color"],
+		"task1 color should reference TaskZero")
+	assert.Equal(t, fmt.Sprintf("$task0.%s", memory16Key), config1["memory"],
+		"task1 memory should reference TaskZero")
+
+	// Verify task2 references
+	order2 := task2.Input["order"].(map[string]any)
+	config2 := order2["config"].(map[string]any)
+
+	assert.Equal(t, "$task0.product_config_color", config2["color"],
+		"task2 color should reference same value in TaskZero (reused)")
+	assert.Equal(t, fmt.Sprintf("$task0.%s", memory32Key), config2["memory"],
+		"task2 memory should reference different value in TaskZero")
+}
+
+func TestCallingPlanMinusTaskZero_MixedNestedStructures(t *testing.T) {
+	// Create a test plan engine
+	p := &PlanEngine{
+		Logger: zerolog.Nop(), // Silent logger for tests
+	}
+
+	// Create a complex plan with mixed nested objects and arrays
+	planJSON := `{
+		"tasks": [
+			{
+				"id": "task0",
+				"input": {
+					"baseProductId": "laptop-1",
+					"userId": "user-1"
+				}
+			},
+			{
+				"id": "task1",
+				"service": "s_byohsjbzdqmldroxueutktsnelgf",
+				"input": {
+					"complex": {
+						"id": "$task0.baseProductId",
+						"details": [{
+							"name": "Feature",
+							"items": [{
+								"spec": "CPU",
+								"value": "i7"
+							}, {
+								"spec": "RAM",
+								"value": "16GB"
+							}]
+						}],
+						"warranty": {
+							"included": true,
+							"options": ["standard", "extended"]
+						}
+					}
+				}
+			},
+			{
+				"id": "task2",
+				"service": "s_avmoeyyudffierttltpsdjstpjxe",
+				"input": {
+					"complex": {
+						"id": "$task0.baseProductId",
+						"details": [{
+							"name": "Feature",
+							"items": [{
+								"spec": "CPU",
+								"value": "i7"
+							}, {
+								"spec": "RAM",
+								"value": "32GB"
+							}]
+						}],
+						"warranty": {
+							"included": false,
+							"options": ["standard", "extended"]
+						}
+					}
+				}
+			}
+		]
+	}`
+
+	var plan ExecutionPlan
+	err := json.Unmarshal([]byte(planJSON), &plan)
+	require.NoError(t, err, "Failed to unmarshal test plan")
+
+	// Execute the function
+	taskZero, newPlan := p.callingPlanMinusTaskZero(&plan)
+
+	// Find task1 and task2 in the new plan
+	var task1, task2 *SubTask
+	for _, task := range newPlan.Tasks {
+		if task.ID == "task1" {
+			task1 = task
+		} else if task.ID == "task2" {
+			task2 = task
+		}
+	}
+
+	require.NotNil(t, task1, "task1 not found in the new plan")
+	require.NotNil(t, task2, "task2 not found in the new plan")
+
+	// Verify deeply nested values are in TaskZero
+	assert.Contains(t, taskZero.Input, "complex_details_0_name", "TaskZero should have the nested name field")
+	assert.Equal(t, "Feature", taskZero.Input["complex_details_0_name"], "TaskZero should have correct name value")
+
+	assert.Contains(t, taskZero.Input, "complex_details_0_items_0_spec", "TaskZero should have the spec field")
+	assert.Equal(t, "CPU", taskZero.Input["complex_details_0_items_0_spec"], "TaskZero should have correct spec value")
+
+	assert.Contains(t, taskZero.Input, "complex_details_0_items_0_value", "TaskZero should have the CPU value field")
+	assert.Equal(t, "i7", taskZero.Input["complex_details_0_items_0_value"], "TaskZero should have correct CPU value")
+
+	// Check for values that differ between tasks
+	// Find the keys for RAM 16GB and 32GB
+	var ram16Key, ram32Key string
+	for key, val := range taskZero.Input {
+		if strVal, ok := val.(string); ok && strVal == "16GB" {
+			ram16Key = key
+		} else if strVal, ok := val.(string); ok && strVal == "32GB" {
+			ram32Key = key
+		}
+	}
+
+	assert.NotEmpty(t, ram16Key, "Should find a key for RAM 16GB in TaskZero")
+	assert.NotEmpty(t, ram32Key, "Should find a key for RAM 32GB in TaskZero")
+	assert.NotEqual(t, ram16Key, ram32Key, "RAM keys should be different")
+
+	// Find the keys for included true and false
+	var includedTrueKey, includedFalseKey string
+	for key, val := range taskZero.Input {
+		if boolVal, ok := val.(bool); ok && boolVal == true && strings.Contains(key, "warranty_included") {
+			includedTrueKey = key
+		} else if boolVal, ok := val.(bool); ok && boolVal == false && strings.Contains(key, "warranty_included") {
+			includedFalseKey = key
+		}
+	}
+
+	assert.NotEmpty(t, includedTrueKey, "Should find a key for included=true in TaskZero")
+	assert.NotEmpty(t, includedFalseKey, "Should find a key for included=false in TaskZero")
+	assert.NotEqual(t, includedTrueKey, includedFalseKey, "Included keys should be different")
+
+	// Check that warranty options are reused between tasks
+	assert.Contains(t, taskZero.Input, "complex_warranty_options_0", "TaskZero should have warranty option")
+	assert.Equal(t, "standard", taskZero.Input["complex_warranty_options_0"], "TaskZero should have correct warranty option")
+
+	// Verify task1 references
+	complex1 := task1.Input["complex"].(map[string]any)
+	details1 := complex1["details"].([]any)
+	firstDetail1 := details1[0].(map[string]any)
+	items1 := firstDetail1["items"].([]any)
+	firstItem1 := items1[0].(map[string]any)
+	secondItem1 := items1[1].(map[string]any)
+
+	assert.Equal(t, "$task0.complex_details_0_name", firstDetail1["name"],
+		"Detail name should reference TaskZero")
+	assert.Equal(t, "$task0.complex_details_0_items_0_spec", firstItem1["spec"],
+		"CPU spec should reference TaskZero")
+	assert.Equal(t, "$task0.complex_details_0_items_0_value", firstItem1["value"],
+		"CPU value should reference TaskZero")
+	assert.Equal(t, fmt.Sprintf("$task0.%s", ram16Key), secondItem1["value"],
+		"RAM 16GB should reference TaskZero")
+
+	warranty1 := complex1["warranty"].(map[string]any)
+	assert.Equal(t, fmt.Sprintf("$task0.%s", includedTrueKey), warranty1["included"],
+		"Warranty included true should reference TaskZero")
+
+	// Verify task2 references
+	complex2 := task2.Input["complex"].(map[string]any)
+	details2 := complex2["details"].([]any)
+	firstDetail2 := details2[0].(map[string]any)
+	items2 := firstDetail2["items"].([]any)
+	secondItem2 := items2[1].(map[string]any)
+
+	assert.Equal(t, fmt.Sprintf("$task0.%s", ram32Key), secondItem2["value"],
+		"RAM 32GB should reference TaskZero")
+
+	warranty2 := complex2["warranty"].(map[string]any)
+	assert.Equal(t, fmt.Sprintf("$task0.%s", includedFalseKey), warranty2["included"],
+		"Warranty included false should reference TaskZero")
+
+	// Verify that both tasks reference the same warranty options
+	options1 := warranty1["options"].([]any)
+	options2 := warranty2["options"].([]any)
+	assert.Equal(t, "$task0.complex_warranty_options_0", options1[0],
+		"Standard warranty option in task1 should reference TaskZero")
+	assert.Equal(t, "$task0.complex_warranty_options_0", options2[0],
+		"Standard warranty option in task2 should reference TaskZero")
+	assert.Equal(t, "$task0.complex_warranty_options_1", options1[1],
+		"Standard warranty option in task1 should reference TaskZero")
+	assert.Equal(t, "$task0.complex_warranty_options_1", options2[1],
+		"Standard warranty option in task2 should reference TaskZero")
+}

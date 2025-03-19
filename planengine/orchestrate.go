@@ -15,7 +15,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"reflect"
 	"regexp"
 	"slices"
 	"sort"
@@ -800,62 +799,35 @@ func (p *PlanEngine) callingPlanMinusTaskZero(callingPlan *ExecutionPlan) (*SubT
 
 	// Track which keys we've seen and their corresponding values in taskZero
 	keyCounter := make(map[string]int)
+	valueToKeyMap := make(map[string]string) // Maps JSON string value to taskZero key
 
-	// Process each service task looking for direct values
+	// Process each service task for non-reference direct values
 	for _, task := range serviceTasks {
-		for inputKey, inputVal := range task.Input {
-			// Skip if it's already a reference
-			strVal, isString := inputVal.(string)
-			if isString && strings.HasPrefix(strVal, "$") {
-				continue
-			}
-
-			// Check if we've already seen this key
-			baseKey := inputKey
-
-			// If this key already exists in TaskZero with different value,
-			// we need to use a numbered variant
-			//needsUniqueKey := false
-
-			// First occurrence - use the key as is
-			if keyCounter[baseKey] == 0 {
-				taskZero.Input[baseKey] = inputVal
-				keyCounter[baseKey] = 1
-				task.Input[inputKey] = fmt.Sprintf("$%s.%s", TaskZero, baseKey)
-			} else {
-				// Check if any existing value in taskZero matches this value
-				foundMatch := false
-				var matchingKey string
-
-				// Look for a matching value in taskZero
-				for tKey, tVal := range taskZero.Input {
-					// Only check keys with the same base
-					if tKey == baseKey || strings.HasPrefix(tKey, baseKey+"_") {
-						// If values are equal, we can reuse this key
-						if reflect.DeepEqual(tVal, inputVal) {
-							foundMatch = true
-							matchingKey = tKey
-							break
-						}
-					}
-				}
-
-				if foundMatch {
-					// Reference the existing key in taskZero
-					task.Input[inputKey] = fmt.Sprintf("$%s.%s", TaskZero, matchingKey)
-				} else {
-					// Create a new unique key
-					keyCounter[baseKey]++
-					uniqueKey := fmt.Sprintf("%s_%d", baseKey, keyCounter[baseKey])
-
-					// Add to TaskZero with the unique key
-					taskZero.Input[uniqueKey] = inputVal
-
-					// Update task to reference the unique key
-					task.Input[inputKey] = fmt.Sprintf("$%s.%s", TaskZero, uniqueKey)
-				}
-			}
+		// First, marshal the task input to JSON for processing
+		inputJSON, err := json.Marshal(task.Input)
+		if err != nil {
+			p.Logger.Error().
+				Err(err).
+				Str("TaskID", task.ID).
+				Msg("Failed to marshal task input to JSON")
+			continue
 		}
+
+		// Create a temporary map to work with
+		var inputMap map[string]any
+		if err := json.Unmarshal(inputJSON, &inputMap); err != nil {
+			p.Logger.Error().
+				Err(err).
+				Str("TaskID", task.ID).
+				Msg("Failed to unmarshal task input from JSON")
+			continue
+		}
+
+		// Find and process all values that need to be moved to TaskZero
+		processedMap := p.findAndReplaceDirectValues(task.ID, inputMap, taskZero, keyCounter, valueToKeyMap)
+
+		// Update the task input with the processed map
+		task.Input = processedMap
 	}
 
 	return taskZero, &ExecutionPlan{
@@ -863,6 +835,107 @@ func (p *PlanEngine) callingPlanMinusTaskZero(callingPlan *ExecutionPlan) (*SubT
 		Tasks:          serviceTasks,
 		ParallelGroups: callingPlan.ParallelGroups,
 	}
+}
+
+// findAndReplaceDirectValues finds all values (including those in nested objects and arrays)
+// that need to be moved to TaskZero, and replaces them with references.
+func (p *PlanEngine) findAndReplaceDirectValues(
+	taskID string,
+	inputMap map[string]any,
+	taskZero *SubTask,
+	keyCounter map[string]int,
+	valueToKeyMap map[string]string,
+) map[string]any {
+	// Process each key in the input map
+	for key, value := range inputMap {
+		inputMap[key] = p.processValue(taskID, key, value, taskZero, keyCounter, valueToKeyMap)
+	}
+	return inputMap
+}
+
+// processValue handles a single value which might be a primitive, object, or array
+func (p *PlanEngine) processValue(
+	taskID string,
+	path string,
+	value any,
+	taskZero *SubTask,
+	keyCounter map[string]int,
+	valueToKeyMap map[string]string,
+) any {
+	// Skip if it's already a reference
+	if strVal, isString := value.(string); isString && strings.HasPrefix(strVal, "$") {
+		return value
+	}
+
+	switch v := value.(type) {
+	case map[string]any:
+		// Process each key in the nested object
+		for k, val := range v {
+			v[k] = p.processValue(taskID, path+"."+k, val, taskZero, keyCounter, valueToKeyMap)
+		}
+		return v
+
+	case []any:
+		// Process each element in the array
+		for i, val := range v {
+			v[i] = p.processValue(taskID, fmt.Sprintf("%s[%d]", path, i), val, taskZero, keyCounter, valueToKeyMap)
+		}
+		return v
+
+	default:
+		// For primitive values, move to TaskZero and replace with reference
+		return p.moveValueToTaskZero(taskID, path, value, taskZero, keyCounter, valueToKeyMap)
+	}
+}
+
+// moveValueToTaskZero moves a primitive value to TaskZero and returns a reference to it
+func (p *PlanEngine) moveValueToTaskZero(
+	taskID string,
+	path string,
+	value any,
+	taskZero *SubTask,
+	keyCounter map[string]int,
+	valueToKeyMap map[string]string,
+) string {
+	// Convert value to a string representation for deduplication
+	valueJSON, err := json.Marshal(value)
+	if err != nil {
+		p.Logger.Error().
+			Err(err).
+			Str("TaskID", taskID).
+			Interface("Value", value).
+			Msg("Failed to marshal value to JSON")
+		return fmt.Sprintf("%v", value) // Return as string as fallback
+	}
+	valueStr := string(valueJSON)
+
+	// Check if we already have this exact value in TaskZero
+	if existingKey, found := valueToKeyMap[valueStr]; found {
+		return fmt.Sprintf("$%s.%s", TaskZero, existingKey)
+	}
+
+	// Create a safe key from the path
+	safeKey := path
+	// Clean up the key for valid JSON key name
+	safeKey = strings.ReplaceAll(safeKey, ".", "_")
+	safeKey = strings.ReplaceAll(safeKey, "[", "_")
+	safeKey = strings.ReplaceAll(safeKey, "]", "")
+
+	// If the key is already in use, create a unique version
+	if _, exists := keyCounter[safeKey]; exists {
+		keyCounter[safeKey]++
+		safeKey = fmt.Sprintf("%s_%d", safeKey, keyCounter[safeKey])
+	} else {
+		keyCounter[safeKey] = 1
+	}
+
+	// Add value to TaskZero
+	taskZero.Input[safeKey] = value
+	// Remember this value to key mapping for deduplication
+	valueToKeyMap[valueStr] = safeKey
+
+	// Return the reference
+	return fmt.Sprintf("$%s.%s", TaskZero, safeKey)
 }
 
 func (p *PlanEngine) validateActionable(subTasks []*SubTask) error {
