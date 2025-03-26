@@ -247,9 +247,9 @@ The Plan Engine ensures:
 
 ## Self Hosting
 
-The orra Plan Engine is packaged with a [Dockerfile](planengine/Dockerfile). Run it a single instance locally using docker or docker compose.
+The orra Plan Engine is packaged with a [Dockerfile](planengine/Dockerfile). [Run it as a single instance locally](#installation) using docker or docker compose.
 
-**For production**, run the Plan Engine as single instance on a Cloud Service like [Digital Ocean](https://docs.digitalocean.com/products/app-platform/how-to/deploy-from-monorepo/) by pointing to the `planengine` folder during setup. 
+**For production**, run the Plan Engine as a single instance on a Cloud Service like [Digital Ocean's App Platform](https://docs.digitalocean.com/products/app-platform/how-to/deploy-from-monorepo/) by pointing to the `planengine` folder during setup and configuring the necessary environment variables. 
 
 The Plan Engine uses the [BadgerDB](https://github.com/hypermodeinc/badger) embedded database to persist all state - operational information is queryable using the [orra CLI](docs/cli.md).  
 
