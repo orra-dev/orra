@@ -1,4 +1,4 @@
-# 🪡 orra (✨Alpha✨)
+# 🪡 orra
 
 Move beyond simple Crews and Agents. Use orra to build production-ready multi-agent applications that handle complex real-world interactions.
 
@@ -22,6 +22,8 @@ orra coordinates tasks across your existing stack, agents and any tools run as s
 * Agent replay and multi-LLM consensus planning
 * Continuous adjustment of Agent workflows during runtime
 * Additional language SDKs - Ruby, DotNet and Go very soon!
+* MCP integration
+* Leverage Local LLMs
 
 ## Table of Contents
 
