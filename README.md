@@ -33,7 +33,7 @@ orra coordinates tasks across your existing stack, agents and any tools run as s
 - [Explore Examples](#explore-examples)
 - [Docs](#docs)
 - [Self Hosting](#self-hosting)
-- [Join Our Alpha Testing Community](#join-our-alpha-testing-community)
+- [Support](#support)
 - [License](#license)
 
 ## Installation
@@ -247,22 +247,20 @@ The Plan Engine ensures:
 
 ## Self Hosting
 
-1. **Storage**: We use BadgerDB to persist all state
-2. **Deployment**: Single-instance only, using containers designed for development and self-hosted deployments
+The orra Plan Engine is packaged with a [Dockerfile](planengine/Dockerfile). Run it a single instance locally using docker or docker compose.
 
-## Join Our Alpha Testing Community
+**For production**, run the Plan Engine as single instance on a Cloud Service like [Digital Ocean](https://docs.digitalocean.com/products/app-platform/how-to/deploy-from-monorepo/) by pointing to the `planengine` folder during setup. 
 
-**We're looking for developers who:**
+The Plan Engine uses the [BadgerDB](https://github.com/hypermodeinc/badger) embedded database to persist all state - operational information is queryable using the [orra CLI](docs/cli.md).  
 
-- Are building multi-agent applications
-- Want to help shape orra's development
-- Are comfortable working with Alpha software
-- Can provide feedback on real-world use cases
+[Book an office hours slot](https://cal.com/orra-dev/office-hours), to get help hosting or running orra's Plan Engine for production.
 
-**Connect With Us:**
+## Support
 
-- [GitHub Discussions](https://github.com/orra-dev/orra/discussions) - Share your experience and ideas
-- [Office Hours](https://cal.com/orra-dev/office-hours) - Weekly calls with the team every Friday
+Need help? We're here to support you:
+
+- Report a bug or request a feature by creating an [issue](https://github.com/orra-dev/orra/issues/new?template=bug-report-feature-request.yml)
+- Start a [discussion](https://github.com/orra-dev/orra/discussions) about your ideas or questions
 
 ## License
 
