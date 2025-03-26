@@ -4,7 +4,7 @@
  *  file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-import WebSocket from 'ws';
+import DefaultWebSocket from 'ws';
 import { OrraLogger } from './logger.js';
 
 import { promises as fs } from 'fs';
@@ -39,7 +39,8 @@ class OrraSDK {
 	#userInitiatedClose = false;
 	#cacheCleanupIntervalId = null;
 	
-	constructor({ serviceName, connection, persistence }) {
+	constructor({ serviceName, connection, persistence, WebSocketImpl }) {
+		this.WebSocket = WebSocketImpl || DefaultWebSocket;
 		this.#apiUrl = connection.orraUrl;
 		this.#apiKey = connection.orraKey;
 		this.#ws = null;
@@ -257,7 +258,7 @@ class OrraSDK {
 		}
 		
 		const wsUrl = this.#apiUrl.replace('http', 'ws');
-		this.#ws = new WebSocket(`${wsUrl}/ws?serviceId=${this.serviceId}&apiKey=${this.#apiKey}`);
+		this.#ws = new this.WebSocket(`${wsUrl}/ws?serviceId=${this.serviceId}&apiKey=${this.#apiKey}`);
 		
 		this.logger.debug('Initiating WebSocket connection');
 		
@@ -352,7 +353,7 @@ class OrraSDK {
 	}
 	
 	#sendPong() {
-		if (this.#isConnected && this?.#ws?.readyState === WebSocket.OPEN) {
+		if (this.#isConnected && this?.#ws?.readyState === this.WebSocket.OPEN) {
 			this?.#ws?.send(JSON.stringify({ id: "pong", payload: { type: 'pong', serviceId: this.serviceId } }));
 		}
 	}
@@ -676,7 +677,7 @@ class OrraSDK {
 			type: message.type
 		});
 		
-		if (this.#isConnected && this?.#ws?.readyState === WebSocket.OPEN) {
+		if (this.#isConnected && this?.#ws?.readyState === this.WebSocket.OPEN) {
 			try {
 				this.#ws.send(JSON.stringify(wrappedMessage));
 				this.logger.debug('Message sent successfully', {
@@ -714,7 +715,7 @@ class OrraSDK {
 	}
 	
 	#sendQueuedMessages() {
-		while (this.#messageQueue.length > 0 && this.#isConnected && this?.#ws?.readyState === WebSocket.OPEN) {
+		while (this.#messageQueue.length > 0 && this.#isConnected && this?.#ws?.readyState === this.WebSocket.OPEN) {
 			const message = this.#messageQueue.shift();
 			this.#ws.send(JSON.stringify(message));
 			this.logger.debug('Sent queued message', {
@@ -787,7 +788,7 @@ class OrraSDK {
 		this.#userInitiatedClose = true;
 		
 		// Close WebSocket cleanly with normal closure code (1000)
-		if (this?.#ws?.readyState === WebSocket.OPEN || this?.#ws?.readyState === WebSocket.CONNECTING) {
+		if (this?.#ws?.readyState === this.WebSocket.OPEN || this?.#ws?.readyState === this.WebSocket.CONNECTING) {
 			this?.#ws?.close(1000, 'Normal Closure');
 		}
 		
@@ -903,6 +904,7 @@ const initOrraEntity = (type) => ({
 	                                  orraUrl,
 	                                  orraKey,
 	                                  persistenceOpts = {},
+	                                  WebSocketImpl,
                                   }) => {
 	validateName(name, type);
 	
@@ -923,7 +925,8 @@ const initOrraEntity = (type) => ({
 		persistence: {
 			filePath: path.join(process.cwd(), DEFAULT_SERVICE_KEY_DIR, `${name}-${DEFAULT_SERVICE_KEY_FILE}`),
 			...persistenceOpts
-		}
+		},
+		WebSocketImpl
 	});
 	
 	const registerMethod = type === 'agent' ? sdk.registerAgent : sdk.registerService;
