@@ -41,9 +41,15 @@ const (
 	PauseExecutionCode            = "PAUSE_EXECUTION"
 	LLMOpenAIProvider             = "openai"
 	LLMGroqProvider               = "groq"
+	LLMSelfHostedProvider         = "self-hosted"
 	O1MiniReasoningModel          = "o1-mini"
 	O3MiniReasoningModel          = "o3-mini"
 	R1ReasoningModel              = "deepseek-r1-distill-llama-70b"
+	Phi4ReasoningModel            = "phi-4"
+	EmbeddingOpenAIProvider       = "openai"
+	EmbeddingSelfHostedProvider   = "self-hosted"
+	OpenAIEmbeddingModel          = "text-embedding-3-small"
+	JinaEmbeddingModel            = "jina-embeddings-v2-small-en"
 )
 
 const (
@@ -63,24 +69,37 @@ var (
 	DependencyPattern                = regexp.MustCompile(`^\$([^.]+)\.`)
 	WSWriteTimeOut                   = time.Second * 120
 	WSMaxMessageBytes          int64 = 10 * 1024 // 10K
-	AcceptedReasoningProviders       = []string{LLMOpenAIProvider, LLMGroqProvider}
-	AcceptedReasoningModels          = []string{O1MiniReasoningModel, O3MiniReasoningModel, R1ReasoningModel}
+	AcceptedReasoningProviders       = []string{LLMOpenAIProvider, LLMGroqProvider, LLMSelfHostedProvider}
+	AcceptedReasoningModels          = map[string][]string{
+		LLMOpenAIProvider:     {O1MiniReasoningModel, O3MiniReasoningModel},
+		LLMGroqProvider:       {R1ReasoningModel},
+		LLMSelfHostedProvider: {R1ReasoningModel, Phi4ReasoningModel},
+	}
+	AcceptedEmbeddingProviders = []string{EmbeddingOpenAIProvider, EmbeddingSelfHostedProvider}
+	AcceptedEmbeddingModels    = map[string][]string{
+		EmbeddingOpenAIProvider:     {OpenAIEmbeddingModel},
+		EmbeddingSelfHostedProvider: {JinaEmbeddingModel},
+	}
 )
 
 type Reasoning struct {
-	Provider string `envconfig:"default=openai"`
-	Model    string `envconfig:"default=o1-mini"`
-	ApiKey   string
+	Provider   string `envconfig:"default=openai"`
+	Model      string `envconfig:"default=o1-mini"`
+	ApiKey     string
+	ApiBaseUrl string `envconfig:"default=https://api.openai.com/v1"`
 }
 
-type PlanCache struct {
-	OpenaiApiKey string
+type Embeddings struct {
+	Provider   string `envconfig:"default=openai"`
+	Model      string `envconfig:"default=text-embedding-3-small"`
+	ApiKey     string
+	ApiBaseUrl string `envconfig:"default=https://api.openai.com/v1"`
 }
 
 type Config struct {
 	Port                  int `envconfig:"default=8005"`
 	Reasoning             Reasoning
-	PlanCache             PlanCache
+	Embeddings            Embeddings
 	PddlValidatorPath     string        `envconfig:"default=/usr/local/bin/Validate"`
 	PddlValidationTimeout time.Duration `envconfig:"default=30s"`
 	StoragePath           string        `envconfig:"optional"`
@@ -93,6 +112,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if err := validateReasoningConfig(cfg.Reasoning); err != nil {
+		return Config{}, err
+	}
+	if err := validateEmbeddingsConfig(cfg.Embeddings); err != nil {
 		return Config{}, err
 	}
 	if cfg.StoragePath != "" {
@@ -113,15 +135,64 @@ func validateReasoningConfig(reasoning Reasoning) error {
 			reasoning.Provider,
 			AcceptedReasoningProviders)
 	}
-	if !slices.Contains(AcceptedReasoningModels, reasoning.Model) {
+
+	models, ok := AcceptedReasoningModels[reasoning.Provider]
+	if !ok {
+		return fmt.Errorf("no models configured for provider [%s]", reasoning.Provider)
+	}
+
+	if !slices.Contains(models, reasoning.Model) {
 		return fmt.Errorf(
-			"invalid reasoning model [%s], select one of [%+v]",
+			"invalid reasoning model [%s] for provider [%s], select one of [%+v]",
 			reasoning.Model,
-			AcceptedReasoningModels)
+			reasoning.Provider,
+			models)
 	}
-	if reasoning.ApiKey == "" {
-		return fmt.Errorf("reasoning api key is required")
+
+	// API key is optional for self-hosted provider
+	if reasoning.Provider != LLMSelfHostedProvider && reasoning.ApiKey == "" {
+		return fmt.Errorf("reasoning api key is required for provider [%s]", reasoning.Provider)
 	}
+
+	// Validate API base URL
+	if reasoning.Provider == LLMSelfHostedProvider && reasoning.ApiBaseUrl == "" {
+		return fmt.Errorf("reasoning api base url is required")
+	}
+
+	return nil
+}
+
+func validateEmbeddingsConfig(embeddings Embeddings) error {
+	if !slices.Contains(AcceptedEmbeddingProviders, embeddings.Provider) {
+		return fmt.Errorf(
+			"invalid embeddings provider [%s], select one of [%+v]",
+			embeddings.Provider,
+			AcceptedEmbeddingProviders)
+	}
+
+	models, ok := AcceptedEmbeddingModels[embeddings.Provider]
+	if !ok {
+		return fmt.Errorf("no models configured for embeddings provider [%s]", embeddings.Provider)
+	}
+
+	if !slices.Contains(models, embeddings.Model) {
+		return fmt.Errorf(
+			"invalid embeddings model [%s] for provider [%s], select one of [%+v]",
+			embeddings.Model,
+			embeddings.Provider,
+			models)
+	}
+
+	// API key is optional for self-hosted provider
+	if embeddings.Provider != EmbeddingSelfHostedProvider && embeddings.ApiKey == "" {
+		return fmt.Errorf("embeddings api key is required for provider [%s]", embeddings.Provider)
+	}
+
+	// Validate API base URL
+	if embeddings.ApiBaseUrl == "" {
+		return fmt.Errorf("embeddings api base url is required")
+	}
+
 	return nil
 }
 

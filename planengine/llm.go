@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	groqAPIURLv1 = "https://api.groq.com/openai/v1"
-	APITypeGroq  = "GROQ"
+	groqAPIURLv1  = "https://api.groq.com/openai/v1"
+	APITypeGroq   = "GROQ"
+	APISelfHosted = "SELF_HOSTED"
 )
 
 type Embedder interface {
@@ -29,6 +30,7 @@ type LLMClient struct {
 	reasoningConfig  LLMClientConfig
 	embeddingsClient *open.Client
 	embeddingsModel  string
+	embeddingsConfig LLMClientConfig
 	logger           zerolog.Logger
 }
 
@@ -39,9 +41,13 @@ type LLMClientConfig struct {
 	n           int
 }
 
-func GroqConfig(authToken string) LLMClientConfig {
+func GroqConfig(authToken string, baseURL string) LLMClientConfig {
 	cfg := open.DefaultConfig(authToken)
 	cfg.BaseURL = groqAPIURLv1
+	if baseURL != "" {
+		cfg.BaseURL = baseURL
+	}
+
 	cfg.APIType = APITypeGroq
 	return LLMClientConfig{
 		baseConfig:  cfg,
@@ -51,8 +57,11 @@ func GroqConfig(authToken string) LLMClientConfig {
 	}
 }
 
-func OpenAIConfig(authToken string) LLMClientConfig {
+func OpenAIConfig(authToken string, baseURL string) LLMClientConfig {
 	cfg := open.DefaultConfig(authToken)
+	if baseURL != "" {
+		cfg.BaseURL = baseURL
+	}
 	return LLMClientConfig{
 		baseConfig:  cfg,
 		temperature: 1.0,
@@ -61,34 +70,66 @@ func OpenAIConfig(authToken string) LLMClientConfig {
 	}
 }
 
-func GetReasoningConfig(provider, apiKey string) (LLMClientConfig, error) {
+func SelfHostedConfig(authToken string, baseURL string) LLMClientConfig {
+	cfg := open.DefaultConfig(authToken)
+	cfg.BaseURL = baseURL
+	cfg.APIType = APISelfHosted
+	return LLMClientConfig{
+		baseConfig:  cfg,
+		temperature: 0.7,
+		topP:        1.0,
+		n:           1,
+	}
+}
+
+func GetProviderConfig(provider, apiKey, baseURL string) (LLMClientConfig, error) {
 	switch provider {
 	case LLMGroqProvider:
-		return GroqConfig(apiKey), nil
+		return GroqConfig(apiKey, baseURL), nil
 	case LLMOpenAIProvider:
-		return OpenAIConfig(apiKey), nil
+		return OpenAIConfig(apiKey, baseURL), nil
+	case LLMSelfHostedProvider:
+		return SelfHostedConfig(apiKey, baseURL), nil
 	default:
 		return LLMClientConfig{}, fmt.Errorf("unknown LLM provider: %s", provider)
 	}
 }
 
 func NewLLMClient(cfg Config, logger zerolog.Logger) (*LLMClient, error) {
-	reasoningConfig, err := GetReasoningConfig(cfg.Reasoning.Provider, cfg.Reasoning.ApiKey)
+	// Configure reasoning client
+	reasoningConfig, err := GetProviderConfig(
+		cfg.Reasoning.Provider,
+		cfg.Reasoning.ApiKey,
+		cfg.Reasoning.ApiBaseUrl,
+	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to configure reasoning provider: %w", err)
+	}
+
+	// Configure embeddings client
+	embeddingsConfig, err := GetProviderConfig(
+		cfg.Embeddings.Provider,
+		cfg.Embeddings.ApiKey,
+		cfg.Embeddings.ApiBaseUrl,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to configure embeddings provider: %w", err)
 	}
 
 	logger.Info().
 		Str("ReasoningProvider", cfg.Reasoning.Provider).
 		Str("ReasoningModel", cfg.Reasoning.Model).
-		Msg("initialising LLM provider")
+		Str("EmbeddingsProvider", cfg.Embeddings.Provider).
+		Str("EmbeddingsModel", cfg.Embeddings.Model).
+		Msg("initialising LLM providers")
 
 	return &LLMClient{
 		reasoningClient:  open.NewClientWithConfig(reasoningConfig.baseConfig),
 		reasoningConfig:  reasoningConfig,
 		reasoningModel:   cfg.Reasoning.Model,
-		embeddingsClient: open.NewClient(cfg.PlanCache.OpenaiApiKey),
-		embeddingsModel:  string(open.AdaEmbeddingV2),
+		embeddingsClient: open.NewClientWithConfig(embeddingsConfig.baseConfig),
+		embeddingsModel:  cfg.Embeddings.Model,
+		embeddingsConfig: embeddingsConfig,
 		logger:           logger,
 	}, nil
 }
