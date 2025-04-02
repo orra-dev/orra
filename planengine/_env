@@ -6,21 +6,21 @@ REASONING_PROVIDER=openai
 
 # OpenAI LLM Configuration
 REASONING_API_KEY=xxx
-REASONING_API_BASE_URL=https://api.openai.com/v1
+REASONING_API_BASE_URL=https://api.openai.com/v1 # Optional, leave empty for openai
 # Allowed models: o1-mini, o3-mini
 REASONING_MODEL=o1-mini
 
 # Groq LLM Configuration
 # Set REASONING_PROVIDER=groq to use Groq
 # REASONING_API_KEY=xxx
-# REASONING_API_BASE_URL=https://api.groq.com/v1
+# REASONING_API_BASE_URL=https://api.groq.com/v1  # Optional, leave empty for groq
 # Allowed models: deepseek-r1-distill-llama-70b
 # REASONING_MODEL=deepseek-r1-distill-llama-70b
 
 # Self-Hosted LLM Configuration (via OpenAI-compatible API)
 # Set REASONING_PROVIDER=self-hosted to use self-hosted models
 # REASONING_API_KEY=  # Optional, leave empty for no auth
-# REASONING_API_BASE_URL=http://localhost:1234/v1  # Point to your server (local or remote)
+# REASONING_API_BASE_URL=http://localhost:1234/v1  # Point to your server (local or remote on-prem setup)
 # Allowed models: deepseek-r1-distill-llama-70b, phi-4
 # REASONING_MODEL=phi-4
 
@@ -32,7 +32,7 @@ EMBEDDINGS_PROVIDER=openai
 
 # OpenAI Embeddings Configuration
 EMBEDDINGS_API_KEY=xxx
-EMBEDDINGS_API_BASE_URL=https://api.openai.com/v1
+EMBEDDINGS_API_BASE_URL=https://api.openai.com/v1   # Optional, leave empty for groq
 # Allowed models: text-embedding-3-small
 EMBEDDINGS_MODEL=text-embedding-3-small
 
