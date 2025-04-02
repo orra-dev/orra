@@ -47,8 +47,8 @@ func GroqConfig(authToken string, baseURL string) LLMClientConfig {
 	if baseURL != "" {
 		cfg.BaseURL = baseURL
 	}
-
 	cfg.APIType = APITypeGroq
+
 	return LLMClientConfig{
 		baseConfig:  cfg,
 		temperature: 0.6,
