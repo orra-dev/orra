@@ -98,7 +98,7 @@ func (g *PddlGenerator) addTypes(domain *strings.Builder) error {
 	for paramName := range params {
 		paramType := g.inferTypeFromParamName(paramName)
 		if !addedTypes[paramType] {
-			domain.WriteString(fmt.Sprintf("    %s - object\n", paramType))
+			_, _ = fmt.Fprintf(domain, "    %s - object\n", paramType)
 			addedTypes[paramType] = true
 		}
 	}
@@ -123,8 +123,7 @@ func (g *PddlGenerator) addPredicates(domain *strings.Builder) error {
 	// Parameter validity predicates from Task0
 	for paramName := range params {
 		paramType := g.inferTypeFromParamName(paramName)
-		domain.WriteString(fmt.Sprintf("    (valid-%s ?%s - %s)\n",
-			paramName, paramName, paramType))
+		_, _ = fmt.Fprintf(domain, "    (valid-%s ?%s - %s)\n", paramName, paramName, paramType)
 	}
 
 	// Task dependencies
@@ -154,7 +153,7 @@ func (g *PddlGenerator) addActions(domain *strings.Builder) error {
 
 	for _, paramName := range paramNames {
 		paramType := g.inferTypeFromParamName(paramName)
-		domain.WriteString(fmt.Sprintf(" ?%s - %s", paramName, paramType))
+		_, _ = fmt.Fprintf(domain, " ?%s - %s", paramName, paramType)
 	}
 	domain.WriteString(")\n")
 
@@ -164,8 +163,7 @@ func (g *PddlGenerator) addActions(domain *strings.Builder) error {
 
 	// Parameter requirements from Task0
 	for paramName := range params {
-		domain.WriteString(fmt.Sprintf("     (valid-%s ?%s)\n",
-			paramName, paramName))
+		_, _ = fmt.Fprintf(domain, "     (valid-%s ?%s)\n", paramName, paramName)
 	}
 
 	// Dependencies
@@ -335,7 +333,7 @@ func (g *PddlGenerator) addProblemObjects(problem *strings.Builder, taskZero *Su
 	// Add service objects
 	problem.WriteString("    ; Services\n")
 	for _, task := range tasks {
-		problem.WriteString(fmt.Sprintf("    %s - service\n", task.ID))
+		_, _ = fmt.Fprintf(problem, "    %s - service\n", task.ID)
 	}
 
 	// Add parameter objects from Task0 input
@@ -359,7 +357,7 @@ func (g *PddlGenerator) addProblemObjects(problem *strings.Builder, taskZero *Su
 		objName = strings.ReplaceAll(objName, "-", "_")
 		objName = strings.ReplaceAll(objName, " ", "_")
 
-		problem.WriteString(fmt.Sprintf("    %s - %s\n", objName, paramType))
+		_, _ = fmt.Fprintf(problem, "    %s - %s\n", objName, paramType)
 	}
 
 	problem.WriteString("  )\n\n")
@@ -372,8 +370,8 @@ func (g *PddlGenerator) addProblemInit(problem *strings.Builder, taskZero *SubTa
 	// Add service states
 	problem.WriteString("    ; Initial service states\n")
 	for _, task := range tasks {
-		problem.WriteString(fmt.Sprintf("    (service-validated %s)\n", task.ID))
-		problem.WriteString(fmt.Sprintf("    (service-active %s)\n", task.ID))
+		_, _ = fmt.Fprintf(problem, "    (service-validated %s)\n", task.ID)
+		_, _ = fmt.Fprintf(problem, "    (service-active %s)\n", task.ID)
 	}
 
 	// Add parameter validations from Task0
@@ -395,7 +393,7 @@ func (g *PddlGenerator) addProblemInit(problem *strings.Builder, taskZero *SubTa
 		objName = strings.ReplaceAll(objName, "-", "_")
 		objName = strings.ReplaceAll(objName, " ", "_")
 
-		problem.WriteString(fmt.Sprintf("    (valid-%s %s)\n", paramName, objName))
+		_, _ = fmt.Fprintf(problem, "    (valid-%s %s)\n", paramName, objName)
 	}
 
 	// Add dependencies based on data flow
@@ -406,7 +404,7 @@ func (g *PddlGenerator) addProblemInit(problem *strings.Builder, taskZero *SubTa
 			if strings.EqualFold(depTaskID, TaskZero) {
 				continue // Skip Task0 dependencies in PDDL
 			}
-			problem.WriteString(fmt.Sprintf("    (depends-on %s %s)\n", task.ID, depTaskID))
+			_, _ = fmt.Fprintf(problem, "    (depends-on %s %s)\n", task.ID, depTaskID)
 		}
 	}
 
@@ -420,7 +418,7 @@ func (g *PddlGenerator) addProblemGoal(problem *strings.Builder, tasks []*SubTas
 
 	// Goal is to complete all services
 	for _, task := range tasks {
-		problem.WriteString(fmt.Sprintf("      (service-complete %s)\n", task.ID))
+		_, _ = fmt.Fprintf(problem, "      (service-complete %s)\n", task.ID)
 	}
 
 	problem.WriteString("    )\n")

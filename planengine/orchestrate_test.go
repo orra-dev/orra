@@ -443,9 +443,10 @@ func TestCallingPlanMinusTaskZero_SameKeyDifferentValues(t *testing.T) {
 	// Find task1 and task2 in the new plan
 	var task1, task2 *SubTask
 	for _, task := range newPlan.Tasks {
-		if task.ID == "task1" {
+		switch task.ID {
+		case "task1":
 			task1 = task
-		} else if task.ID == "task2" {
+		case "task2":
 			task2 = task
 		}
 	}
