@@ -44,8 +44,8 @@ const (
 	LLMSelfHostedProvider         = "self-hosted"
 	O1MiniReasoningModel          = "o1-mini"
 	O3MiniReasoningModel          = "o3-mini"
-	R1ReasoningModel              = "deepseek-r1-distill-llama-70b"
-	Phi4ReasoningModel            = "phi-4"
+	R1ReasoningModel70B           = "deepseek-r1-distill-llama-70b"
+	R1ReasoningModel8B            = "deepseek-r1-distill-llama-8b"
 	EmbeddingOpenAIProvider       = "openai"
 	EmbeddingSelfHostedProvider   = "self-hosted"
 	OpenAIEmbeddingModel          = "text-embedding-3-small"
@@ -72,8 +72,8 @@ var (
 	AcceptedReasoningProviders       = []string{LLMOpenAIProvider, LLMGroqProvider, LLMSelfHostedProvider}
 	AcceptedReasoningModels          = map[string][]string{
 		LLMOpenAIProvider:     {O1MiniReasoningModel, O3MiniReasoningModel},
-		LLMGroqProvider:       {R1ReasoningModel},
-		LLMSelfHostedProvider: {R1ReasoningModel, Phi4ReasoningModel},
+		LLMGroqProvider:       {R1ReasoningModel70B},
+		LLMSelfHostedProvider: {R1ReasoningModel70B, R1ReasoningModel8B},
 	}
 	AcceptedEmbeddingProviders = []string{EmbeddingOpenAIProvider, EmbeddingSelfHostedProvider}
 	AcceptedEmbeddingModels    = map[string][]string{
