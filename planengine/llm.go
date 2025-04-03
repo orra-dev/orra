@@ -76,9 +76,9 @@ func SelfHostedConfig(authToken string, baseURL string) LLMClientConfig {
 	cfg.APIType = APISelfHosted
 	return LLMClientConfig{
 		baseConfig:  cfg,
-		temperature: 0.7,
-		topP:        1.0,
-		n:           1,
+		temperature: 0.6,
+		topP:        -1.0,
+		n:           -1,
 	}
 }
 
