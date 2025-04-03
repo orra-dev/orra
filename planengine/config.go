@@ -39,6 +39,8 @@ const (
 	CompensationExpiredLogType    = "compensation_expired"
 	VersionHeader                 = "X-Orra-PlaneEngine-Version"
 	PauseExecutionCode            = "PAUSE_EXECUTION"
+	StartJsonMarker               = "```json"
+	EndJsonMarker                 = "```"
 )
 
 // Supported LLM and Embeddings models

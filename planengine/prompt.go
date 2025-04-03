@@ -99,8 +99,6 @@ func buildPlannerPrompt(action string, actionParams json.RawMessage, serviceDesc
 	}
 
 	promptExtras := buildPromptExtras(generateDomainContext(useCases, constraints), backPromptContext)
-	jsonStartMarker := "```json"
-	jsonEndMarker := "```"
 	prompt := fmt.Sprintf(`You are an AI orchestrator tasked with planning the execution of services based on a user's action. A user's action contains PARAMS for the action to be executed, USE THEM. Your goal is to create an efficient, parallel execution plan that fulfils the user's request.
 
 Available Services:
@@ -172,8 +170,8 @@ Generate the execution plan:`,
 		action,
 		string(actionParams),
 		promptExtras,
-		jsonStartMarker,
-		jsonEndMarker,
+		StartJsonMarker,
+		EndJsonMarker,
 	)
 
 	return prompt

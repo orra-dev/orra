@@ -992,22 +992,18 @@ func (si *ServiceInfo) InputPropKeys() []string {
 }
 
 func extractValidJSONOutput(input string) (string, error) {
-	// Define the markers to locate the JSON block.
-	startMarker := "```json"
-	endMarker := "```"
-
 	// Find the start of the JSON block.
-	startIdx := strings.Index(input, startMarker)
+	startIdx := strings.Index(input, StartJsonMarker)
 	if startIdx == -1 {
 		// Return full input if the JSON start marker is not found.
 		return "", fmt.Errorf("cannot find opening JSON marker in %s", input)
 	}
 
 	// Start after the marker.
-	startIdx += len(startMarker)
+	startIdx += len(StartJsonMarker)
 
 	// Find the closing marker after the start.
-	endIdx := strings.Index(input[startIdx:], endMarker)
+	endIdx := strings.Index(input[startIdx:], EndJsonMarker)
 	if endIdx == -1 {
 		// Return full input if no closing marker is found.
 		return "", fmt.Errorf("cannot find closing JSON marker in %s", input)
