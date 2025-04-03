@@ -99,7 +99,9 @@ func buildPlannerPrompt(action string, actionParams json.RawMessage, serviceDesc
 	}
 
 	promptExtras := buildPromptExtras(generateDomainContext(useCases, constraints), backPromptContext)
-	prompt := fmt.Sprintf(`You are an AI orchestrator tasked with planning the execution of services based on a user's action. A user's action contains PARAMS for the action to be executed, USE THEM. Your goal is to create an efficient, parallel execution plan that fulfills the user's request.
+	jsonStartMarker := "```json"
+	jsonEndMarker := "```"
+	prompt := fmt.Sprintf(`You are an AI orchestrator tasked with planning the execution of services based on a user's action. A user's action contains PARAMS for the action to be executed, USE THEM. Your goal is to create an efficient, parallel execution plan that fulfils the user's request.
 
 Available Services:
 %s
@@ -110,11 +112,14 @@ Action Params:
 %s
 
 %s
+
 Guidelines:
 1. Each service described above contains input/output types and description. You must strictly adhere to these types and descriptions when using the services.
 2. Each task in the plan should strictly use one of the available services. Follow the JSON conventions for each task.
 3. Each task MUST have a unique ID, which is strictly increasing.
-4. With the excpetion of Task 0, whose inputs are constants derived from the User Action, inputs for other tasks have to be outputs from preceding tasks. In the latter case, use the format $taskId to denote the ID of the previous task whose output will be the input.
+4. With the excpetion of Task 0, whose inputs are constants derived from the User Action, inputs for other tasks have to be outputs from preceding tasks. In the latter case, use the format $taskId to denote the ID of the previous task whose output will be the input. Outputs of previous tasks are referenced directly: 
+	- CORRECT: $taskId.outputFieldName
+  - BAD, DO NOT DO THIS: $taskId.output.outputFieldName
 5. There can only be a single Task 0, other tasks HAVE TO CORRESPOND TO AVAILABLE SERVICES.
 6. Task 0 should not be assigned a service, as it is a placeholder for inputs that are constants derived from the User Action params.
 7. When assigning service IDs to tasks, PLEASE PRESERVE THE EXACT ORIGINAL CASING of the IDs because they are case sensitive.
@@ -158,13 +163,17 @@ Please generate a plan in the following JSON format:
   ]
 }
 
-Ensure that the plan is efficient, maximizes parallelization, and accurately fulfills the user's action using the available services. If the action cannot be completed with the given services, explain why in a "final" task and suggest alternatives if possible.
+The generated JSON should be wrapped between a "%s" start marker and a "%s" end marker.  
+
+Ensure that the plan is efficient, maximizes parallelization, and accurately fulfils the user's action using the available services. If the action cannot be completed with the given services, explain why in a "final" task and suggest alternatives if possible.
 
 Generate the execution plan:`,
 		serviceDescriptions,
 		action,
 		string(actionParams),
 		promptExtras,
+		jsonStartMarker,
+		jsonEndMarker,
 	)
 
 	return prompt
