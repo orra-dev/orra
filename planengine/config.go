@@ -39,17 +39,16 @@ const (
 	CompensationExpiredLogType    = "compensation_expired"
 	VersionHeader                 = "X-Orra-PlaneEngine-Version"
 	PauseExecutionCode            = "PAUSE_EXECUTION"
-	LLMOpenAIProvider             = "openai"
-	LLMGroqProvider               = "groq"
-	LLMSelfHostedProvider         = "self-hosted"
-	O1MiniReasoningModel          = "o1-mini"
-	O3MiniReasoningModel          = "o3-mini"
-	R1ReasoningModel70B           = "deepseek-r1-distill-llama-70b"
-	R1ReasoningModel8B            = "deepseek-r1-distill-llama-8b"
-	EmbeddingOpenAIProvider       = "openai"
-	EmbeddingSelfHostedProvider   = "self-hosted"
-	OpenAIEmbeddingModel          = "text-embedding-3-small"
-	JinaEmbeddingModel            = "jina-embeddings-v2-small-en"
+)
+
+// Supported LLM and Embeddings models
+const (
+	O1MiniModel         = "o1-mini"
+	O3MiniModel         = "o3-mini"
+	DeepseekR1Model     = "deepseek-r1"
+	QwQ32BModel         = "qwq-32b"
+	TextEmbedding3Small = "text-embedding-3-small"
+	JinaEmbeddingsSmall = "jina-embeddings-v2-small-en"
 )
 
 const (
@@ -64,42 +63,38 @@ const (
 )
 
 var (
-	Version                          = "0.2.3"
-	LogsRetentionPeriod              = 7 * 24 * time.Hour
-	DependencyPattern                = regexp.MustCompile(`^\$([^.]+)\.`)
-	WSWriteTimeOut                   = time.Second * 120
-	WSMaxMessageBytes          int64 = 10 * 1024 // 10K
-	AcceptedReasoningProviders       = []string{LLMOpenAIProvider, LLMGroqProvider, LLMSelfHostedProvider}
-	AcceptedReasoningModels          = map[string][]string{
-		LLMOpenAIProvider:     {O1MiniReasoningModel, O3MiniReasoningModel},
-		LLMGroqProvider:       {R1ReasoningModel70B},
-		LLMSelfHostedProvider: {R1ReasoningModel70B, R1ReasoningModel8B},
-	}
-	AcceptedEmbeddingProviders = []string{EmbeddingOpenAIProvider, EmbeddingSelfHostedProvider}
-	AcceptedEmbeddingModels    = map[string][]string{
-		EmbeddingOpenAIProvider:     {OpenAIEmbeddingModel},
-		EmbeddingSelfHostedProvider: {JinaEmbeddingModel},
+	Version                        = "0.2.3"
+	LogsRetentionPeriod            = 7 * 24 * time.Hour
+	DependencyPattern              = regexp.MustCompile(`^\$([^.]+)\.`)
+	WSWriteTimeOut                 = time.Second * 120
+	WSMaxMessageBytes        int64 = 10 * 1024 // 10K
+	SupportedLLMModels             = []string{O1MiniModel, O3MiniModel, DeepseekR1Model, QwQ32BModel}
+	SupportedEmbeddingModels       = []string{TextEmbedding3Small, JinaEmbeddingsSmall}
+	ValidSuffixPatterns            = []*regexp.Regexp{
+		regexp.MustCompile(`^-mlx$`),          // Hardware-specific optimization
+		regexp.MustCompile(`^-q\d+$`),         // Quantization (e.g., -q4, -q8)
+		regexp.MustCompile(`^-\d+[kK]$`),      // Context window size (e.g., -8k)
+		regexp.MustCompile(`^-v\d+(\.\d+)*$`), // Version numbers (e.g., -v1, -v2.5)
+		regexp.MustCompile(`^-[a-z]+\d*$`),    // Simple alphanumeric suffixes (e.g., -beta, -cuda)
 	}
 )
 
-type Reasoning struct {
-	Provider   string `envconfig:"default=openai"`
+type LLMConfig struct {
 	Model      string `envconfig:"default=o1-mini"`
 	ApiKey     string
-	ApiBaseUrl string `envconfig:"default=https://api.openai.com/v1"`
+	ApiBaseURL string `envconfig:"default=https://api.openai.com/v1"`
 }
 
-type Embeddings struct {
-	Provider   string `envconfig:"default=openai"`
+type EmbeddingsConfig struct {
 	Model      string `envconfig:"default=text-embedding-3-small"`
 	ApiKey     string
-	ApiBaseUrl string `envconfig:"default=https://api.openai.com/v1"`
+	ApiBaseURL string `envconfig:"default=https://api.openai.com/v1"`
 }
 
 type Config struct {
 	Port                  int `envconfig:"default=8005"`
-	Reasoning             Reasoning
-	Embeddings            Embeddings
+	LLM                   LLMConfig
+	Embeddings            EmbeddingsConfig
 	PddlValidatorPath     string        `envconfig:"default=/usr/local/bin/Validate"`
 	PddlValidationTimeout time.Duration `envconfig:"default=30s"`
 	StoragePath           string        `envconfig:"optional"`
@@ -111,7 +106,7 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	if err := validateReasoningConfig(cfg.Reasoning); err != nil {
+	if err := validateLLMConfig(cfg.LLM); err != nil {
 		return Config{}, err
 	}
 	if err := validateEmbeddingsConfig(cfg.Embeddings); err != nil {
@@ -128,80 +123,80 @@ func Load() (Config, error) {
 	return cfg, err
 }
 
-func validateReasoningConfig(reasoning Reasoning) error {
-	if !slices.Contains(AcceptedReasoningProviders, reasoning.Provider) {
-		return fmt.Errorf(
-			"invalid reasoning provider [%s], select one of [%+v]",
-			reasoning.Provider,
-			AcceptedReasoningProviders)
-	}
-
-	models, ok := AcceptedReasoningModels[reasoning.Provider]
-	if !ok {
-		return fmt.Errorf("no models configured for provider [%s]", reasoning.Provider)
-	}
-
-	if !slices.Contains(models, reasoning.Model) {
-		return fmt.Errorf(
-			"invalid reasoning model [%s] for provider [%s], select one of [%+v]",
-			reasoning.Model,
-			reasoning.Provider,
-			models)
-	}
-
-	// API key is optional for self-hosted provider
-	if reasoning.Provider != LLMSelfHostedProvider && reasoning.ApiKey == "" {
-		return fmt.Errorf("reasoning api key is required for provider [%s]", reasoning.Provider)
-	}
-
-	// Validate API base URL
-	if reasoning.Provider == LLMSelfHostedProvider && reasoning.ApiBaseUrl == "" {
-		return fmt.Errorf("reasoning api base url is required")
-	}
-
-	return nil
-}
-
-func validateEmbeddingsConfig(embeddings Embeddings) error {
-	if !slices.Contains(AcceptedEmbeddingProviders, embeddings.Provider) {
-		return fmt.Errorf(
-			"invalid embeddings provider [%s], select one of [%+v]",
-			embeddings.Provider,
-			AcceptedEmbeddingProviders)
-	}
-
-	models, ok := AcceptedEmbeddingModels[embeddings.Provider]
-	if !ok {
-		return fmt.Errorf("no models configured for embeddings provider [%s]", embeddings.Provider)
-	}
-
-	if !slices.Contains(models, embeddings.Model) {
-		return fmt.Errorf(
-			"invalid embeddings model [%s] for provider [%s], select one of [%+v]",
-			embeddings.Model,
-			embeddings.Provider,
-			models)
-	}
-
-	// API key is optional for self-hosted provider
-	if embeddings.Provider != EmbeddingSelfHostedProvider && embeddings.ApiKey == "" {
-		return fmt.Errorf("embeddings api key is required for provider [%s]", embeddings.Provider)
-	}
-
-	// Validate API base URL
-	if embeddings.ApiBaseUrl == "" {
-		return fmt.Errorf("embeddings api base url is required")
-	}
-
-	return nil
-}
-
 func getStoragePath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("could not determine home directory: %w", err)
 	}
 	return filepath.Join(home, DefaultConfigDir, DBStoreDir), nil
+}
+
+func normalizeModelName(model string) string {
+	// Handle path-like format (e.g., "qwen/qwq-32b")
+	if parts := strings.Split(model, "/"); len(parts) > 1 {
+		return parts[len(parts)-1] // Get the last part after any slashes
+	}
+	return strings.ToLower(strings.TrimSpace(model))
+}
+
+func isSupportedModel(model string, allowedBaseModels []string) bool {
+	// First normalize the model name (handles path-like formats)
+	normalizedModel := normalizeModelName(model)
+
+	if slices.Contains(allowedBaseModels, normalizedModel) {
+		return true
+	}
+
+	// Check if it starts with a valid base model and has a valid suffix
+	for _, baseModel := range allowedBaseModels {
+		if !strings.HasPrefix(normalizedModel, baseModel+"-") {
+			continue
+		}
+
+		suffix := normalizedModel[len(baseModel):]
+		if suffix == "" {
+			return false
+		}
+
+		// Check if suffix matches any of our valid patterns
+		for _, pattern := range ValidSuffixPatterns {
+			if pattern.MatchString(suffix) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func validateLLMConfig(llm LLMConfig) error {
+	if !isSupportedModel(llm.Model, SupportedLLMModels) {
+		return fmt.Errorf(
+			"LLM model [%s] not supported, select one of %v or a supported variant",
+			llm.Model,
+			SupportedLLMModels)
+	}
+
+	if llm.ApiBaseURL == "" {
+		return fmt.Errorf("LLM API base URL is required")
+	}
+
+	return nil
+}
+
+func validateEmbeddingsConfig(embeddings EmbeddingsConfig) error {
+	if !isSupportedModel(embeddings.Model, SupportedEmbeddingModels) {
+		return fmt.Errorf(
+			"embeddings model [%s] not supported, select one of [%+v] or a variant with a suffix",
+			embeddings.Model,
+			SupportedEmbeddingModels)
+	}
+
+	if embeddings.ApiBaseURL == "" {
+		return fmt.Errorf("embeddings API base URL is required")
+	}
+
+	return nil
 }
 
 type Status int
@@ -413,7 +408,7 @@ func (s *PddlValidationErrorType) UnmarshalJSON(data []byte) error {
 	case "timeout":
 		*s = PddlTimeout
 	default:
-		return fmt.Errorf("invalid Compensation Status: %s", s)
+		return fmt.Errorf("invalid PddlValidationErrorType: %s", s)
 	}
 	return nil
 }

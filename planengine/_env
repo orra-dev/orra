@@ -1,47 +1,37 @@
 #========================================
-# REASONING (LLM) CONFIGURATION
+# LLM CONFIGURATION
 #========================================
-# Active LLM Provider (choose one: openai, groq, self-hosted)
-REASONING_PROVIDER=openai
 
-# OpenAI LLM Configuration
-REASONING_API_KEY=xxx
-REASONING_API_BASE_URL=https://api.openai.com/v1 # Optional, leave empty for openai
-# Allowed models: o1-mini, o3-mini
-REASONING_MODEL=o1-mini
-
-# Groq LLM Configuration
-# Set REASONING_PROVIDER=groq to use Groq
-# REASONING_API_KEY=xxx
-# REASONING_API_BASE_URL=https://api.groq.com/v1  # Optional, leave empty for groq
-# Allowed models: deepseek-r1-distill-llama-70b
-# REASONING_MODEL=deepseek-r1-distill-llama-70b
-
-# Self-Hosted LLM Configuration (via OpenAI-compatible API)
-# Set REASONING_PROVIDER=self-hosted to use self-hosted models
-# REASONING_API_KEY=  # Optional, leave empty for no auth
-# REASONING_API_BASE_URL=http://localhost:1234/v1  # Point to your server (local or remote on-prem setup)
-# Allowed models: deepseek-r1-distill-llama-70b, phi-4
-# REASONING_MODEL=phi-4
+# Supported LLM Model (choose one: o1-mini, o3-mini, deepseek-r1, qwq-32b)
+# Examples of supported formats:
+# - Simple name: o1-mini
+# - With suffix: deepseek-r1-mlx
+# - With quantization: deepseek-r1-q4
+# - With path format: qwen/qwq-32b
+# - Case insensitive: Qwen/QwQ-32B
+# Not supported: deepseek-r1-llama-distill-70B (different model)
+LLM_MODEL=o1-mini
+LLM_API_KEY=xxx                             # Optional, leave empty for no auth
+LLM_API_BASE_URL=https://api.openai.com/v1  # Default for OpenAI, change for self-hosted/other providers
 
 #========================================
 # EMBEDDINGS CONFIGURATION
 #========================================
-# Active Embeddings Provider (choose one: openai, self-hosted)
-EMBEDDINGS_PROVIDER=openai
 
-# OpenAI Embeddings Configuration
-EMBEDDINGS_API_KEY=xxx
-EMBEDDINGS_API_BASE_URL=https://api.openai.com/v1   # Optional, leave empty for groq
-# Allowed models: text-embedding-3-small
+# Supported Embeddings Model (choose one: text-embedding-3-small, jina-embeddings-v2-small-en)
 EMBEDDINGS_MODEL=text-embedding-3-small
+EMBEDDINGS_API_KEY=xxx                             # Optional, leave empty for no auth
+EMBEDDINGS_API_BASE_URL=https://api.openai.com/v1  # Default for OpenAI, change for self-hosted/other providers
 
-# Self-Hosted Embeddings Configuration
-# Set EMBEDDINGS_PROVIDER=self-hosted to use self-hosted models
-# EMBEDDINGS_API_KEY=  # Optional, leave empty for no auth
-# EMBEDDINGS_API_BASE_URL=http://localhost:1234/v1  # Point to your server (local or remote)
-# Allowed models: jina-embeddings-v2-small-en
-# EMBEDDINGS_MODEL=jina-embeddings-v2-small-en
+#========================================
+# SERVER CONFIGURATION
+#========================================
 
-# Other configuration
-# PORT=8005  # Default is 8005
+# Server port (default: 8005)
+# PORT=8005
+
+# PDDL validator path (default: /usr/local/bin/Validate)
+# PDDL_VALIDATOR_PATH=/usr/local/bin/Validate
+
+# PDDL validation timeout (default: 30s)
+# PDDL_VALIDATION_TIMEOUT=30s
