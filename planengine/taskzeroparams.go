@@ -78,9 +78,9 @@ func (p *PlanEngine) validateTaskZeroParams(plan *ExecutionPlan, actionParams js
 
 		servicesStr := strings.Join(serviceDetails, ", ")
 		if len(embeddedInfo) == 0 {
-			return Failed, fmt.Errorf("ORCHESTRATION ERROR: Parameters [%s] are missing from task0\n\nPROBLEM: The generated execution plan is missing required parameters that were provided in the orchestration request.\n\nHOW TO FIX:\n1. Update your LLM prompt to ensure all action parameters are included in task0 inputs\n2. OR update the service schema for %s to accept these parameters\n3. OR if these parameters aren't needed, remove them from your orchestration request", missingParamsStr, servicesStr)
+			return Failed, fmt.Errorf("ORCHESTRATION ERROR: Parameters [%s] are missing from task0\n\nPROBLEM: The generated execution plan is missing required parameters that were provided in the orchestration request.\n\nHOW TO FIX:\n1. Update the service schema for %s to accept these parameters\n2. OR if these parameters aren't needed, remove them from your orchestration request", missingParamsStr, servicesStr)
 		}
-		return Failed, fmt.Errorf("ORCHESTRATION ERROR: Parameters [%s] are missing from task0\n\nPROBLEM: The generated execution plan is embedding parameters within other fields (%s) instead of keeping them as separate parameters.\n\nHOW TO FIX:\n1. Update your LLM prompt to emphasize that all parameters must be separate fields in task0\n2. OR update the service schema for %s to accept these parameters\n3. OR if these parameters aren't needed, remove them from your orchestration request", missingParamsStr, embeddedInfo, servicesStr)
+		return Failed, fmt.Errorf("ORCHESTRATION ERROR: Parameters [%s] are missing from task0\n\nPROBLEM: The generated execution plan is embedding parameters within other fields (%s) instead of keeping them as separate parameters.\n\nHOW TO FIX:\n1. Update the service schema for %s to accept these parameters\n2. OR if these parameters aren't needed, remove them from your orchestration request", missingParamsStr, embeddedInfo, servicesStr)
 	}
 }
 
