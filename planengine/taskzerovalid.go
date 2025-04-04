@@ -148,12 +148,6 @@ func buildEmbeddedParamsInfo(embeddedParams map[string][]string) string {
 	return strings.Join(out, ", ")
 }
 
-// validateNoCompositeTaskZeroRefs checks for multiple task0 references embedded
-// within a single input parameter of downstream tasks.
-//
-// The function returns a Status and error combination similar to other validation
-// functions in the codebase. The retryCount parameter is used to provide
-// progressively more detailed error messages.
 func (p *PlanEngine) validateNoCompositeTaskZeroRefs(plan *ExecutionPlan, retryCount int) (Status, error) {
 	// Skip validation if there are no tasks or just task0
 	if len(plan.Tasks) <= 1 {
@@ -164,8 +158,8 @@ func (p *PlanEngine) validateNoCompositeTaskZeroRefs(plan *ExecutionPlan, retryC
 	// Matches $task0.fieldname pattern
 	task0RefRegex := regexp.MustCompile(`\$task0\.([a-zA-Z0-9_]+)`)
 
-	// Maps taskID -> paramName -> []refFields
-	compositeRefs := make(map[string]map[string][]string)
+	// Maps taskID -> paramName -> issue details
+	invalidRefs := make(map[string]map[string]*invalidTaskZeroRef)
 
 	// Check each downstream task (skip task0)
 	for _, task := range plan.Tasks {
@@ -173,7 +167,7 @@ func (p *PlanEngine) validateNoCompositeTaskZeroRefs(plan *ExecutionPlan, retryC
 			continue
 		}
 
-		// For each input parameter, check for composite task0 references
+		// For each input parameter, check for task0 references
 		for paramName, paramValue := range task.Input {
 			// We only care about string values that might contain references
 			strValue, ok := paramValue.(string)
@@ -183,8 +177,8 @@ func (p *PlanEngine) validateNoCompositeTaskZeroRefs(plan *ExecutionPlan, retryC
 
 			// Find all task0 references in this parameter value
 			matches := task0RefRegex.FindAllStringSubmatch(strValue, -1)
-			if len(matches) <= 1 {
-				// At most one reference, this is valid
+			if len(matches) == 0 {
+				// No references, continue
 				continue
 			}
 
@@ -196,18 +190,35 @@ func (p *PlanEngine) validateNoCompositeTaskZeroRefs(plan *ExecutionPlan, retryC
 				}
 			}
 
-			// If we found multiple references, record this issue
+			// Two validation cases:
+			// 1. Multiple task0 references (handled before)
+			// 2. Single reference with extra text (new case)
 			if len(refFields) > 1 {
-				if _, exists := compositeRefs[task.ID]; !exists {
-					compositeRefs[task.ID] = make(map[string][]string)
+				// Case 1: Multiple references in one field (composite reference)
+				if _, exists := invalidRefs[task.ID]; !exists {
+					invalidRefs[task.ID] = make(map[string]*invalidTaskZeroRef)
 				}
-				compositeRefs[task.ID][paramName] = refFields
+				invalidRefs[task.ID][paramName] = &invalidTaskZeroRef{
+					refFields:      refFields,
+					paramValue:     strValue,
+					isMultipleRefs: true,
+				}
+			} else if len(refFields) == 1 && !isExactTaskZeroRef(strValue) {
+				// Case 2: Single reference with extra text
+				if _, exists := invalidRefs[task.ID]; !exists {
+					invalidRefs[task.ID] = make(map[string]*invalidTaskZeroRef)
+				}
+				invalidRefs[task.ID][paramName] = &invalidTaskZeroRef{
+					refFields:      refFields,
+					paramValue:     strValue,
+					isMultipleRefs: false, // Single reference but with extra text
+				}
 			}
 		}
 	}
 
 	// If no issues found, return success
-	if len(compositeRefs) == 0 {
+	if len(invalidRefs) == 0 {
 		return Continue, nil
 	}
 
@@ -215,72 +226,86 @@ func (p *PlanEngine) validateNoCompositeTaskZeroRefs(plan *ExecutionPlan, retryC
 	switch retryCount {
 	case 0:
 		// First attempt - simple error
-		return Failed, buildCompositeRefSimpleError(compositeRefs)
+		return Failed, buildInvalidRefSimpleError(invalidRefs)
 
 	case 1:
 		// First retry - more detailed explanation
-		return Failed, buildCompositeRefDetailedError(compositeRefs)
+		return Failed, buildInvalidRefDetailedError(invalidRefs)
 
 	default:
 		// Final attempt - comprehensive error with actionable guidance
-		return Failed, buildCompositeRefFinalError(compositeRefs, plan)
+		return Failed, buildInvalidRefFinalError(invalidRefs)
 	}
+}
+
+// Checks if a string is exactly a task0 reference without additional text
+func isExactTaskZeroRef(value string) bool {
+	// Pattern: exactly $task0.field_name (allowing alphanumeric + underscore in field name)
+	exactRefPattern := regexp.MustCompile(`^\$task0\.[a-zA-Z0-9_]+$`)
+	return exactRefPattern.MatchString(value)
+}
+
+// Structure to track invalid task0 references
+type invalidTaskZeroRef struct {
+	refFields      []string
+	paramValue     string
+	isMultipleRefs bool
 }
 
 // Helper function to build a simple error message for first attempt
-func buildCompositeRefSimpleError(compositeRefs map[string]map[string][]string) error {
+func buildInvalidRefSimpleError(invalidRefs map[string]map[string]*invalidTaskZeroRef) error {
 	var taskIDs []string
-	for taskID := range compositeRefs {
+	for taskID := range invalidRefs {
 		taskIDs = append(taskIDs, taskID)
 	}
 
-	return fmt.Errorf("found composite task0 references in tasks: %s", strings.Join(taskIDs, ", "))
+	return fmt.Errorf("found invalid task0 references in tasks: %s", strings.Join(taskIDs, ", "))
 }
 
 // Helper function to build a more detailed error for first retry
-func buildCompositeRefDetailedError(compositeRefs map[string]map[string][]string) error {
+func buildInvalidRefDetailedError(invalidRefs map[string]map[string]*invalidTaskZeroRef) error {
 	var sb strings.Builder
-	sb.WriteString("found composite task0 references that should be separate parameters.\n")
+	sb.WriteString("found invalid task0 references that need correction.\n")
 
-	for taskID, params := range compositeRefs {
+	for taskID, params := range invalidRefs {
 		sb.WriteString(fmt.Sprintf("In task %q:\n", taskID))
-		for paramName, refs := range params {
-			sb.WriteString(fmt.Sprintf("  Parameter %q contains multiple references: %s\n",
-				paramName, strings.Join(refs, ", ")))
+		for paramName, refInfo := range params {
+			if refInfo.isMultipleRefs {
+				sb.WriteString(fmt.Sprintf("  Parameter %q contains multiple references: %s\n",
+					paramName, strings.Join(refInfo.refFields, ", ")))
+			} else {
+				sb.WriteString(fmt.Sprintf("  Parameter %q contains a reference with additional text: %q\n",
+					paramName, refInfo.paramValue))
+			}
 		}
 	}
 
-	sb.WriteString("\nEach parameter should reference at most one task0 field.")
+	sb.WriteString("\nEach parameter should reference exactly one task0 field without additional text.")
 	return fmt.Errorf(sb.String())
 }
 
 // Helper function to build comprehensive error for final retry
-func buildCompositeRefFinalError(compositeRefs map[string]map[string][]string, plan *ExecutionPlan) error {
+func buildInvalidRefFinalError(invalidRefs map[string]map[string]*invalidTaskZeroRef) error {
 	var sb strings.Builder
 
-	sb.WriteString("ORCHESTRATION ERROR: Found composite task0 references in downstream tasks\n\n")
-	sb.WriteString("PROBLEM: The generated execution plan is combining multiple task0 references in single parameters.\n")
-	sb.WriteString("Each input parameter should reference at most one task0 field.\n\n")
+	sb.WriteString("ORCHESTRATION ERROR: Found invalid task0 references in downstream tasks\n\n")
+	sb.WriteString("PROBLEM: The generated execution plan has parameters with invalid task0 references.\n")
+	sb.WriteString("Each input parameter should reference exactly one task0 field without additional text.\n\n")
 
 	sb.WriteString("Details:\n")
-	for taskID, params := range compositeRefs {
+	for taskID, params := range invalidRefs {
 		sb.WriteString(fmt.Sprintf("- Task %q:\n", taskID))
-		for paramName, refs := range params {
-			// Get the current value
-			var paramValue string
-			for _, task := range plan.Tasks {
-				if task.ID == taskID {
-					if strVal, ok := task.Input[paramName].(string); ok {
-						paramValue = strVal
-					}
-					break
-				}
+		for paramName, refInfo := range params {
+			if refInfo.isMultipleRefs {
+				sb.WriteString(fmt.Sprintf("  • Parameter %q contains multiple references: %s\n",
+					paramName, strings.Join(refInfo.refFields, ", ")))
+				sb.WriteString(fmt.Sprintf("    Current value: %q\n", refInfo.paramValue))
+				sb.WriteString(fmt.Sprintf("    Expected: exactly %q\n", refInfo.refFields[0]))
+			} else {
+				sb.WriteString(fmt.Sprintf("  • Parameter %q contains a reference with additional text\n", paramName))
+				sb.WriteString(fmt.Sprintf("    Current value: %q\n", refInfo.paramValue))
+				sb.WriteString(fmt.Sprintf("    Expected: exactly %q\n", refInfo.refFields[0]))
 			}
-
-			sb.WriteString(fmt.Sprintf("  • Parameter %q contains multiple references: %s\n",
-				paramName, strings.Join(refs, ", ")))
-			sb.WriteString(fmt.Sprintf("    Current value: %q\n", paramValue))
-			sb.WriteString(fmt.Sprintf("    Expected: only %q instead\n", refs[0]))
 		}
 	}
 

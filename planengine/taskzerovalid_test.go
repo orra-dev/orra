@@ -592,3 +592,265 @@ func TestValidateNoCompositeTask0Refs(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateNoCompositeTaskZeroRefs_SingleReferenceWithText(t *testing.T) {
+	// Create a minimal PlanEngine for testing
+	p := &PlanEngine{}
+
+	tests := []struct {
+		name        string
+		plan        *ExecutionPlan
+		retryCount  int
+		wantStatus  Status
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "valid plan with exact task0 references",
+			plan: &ExecutionPlan{
+				Tasks: []*SubTask{
+					{
+						ID: TaskZero,
+						Input: map[string]interface{}{
+							"query":    "I need a laptop",
+							"budget":   "800",
+							"category": "laptop",
+						},
+					},
+					{
+						ID:      "task1",
+						Service: "some_service",
+						Input: map[string]interface{}{
+							"query":    "$task0.query",
+							"budget":   "$task0.budget",
+							"category": "$task0.category",
+						},
+					},
+				},
+			},
+			retryCount: 0,
+			wantStatus: Continue,
+			wantErr:    false,
+		},
+		{
+			name: "single reference with additional text - first attempt",
+			plan: &ExecutionPlan{
+				Tasks: []*SubTask{
+					{
+						ID: TaskZero,
+						Input: map[string]interface{}{
+							"query":    "I need a laptop",
+							"budget":   "800",
+							"category": "laptop",
+						},
+					},
+					{
+						ID:      "task1",
+						Service: "some_service",
+						Input: map[string]interface{}{
+							"query": "$task0.query budget",
+						},
+					},
+				},
+			},
+			retryCount:  0,
+			wantStatus:  Failed,
+			wantErr:     true,
+			errContains: "found invalid task0 references in tasks",
+		},
+		{
+			name: "single reference with additional text - retry 1",
+			plan: &ExecutionPlan{
+				Tasks: []*SubTask{
+					{
+						ID: TaskZero,
+						Input: map[string]interface{}{
+							"query":    "I need a laptop",
+							"budget":   "800",
+							"category": "laptop",
+						},
+					},
+					{
+						ID:      "task1",
+						Service: "some_service",
+						Input: map[string]interface{}{
+							"query": "$task0.query budget",
+						},
+					},
+				},
+			},
+			retryCount:  1,
+			wantStatus:  Failed,
+			wantErr:     true,
+			errContains: "contains a reference with additional text",
+		},
+		{
+			name: "single reference with additional text - retry 2+",
+			plan: &ExecutionPlan{
+				Tasks: []*SubTask{
+					{
+						ID: TaskZero,
+						Input: map[string]interface{}{
+							"query":    "I need a laptop",
+							"budget":   "800",
+							"category": "laptop",
+						},
+					},
+					{
+						ID:      "task1",
+						Service: "some_service",
+						Input: map[string]interface{}{
+							"query": "$task0.query budget",
+						},
+					},
+				},
+			},
+			retryCount:  2,
+			wantStatus:  Failed,
+			wantErr:     true,
+			errContains: "ORCHESTRATION ERROR: Found invalid task0 references in downstream tasks",
+		},
+		{
+			name: "mixed cases - multiple references and single refs with text",
+			plan: &ExecutionPlan{
+				Tasks: []*SubTask{
+					{
+						ID: TaskZero,
+						Input: map[string]interface{}{
+							"query":    "I need a laptop",
+							"budget":   "800",
+							"category": "laptop",
+						},
+					},
+					{
+						ID:      "task1",
+						Service: "service1",
+						Input: map[string]interface{}{
+							"query": "$task0.query budget: $task0.budget", // Multiple refs
+						},
+					},
+					{
+						ID:      "task2",
+						Service: "service2",
+						Input: map[string]interface{}{
+							"description": "$task0.category with extras", // Single ref with text
+						},
+					},
+				},
+			},
+			retryCount:  2,
+			wantStatus:  Failed,
+			wantErr:     true,
+			errContains: "ORCHESTRATION ERROR: Found invalid task0 references in downstream tasks",
+		},
+		{
+			name: "various formats of invalid references",
+			plan: &ExecutionPlan{
+				Tasks: []*SubTask{
+					{
+						ID: TaskZero,
+						Input: map[string]interface{}{
+							"query":    "I need a laptop",
+							"budget":   "800",
+							"category": "laptop",
+						},
+					},
+					{
+						ID:      "task1",
+						Service: "some_service",
+						Input: map[string]interface{}{
+							"q1": "$task0.query budget",                   // Text after
+							"q2": "Searching for $task0.query",            // Text before
+							"q3": "Find $task0.query products",            // Text before and after
+							"q4": " $task0.query ",                        // With spaces
+							"q5": "Use $task0.budget and $task0.category", // Multiple refs with text
+						},
+					},
+				},
+			},
+			retryCount:  1,
+			wantStatus:  Failed,
+			wantErr:     true,
+			errContains: "found invalid task0 references that need correction",
+		},
+		{
+			name: "parameter references without additional text are valid",
+			plan: &ExecutionPlan{
+				Tasks: []*SubTask{
+					{
+						ID: TaskZero,
+						Input: map[string]interface{}{
+							"query":    "I need a laptop",
+							"budget":   "800",
+							"category": "laptop",
+						},
+					},
+					{
+						ID:      "task1",
+						Service: "some_service",
+						Input: map[string]interface{}{
+							// All valid references
+							"q1": "$task0.query",
+							"q2": "$task0.budget",
+							"q3": "$task0.category",
+						},
+					},
+				},
+			},
+			retryCount: 0,
+			wantStatus: Continue,
+			wantErr:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			status, err := p.validateNoCompositeTaskZeroRefs(tt.plan, tt.retryCount)
+
+			// Check status
+			assert.Equal(t, tt.wantStatus, status, "Status should match expected")
+
+			// Check error presence
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errContains)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// Also test the helper function
+func TestIsExactTaskZeroRef(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected bool
+	}{
+		{"$task0.query", true},
+		{"$task0.complex_field_name", true},
+		{"$task0.123", true},
+		{"$task0.field_123", true},
+
+		// Invalid cases
+		{"$task0.query extra", false},
+		{"prefix $task0.query", false},
+		{"$task0.query suffix", false},
+		{"mixed $task0.query text", false},
+		{" $task0.query", false},
+		{"$task0.query ", false},
+		{"$task0.query\n", false},
+		{"$task0.query,$task0.budget", false},
+		{"not a reference", false},
+		{"$task.query", false}, // Missing 0
+		{"task0.query", false}, // Missing $
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := isExactTaskZeroRef(tt.input)
+			assert.Equal(t, tt.expected, result,
+				"isExactTaskZeroRef(%q) should return %v", tt.input, tt.expected)
+		})
+	}
+}
