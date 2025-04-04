@@ -147,3 +147,145 @@ func buildEmbeddedParamsInfo(embeddedParams map[string][]string) string {
 	}
 	return strings.Join(out, ", ")
 }
+
+// validateNoCompositeTaskZeroRefs checks for multiple task0 references embedded
+// within a single input parameter of downstream tasks.
+//
+// The function returns a Status and error combination similar to other validation
+// functions in the codebase. The retryCount parameter is used to provide
+// progressively more detailed error messages.
+func (p *PlanEngine) validateNoCompositeTaskZeroRefs(plan *ExecutionPlan, retryCount int) (Status, error) {
+	// Skip validation if there are no tasks or just task0
+	if len(plan.Tasks) <= 1 {
+		return Continue, nil
+	}
+
+	// Regular expression to find all task0 references
+	// Matches $task0.fieldname pattern
+	task0RefRegex := regexp.MustCompile(`\$task0\.([a-zA-Z0-9_]+)`)
+
+	// Maps taskID -> paramName -> []refFields
+	compositeRefs := make(map[string]map[string][]string)
+
+	// Check each downstream task (skip task0)
+	for _, task := range plan.Tasks {
+		if strings.EqualFold(task.ID, TaskZero) || task.Input == nil {
+			continue
+		}
+
+		// For each input parameter, check for composite task0 references
+		for paramName, paramValue := range task.Input {
+			// We only care about string values that might contain references
+			strValue, ok := paramValue.(string)
+			if !ok {
+				continue
+			}
+
+			// Find all task0 references in this parameter value
+			matches := task0RefRegex.FindAllStringSubmatch(strValue, -1)
+			if len(matches) <= 1 {
+				// At most one reference, this is valid
+				continue
+			}
+
+			// Extract the field names that were referenced
+			refFields := make([]string, 0, len(matches))
+			for _, match := range matches {
+				if len(match) > 1 {
+					refFields = append(refFields, "$task0."+match[1])
+				}
+			}
+
+			// If we found multiple references, record this issue
+			if len(refFields) > 1 {
+				if _, exists := compositeRefs[task.ID]; !exists {
+					compositeRefs[task.ID] = make(map[string][]string)
+				}
+				compositeRefs[task.ID][paramName] = refFields
+			}
+		}
+	}
+
+	// If no issues found, return success
+	if len(compositeRefs) == 0 {
+		return Continue, nil
+	}
+
+	// Build an error message with progressive detail based on retry count
+	switch retryCount {
+	case 0:
+		// First attempt - simple error
+		return Failed, buildCompositeRefSimpleError(compositeRefs)
+
+	case 1:
+		// First retry - more detailed explanation
+		return Failed, buildCompositeRefDetailedError(compositeRefs)
+
+	default:
+		// Final attempt - comprehensive error with actionable guidance
+		return Failed, buildCompositeRefFinalError(compositeRefs, plan)
+	}
+}
+
+// Helper function to build a simple error message for first attempt
+func buildCompositeRefSimpleError(compositeRefs map[string]map[string][]string) error {
+	var taskIDs []string
+	for taskID := range compositeRefs {
+		taskIDs = append(taskIDs, taskID)
+	}
+
+	return fmt.Errorf("found composite task0 references in tasks: %s", strings.Join(taskIDs, ", "))
+}
+
+// Helper function to build a more detailed error for first retry
+func buildCompositeRefDetailedError(compositeRefs map[string]map[string][]string) error {
+	var sb strings.Builder
+	sb.WriteString("found composite task0 references that should be separate parameters.\n")
+
+	for taskID, params := range compositeRefs {
+		sb.WriteString(fmt.Sprintf("In task %q:\n", taskID))
+		for paramName, refs := range params {
+			sb.WriteString(fmt.Sprintf("  Parameter %q contains multiple references: %s\n",
+				paramName, strings.Join(refs, ", ")))
+		}
+	}
+
+	sb.WriteString("\nEach parameter should reference at most one task0 field.")
+	return fmt.Errorf(sb.String())
+}
+
+// Helper function to build comprehensive error for final retry
+func buildCompositeRefFinalError(compositeRefs map[string]map[string][]string, plan *ExecutionPlan) error {
+	var sb strings.Builder
+
+	sb.WriteString("ORCHESTRATION ERROR: Found composite task0 references in downstream tasks\n\n")
+	sb.WriteString("PROBLEM: The generated execution plan is combining multiple task0 references in single parameters.\n")
+	sb.WriteString("Each input parameter should reference at most one task0 field.\n\n")
+
+	sb.WriteString("Details:\n")
+	for taskID, params := range compositeRefs {
+		sb.WriteString(fmt.Sprintf("- Task %q:\n", taskID))
+		for paramName, refs := range params {
+			// Get the current value
+			var paramValue string
+			for _, task := range plan.Tasks {
+				if task.ID == taskID {
+					if strVal, ok := task.Input[paramName].(string); ok {
+						paramValue = strVal
+					}
+					break
+				}
+			}
+
+			sb.WriteString(fmt.Sprintf("  • Parameter %q contains multiple references: %s\n",
+				paramName, strings.Join(refs, ", ")))
+			sb.WriteString(fmt.Sprintf("    Current value: %q\n", paramValue))
+			sb.WriteString(fmt.Sprintf("    Expected: only %q instead\n", refs[0]))
+		}
+	}
+
+	sb.WriteString("\nHOW TO FIX:\n")
+	sb.WriteString("If required, update each task's service's input schema for to accept these parameters\n")
+
+	return fmt.Errorf(sb.String())
+}

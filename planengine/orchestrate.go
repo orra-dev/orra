@@ -284,6 +284,14 @@ func (p *PlanEngine) attemptRetryablePreparation(ctx context.Context, orchestrat
 			}
 		}
 
+		if status, err := p.validateNoCompositeTaskZeroRefs(callingPlan, retryCount); err != nil {
+			p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
+			return PreparationError{
+				Status: status,
+				Err:    fmt.Errorf("execution plan contains invalid composite task0 references: %w", err),
+			}
+		}
+
 		// Validate subtask inputs
 		if err = p.validateSubTaskInputs(services, onlyServicesCallingPlan.Tasks); err != nil {
 			p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)

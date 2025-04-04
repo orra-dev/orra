@@ -370,3 +370,225 @@ func TestValidateTaskZeroParams(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateNoCompositeTask0Refs(t *testing.T) {
+	// Create a minimal PlanEngine for testing
+	p := &PlanEngine{}
+
+	tests := []struct {
+		name        string
+		plan        *ExecutionPlan
+		retryCount  int
+		wantStatus  Status
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "valid plan with single task0 references",
+			plan: &ExecutionPlan{
+				Tasks: []*SubTask{
+					{
+						ID: TaskZero,
+						Input: map[string]interface{}{
+							"query":    "I need a laptop",
+							"budget":   "800",
+							"category": "laptop",
+						},
+					},
+					{
+						ID:      "task1",
+						Service: "some_service",
+						Input: map[string]interface{}{
+							"query":    "$task0.query",
+							"budget":   "$task0.budget",
+							"category": "$task0.category",
+						},
+					},
+				},
+			},
+			retryCount: 0,
+			wantStatus: Continue,
+			wantErr:    false,
+		},
+		{
+			name: "invalid plan with composite task0 references - first attempt",
+			plan: &ExecutionPlan{
+				Tasks: []*SubTask{
+					{
+						ID: TaskZero,
+						Input: map[string]interface{}{
+							"query":    "I need a laptop",
+							"budget":   "800",
+							"category": "laptop",
+						},
+					},
+					{
+						ID:      "task1",
+						Service: "some_service",
+						Input: map[string]interface{}{
+							"query": "$task0.query budget: $task0.budget category: $task0.category",
+						},
+					},
+				},
+			},
+			retryCount:  0,
+			wantStatus:  Failed,
+			wantErr:     true,
+			errContains: "found composite task0 references in tasks",
+		},
+		{
+			name: "invalid plan with composite task0 references - retry 1",
+			plan: &ExecutionPlan{
+				Tasks: []*SubTask{
+					{
+						ID: TaskZero,
+						Input: map[string]interface{}{
+							"query":    "I need a laptop",
+							"budget":   "800",
+							"category": "laptop",
+						},
+					},
+					{
+						ID:      "task1",
+						Service: "some_service",
+						Input: map[string]interface{}{
+							"query": "$task0.query budget: $task0.budget category: $task0.category",
+						},
+					},
+				},
+			},
+			retryCount:  1,
+			wantStatus:  Failed,
+			wantErr:     true,
+			errContains: "found composite task0 references that should be separate parameters",
+		},
+		{
+			name: "invalid plan with composite task0 references - retry 2+",
+			plan: &ExecutionPlan{
+				Tasks: []*SubTask{
+					{
+						ID: TaskZero,
+						Input: map[string]interface{}{
+							"query":    "I need a laptop",
+							"budget":   "800",
+							"category": "laptop",
+						},
+					},
+					{
+						ID:      "task1",
+						Service: "some_service",
+						Input: map[string]interface{}{
+							"query": "$task0.query budget: $task0.budget category: $task0.category",
+						},
+					},
+				},
+			},
+			retryCount:  2,
+			wantStatus:  Failed,
+			wantErr:     true,
+			errContains: "ORCHESTRATION ERROR: Found composite task0 references in downstream tasks",
+		},
+		{
+			name: "multiple composite references in different tasks",
+			plan: &ExecutionPlan{
+				Tasks: []*SubTask{
+					{
+						ID: TaskZero,
+						Input: map[string]interface{}{
+							"query":     "I need a laptop",
+							"budget":    "800",
+							"category":  "laptop",
+							"condition": "new",
+						},
+					},
+					{
+						ID:      "task1",
+						Service: "service1",
+						Input: map[string]interface{}{
+							"query": "$task0.query budget: $task0.budget",
+						},
+					},
+					{
+						ID:      "task2",
+						Service: "service2",
+						Input: map[string]interface{}{
+							"description": "Looking for $task0.category with condition: $task0.condition",
+						},
+					},
+				},
+			},
+			retryCount:  2,
+			wantStatus:  Failed,
+			wantErr:     true,
+			errContains: "ORCHESTRATION ERROR: Found composite task0 references in downstream tasks",
+		},
+		{
+			name: "non-string values should not be checked",
+			plan: &ExecutionPlan{
+				Tasks: []*SubTask{
+					{
+						ID: TaskZero,
+						Input: map[string]interface{}{
+							"query":  "I need a laptop",
+							"budget": 800,
+						},
+					},
+					{
+						ID:      "task1",
+						Service: "some_service",
+						Input: map[string]interface{}{
+							"query":  "$task0.query",
+							"budget": 800,  // numeric, not checked
+							"flag":   true, // boolean, not checked
+						},
+					},
+				},
+			},
+			retryCount: 0,
+			wantStatus: Continue,
+			wantErr:    false,
+		},
+		{
+			name: "empty plan should be valid",
+			plan: &ExecutionPlan{
+				Tasks: []*SubTask{},
+			},
+			retryCount: 0,
+			wantStatus: Continue,
+			wantErr:    false,
+		},
+		{
+			name: "plan with only task0 should be valid",
+			plan: &ExecutionPlan{
+				Tasks: []*SubTask{
+					{
+						ID: TaskZero,
+						Input: map[string]interface{}{
+							"query": "I need a laptop",
+						},
+					},
+				},
+			},
+			retryCount: 0,
+			wantStatus: Continue,
+			wantErr:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			status, err := p.validateNoCompositeTaskZeroRefs(tt.plan, tt.retryCount)
+
+			// Check status
+			assert.Equal(t, tt.wantStatus, status, "Status should match expected")
+
+			// Check error presence
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errContains)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
