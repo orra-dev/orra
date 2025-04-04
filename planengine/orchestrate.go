@@ -151,7 +151,7 @@ func (p *PlanEngine) PrepareOrchestration(ctx context.Context, projectID string,
 
 	// Setup retry operation
 	operation := func() error {
-		// Attempt the retryable portion of execution plan preparation
+		// Attempt the retryable portion of execution plan preparation with current retry count
 		err := p.attemptRetryablePreparation(
 			ctx,
 			orchestration,
@@ -159,6 +159,7 @@ func (p *PlanEngine) PrepareOrchestration(ctx context.Context, projectID string,
 			actionParams,
 			serviceDescriptions,
 			errorFeedback,
+			consecutiveRetries,
 		)
 		if err == nil {
 			return nil
@@ -170,6 +171,10 @@ func (p *PlanEngine) PrepareOrchestration(ctx context.Context, projectID string,
 			switch prepErr.Status {
 			case NotActionable:
 				// NotActionable errors are permanent
+				return back.Permanent(prepErr)
+
+			case FailedNotRetryable:
+				// FailedNotRetryable errors are permanent
 				return back.Permanent(prepErr)
 
 			case Failed:
@@ -233,7 +238,7 @@ func (p *PlanEngine) PrepareOrchestration(ctx context.Context, projectID string,
 	return nil
 }
 
-func (p *PlanEngine) attemptRetryablePreparation(ctx context.Context, orchestration *Orchestration, services []*ServiceInfo, actionParams json.RawMessage, serviceDescriptions string, retryCauseIfAny string) error {
+func (p *PlanEngine) attemptRetryablePreparation(ctx context.Context, orchestration *Orchestration, services []*ServiceInfo, actionParams json.RawMessage, serviceDescriptions string, retryCauseIfAny string, retryCount int) error {
 	p.Logger.Trace().Str("retryCauseIfAny", retryCauseIfAny).Msg("")
 
 	callingPlan, cachedEntryID, isCacheHit, err := p.decomposeAction(
@@ -270,6 +275,15 @@ func (p *PlanEngine) attemptRetryablePreparation(ctx context.Context, orchestrat
 	}
 
 	if !isCacheHit {
+		// Validate that all action parameters are properly included in TaskZero
+		if status, err := p.validateTaskZeroParams(callingPlan, actionParams, retryCount); err != nil {
+			p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
+			return PreparationError{
+				Status: status,
+				Err:    fmt.Errorf("execution plan action parameters validation failed: %w", err),
+			}
+		}
+
 		// Validate subtask inputs
 		if err = p.validateSubTaskInputs(services, onlyServicesCallingPlan.Tasks); err != nil {
 			p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)

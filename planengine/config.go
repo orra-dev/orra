@@ -136,7 +136,7 @@ func getStoragePath() (string, error) {
 func normalizeModelName(model string) string {
 	// Handle path-like format (e.g., "qwen/qwq-32b")
 	if parts := strings.Split(model, "/"); len(parts) > 1 {
-		return parts[len(parts)-1] // Get the last part after any slashes
+		return strings.ToLower(strings.TrimSpace(parts[len(parts)-1])) // Get the last part after any slashes
 	}
 	return strings.ToLower(strings.TrimSpace(model))
 }
@@ -210,9 +210,11 @@ const (
 	Processing
 	Completed
 	Failed
+	FailedNotRetryable
 	NotActionable
 	Paused
 	Cancelled
+	Continue
 )
 
 func (s Status) String() string {
@@ -229,12 +231,16 @@ func (s Status) String() string {
 		return "completed"
 	case Failed:
 		return "failed"
+	case FailedNotRetryable:
+		return "failed_not_retryable"
 	case NotActionable:
 		return "not_actionable"
 	case Paused:
 		return "paused"
 	case Cancelled:
 		return "cancelled"
+	case Continue:
+		return "continue"
 	default:
 		return ""
 	}
@@ -262,12 +268,16 @@ func (s *Status) UnmarshalJSON(data []byte) error {
 		*s = Completed
 	case "failed":
 		*s = Failed
+	case "failed_not_retryable":
+		*s = Failed
 	case "not_actionable":
 		*s = NotActionable
 	case "paused":
 		*s = Paused
 	case "cancelled":
 		*s = Cancelled
+	case "continue":
+		*s = Continue
 	default:
 		return fmt.Errorf("invalid Status: %s", s)
 	}
