@@ -9,6 +9,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -30,39 +31,23 @@ func (p *PlanEngine) validateTaskZeroParams(plan *ExecutionPlan, actionParams js
 	}
 
 	if taskZero == nil {
-		return FailedNotRetryable, fmt.Errorf("task zero not found in execution plan")
+		return FailedNotRetryable, fmt.Errorf("task0 not found in execution plan")
 	}
 
 	// Parse the original action parameters as an array of ActionParam structs
 	var params []ActionParam
 	if err := json.Unmarshal(actionParams, &params); err != nil {
-		// Try as raw map as fallback
-		var paramsMap map[string]interface{}
-		if err2 := json.Unmarshal(actionParams, &paramsMap); err2 != nil {
-			return FailedNotRetryable, fmt.Errorf("failed to unmarshal action parameters: %w", err)
-		}
-
-		// Convert map to array of ActionParam
-		for field, value := range paramsMap {
-			params = append(params, ActionParam{
-				Field: field,
-				Value: value,
-			})
-		}
+		return FailedNotRetryable, err
 	}
 
 	// Check if each original parameter exists in TaskZero's input
-	var missingParams []string
-	for _, param := range params {
-		_, found := taskZero.Input[param.Field]
-		if !found {
-			missingParams = append(missingParams, param.Field)
-		}
-	}
-
+	missingParams := findTaskZeroMissingParams(params, taskZero)
 	if len(missingParams) == 0 {
 		return Continue, nil
 	}
+	embeddedParams := findEmbeddedActionParams(taskZero, missingParams)
+	embeddedInfo := buildEmbeddedParamsInfo(embeddedParams)
+	missingParamsStr := strings.Join(missingParams, ", ")
 
 	// Get services details for the error message
 	var serviceDetails []string
@@ -73,22 +58,92 @@ func (p *PlanEngine) validateTaskZeroParams(plan *ExecutionPlan, actionParams js
 		serviceDetails = append(serviceDetails, task.Service)
 	}
 
-	// Format the missing parameters as a comma-separated list
-	paramsStr := strings.Join(missingParams, ", ")
-
-	// Generate the appropriate error message based on retry count
+	// Generate the appropriate error message based on retry count and embedding status
 	switch retryCount {
 	case 0:
 		// First attempt - simple error
-		return Failed, fmt.Errorf("parameters %s are missing from TaskZero inputs", paramsStr)
+		if len(embeddedInfo) == 0 {
+			return Failed, fmt.Errorf("parameters %s are missing from task0 inputs", missingParamsStr)
+		}
+		return Failed, fmt.Errorf("parameters %s are missing from task0 inputs (embedded in %s)", missingParamsStr, embeddedInfo)
 
 	case 1:
 		// First retry - more detailed explanation
-		return Failed, fmt.Errorf("parameters %s are missing from TaskZero. Your execution plan should include all action parameters explicitly in TaskZero, not embedded inside other parameters. Make sure each parameter is a separate field in TaskZero's input", paramsStr)
+		if len(embeddedInfo) == 0 {
+			return Failed, fmt.Errorf("parameters %s are missing from task0. Your execution plan should include all action parameters explicitly in task0 as separate fields", missingParamsStr)
+		}
+		return Failed, fmt.Errorf("parameters %s are missing from task0. They appear to be embedded in %s. Your execution plan should include all action parameters explicitly in task0, not embedded inside other parameters", missingParamsStr, embeddedInfo)
 
 	default:
-		// Final retry - developer-friendly error with clear guidance
+
 		servicesStr := strings.Join(serviceDetails, ", ")
-		return Failed, fmt.Errorf("ORCHESTRATION ERROR: Action parameters [%s] are missing from TaskZero\n\nPROBLEM: Your LLM-generated execution plan is embedding parameters within other fields instead of keeping them as separate parameters.\n\nHOW TO FIX:\n1. Update the service schema for service in [%s] to accept these parameters\n2. OR if these parameters aren't needed, remove them from your orchestration request", paramsStr, servicesStr)
+		if len(embeddedInfo) == 0 {
+			return Failed, fmt.Errorf("ORCHESTRATION ERROR: Parameters [%s] are missing from task0\n\nPROBLEM: The generated execution plan is missing required parameters that were provided in the orchestration request.\n\nHOW TO FIX:\n1. Update your LLM prompt to ensure all action parameters are included in task0 inputs\n2. OR update the service schema for %s to accept these parameters\n3. OR if these parameters aren't needed, remove them from your orchestration request", missingParamsStr, servicesStr)
+		}
+		return Failed, fmt.Errorf("ORCHESTRATION ERROR: Parameters [%s] are missing from task0\n\nPROBLEM: The generated execution plan is embedding parameters within other fields (%s) instead of keeping them as separate parameters.\n\nHOW TO FIX:\n1. Update your LLM prompt to emphasize that all parameters must be separate fields in task0\n2. OR update the service schema for %s to accept these parameters\n3. OR if these parameters aren't needed, remove them from your orchestration request", missingParamsStr, embeddedInfo, servicesStr)
 	}
+}
+
+func findTaskZeroMissingParams(params []ActionParam, taskZero *SubTask) []string {
+	var out []string
+	for _, param := range params {
+		if _, found := taskZero.Input[param.Field]; found {
+			continue
+		}
+		out = append(out, param.Field)
+	}
+	return out
+}
+
+func findEmbeddedActionParams(taskZero *SubTask, missingParams []string) map[string][]string {
+	// Check if any missing parameters are embedded in other parameters
+	embeddedParams := make(map[string][]string) // Maps parameter name to list of parameters embedded in it
+
+	// Check each parameter in taskZero
+	for paramName, paramValue := range taskZero.Input {
+		strValue, ok := paramValue.(string)
+		if !ok {
+			continue
+		}
+
+		// Check each missing parameter to see if it's embedded in this value
+		for _, missingParam := range missingParams {
+			// Create regex patterns to match common embedding patterns
+			patterns := []string{
+				// Match "param: value" or "param:value"
+				fmt.Sprintf(`%s\s*:\s*(\S+)`, regexp.QuoteMeta(missingParam)),
+				// Match "param=value"
+				fmt.Sprintf(`%s\s*=\s*(\S+)`, regexp.QuoteMeta(missingParam)),
+				// Match "param = value"
+				fmt.Sprintf(`%s\s*=\s*"([^"]+)"`, regexp.QuoteMeta(missingParam)),
+				// Match "param is value" or "param was value"
+				fmt.Sprintf(`%s\s+(?:is|was|should be)\s+(\S+)`, regexp.QuoteMeta(missingParam)),
+				// Match "with param value" or "has param value"
+				fmt.Sprintf(`(?:with|has)\s+%s\s+(\S+)`, regexp.QuoteMeta(missingParam)),
+				// Match "param value" or "param value"
+				fmt.Sprintf(`\s+%s\s+(\S+)`, regexp.QuoteMeta(missingParam)),
+			}
+
+			for _, pattern := range patterns {
+				re := regexp.MustCompile(pattern)
+				if re.MatchString(strValue) {
+					embeddedParams[paramName] = append(embeddedParams[paramName], missingParam)
+					break // Found a match for this missing param
+				}
+			}
+		}
+	}
+	return embeddedParams
+}
+
+func buildEmbeddedParamsInfo(embeddedParams map[string][]string) string {
+	if len(embeddedParams) == 0 {
+		return ""
+	}
+
+	var out []string
+	for paramName, embedded := range embeddedParams {
+		out = append(out, fmt.Sprintf("%s contains [%s]", paramName, strings.Join(embedded, ", ")))
+	}
+	return strings.Join(out, ", ")
 }

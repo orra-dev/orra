@@ -29,6 +29,7 @@ func TestValidateTaskZeroParams(t *testing.T) {
 		retryCount    int
 		wantError     bool
 		errorContains string
+		notContains   string // Error should NOT contain this string
 	}{
 		{
 			name: "all action params present in task0 (map format)",
@@ -55,7 +56,7 @@ func TestValidateTaskZeroParams(t *testing.T) {
 				]
 			}`,
 			actionParams: `[
-				{"field": "query", "value": "I need a used laptop"},
+				{"field": "query", "value": "I need a used laptop for college that is powerful enough for programming"},
 				{"field": "budget", "value": 800},
 				{"field": "category", "value": "laptop"}
 			]`,
@@ -63,39 +64,7 @@ func TestValidateTaskZeroParams(t *testing.T) {
 			wantError:  false,
 		},
 		{
-			name: "all action params present in task0 (array format)",
-			executionPlan: `{
-				"tasks": [
-					{
-						"id": "task0",
-						"input": {
-							"query": "I need a used laptop",
-							"budget": 800,
-							"category": "laptop"
-						}
-					},
-					{
-						"id": "task1",
-						"service": "s_aodlipsfcgzmnirkyhyrlmdavwag",
-						"input": {
-							"query": "$task0.query"
-						}
-					}
-				],
-				"parallel_groups": [
-					["task1"]
-				]
-			}`,
-			actionParams: `[
-				{"field": "query", "value": "I need a used laptop"},
-				{"field": "budget", "value": 800},
-				{"field": "category", "value": "laptop"}
-			]`,
-			retryCount: 0,
-			wantError:  false,
-		},
-		{
-			name: "missing params - first validation (retry 0) - array format",
+			name: "params embedded in query - first validation (retry 0)",
 			executionPlan: `{
 				"tasks": [
 					{
@@ -123,10 +92,73 @@ func TestValidateTaskZeroParams(t *testing.T) {
 			]`,
 			retryCount:    0,
 			wantError:     true,
-			errorContains: "parameters budget, category are missing from TaskZero inputs",
+			errorContains: "parameters budget, category are missing from task0 inputs (embedded in query",
 		},
 		{
-			name: "missing params - second validation (retry 1) - array format",
+			name: "params embedded with different patterns - retry 0",
+			executionPlan: `{
+				"tasks": [
+					{
+						"id": "task0",
+						"input": {
+							"query": "I need a used laptop with budget=800 and category is laptop"
+						}
+					},
+					{
+						"id": "task1",
+						"service": "s_aodlipsfcgzmnirkyhyrlmdavwag",
+						"input": {
+							"query": "$task0.query"
+						}
+					}
+				],
+				"parallel_groups": [
+					["task1"]
+				]
+			}`,
+			actionParams: `[
+				{"field": "query", "value": "I need a used laptop"},
+				{"field": "budget", "value": 800},
+				{"field": "category", "value": "laptop"}
+			]`,
+			retryCount:    0,
+			wantError:     true,
+			errorContains: "parameters budget, category are missing from task0 inputs (embedded in query",
+		},
+		{
+			name: "params truly missing (not embedded) - retry 0",
+			executionPlan: `{
+				"tasks": [
+					{
+						"id": "task0",
+						"input": {
+							"query": "I need a used laptop"
+						}
+					},
+					{
+						"id": "task1",
+						"service": "s_aodlipsfcgzmnirkyhyrlmdavwag",
+						"input": {
+							"query": "$task0.query"
+						}
+					}
+				],
+				"parallel_groups": [
+					["task1"]
+				]
+			}`,
+			actionParams: `[
+				{"field": "query", "value": "I need a used laptop"},
+				{"field": "budget", "value": 800},
+				{"field": "category", "value": "laptop"}
+			]`,
+			retryCount:    0,
+			wantError:     true,
+			errorContains: "parameters budget, category are missing from task0 inputs",
+			notContains:   "embedded in",
+		},
+		{
+			name: "params embedded in query - second validation (retry 1)",
 			executionPlan: `{
 				"tasks": [
 					{
@@ -154,10 +186,42 @@ func TestValidateTaskZeroParams(t *testing.T) {
 			]`,
 			retryCount:    1,
 			wantError:     true,
-			errorContains: "parameters budget, category are missing from TaskZero. Your execution plan should include all action parameters explicitly in TaskZero",
+			errorContains: "They appear to be embedded in query",
 		},
 		{
-			name: "missing params - third validation (retry 2) - array format",
+			name: "params truly missing (not embedded) - retry 1",
+			executionPlan: `{
+				"tasks": [
+					{
+						"id": "task0",
+						"input": {
+							"query": "I need a used laptop"
+						}
+					},
+					{
+						"id": "task1",
+						"service": "s_aodlipsfcgzmnirkyhyrlmdavwag",
+						"input": {
+							"query": "$task0.query"
+						}
+					}
+				],
+				"parallel_groups": [
+					["task1"]
+				]
+			}`,
+			actionParams: `[
+				{"field": "query", "value": "I need a used laptop"},
+				{"field": "budget", "value": 800},
+				{"field": "category", "value": "laptop"}
+			]`,
+			retryCount:    1,
+			wantError:     true,
+			errorContains: "parameters budget, category are missing from task0",
+			notContains:   "appear to be embedded",
+		},
+		{
+			name: "params embedded in query - final validation (retry 2)",
 			executionPlan: `{
 				"tasks": [
 					{
@@ -186,7 +250,40 @@ func TestValidateTaskZeroParams(t *testing.T) {
 			]`,
 			retryCount:    2,
 			wantError:     true,
-			errorContains: "ORCHESTRATION ERROR: Action parameters [budget, category] are missing from TaskZero",
+			errorContains: "PROBLEM: The generated execution plan is embedding parameters within other fields",
+		},
+		{
+			name: "params truly missing (not embedded) - retry 2",
+			executionPlan: `{
+				"tasks": [
+					{
+						"id": "task0",
+						"input": {
+							"query": "I need a used laptop"
+						}
+					},
+					{
+						"id": "task1",
+						"service": "s_aodlipsfcgzmnirkyhyrlmdavwag",
+						"serviceName": "Product Search",
+						"input": {
+							"query": "$task0.query"
+						}
+					}
+				],
+				"parallel_groups": [
+					["task1"]
+				]
+			}`,
+			actionParams: `[
+				{"field": "query", "value": "I need a used laptop"},
+				{"field": "budget", "value": 800},
+				{"field": "category", "value": "laptop"}
+			]`,
+			retryCount:    2,
+			wantError:     true,
+			errorContains: "PROBLEM: The generated execution plan is missing required parameters",
+			notContains:   "embedding parameters",
 		},
 		{
 			name: "no task0 in execution plan",
@@ -207,17 +304,16 @@ func TestValidateTaskZeroParams(t *testing.T) {
 			actionParams:  `[{"field": "query", "value": "Original query"}]`,
 			retryCount:    0,
 			wantError:     true,
-			errorContains: "task zero not found in execution plan",
+			errorContains: "task0 not found in execution plan",
 		},
 		{
-			name: "some action params missing from task0 - multiple services - array format",
+			name: "multiple parameters embedded in query",
 			executionPlan: `{
 				"tasks": [
 					{
 						"id": "task0",
 						"input": {
-							"query": "I need a used laptop with budget 800",
-							"category": "laptop"
+							"query": "Find laptops with budget: 800 price_max: 1000 price_min: 500 and category is laptop"
 						}
 					},
 					{
@@ -227,29 +323,22 @@ func TestValidateTaskZeroParams(t *testing.T) {
 						"input": {
 							"query": "$task0.query"
 						}
-					},
-					{
-						"id": "task2",
-						"service": "s_service2",
-						"serviceName": "Recommendation Engine",
-						"input": {
-							"category": "$task0.category"
-						}
 					}
 				],
 				"parallel_groups": [
-					["task1"],
-					["task2"]
+					["task1"]
 				]
 			}`,
 			actionParams: `[
-				{"field": "query", "value": "I need a used laptop"},
+				{"field": "query", "value": "Find laptops"},
 				{"field": "budget", "value": 800},
+				{"field": "price_max", "value": 1000},
+				{"field": "price_min", "value": 500},
 				{"field": "category", "value": "laptop"}
 			]`,
 			retryCount:    2,
 			wantError:     true,
-			errorContains: "HOW TO FIX:",
+			errorContains: "query contains [budget, price_max, price_min, category]",
 		},
 	}
 
@@ -270,6 +359,10 @@ func TestValidateTaskZeroParams(t *testing.T) {
 				if tc.errorContains != "" {
 					assert.True(t, strings.Contains(err.Error(), tc.errorContains),
 						"Expected error to contain %q, but got: %q", tc.errorContains, err.Error())
+				}
+				if tc.notContains != "" {
+					assert.False(t, strings.Contains(err.Error(), tc.notContains),
+						"Expected error NOT to contain %q, but got: %q", tc.notContains, err.Error())
 				}
 			} else {
 				assert.NoError(t, err, "Expected no error but got one")
