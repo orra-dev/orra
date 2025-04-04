@@ -55,7 +55,7 @@ func TestValidateTaskZeroParams(t *testing.T) {
 				]
 			}`,
 			actionParams: `[
-				{"field": "query", "value": "I need a used laptop for college that is powerful enough for programming"},
+				{"field": "query", "value": "I need a used laptop"},
 				{"field": "budget", "value": 800},
 				{"field": "category", "value": "laptop"}
 			]`,
@@ -123,7 +123,7 @@ func TestValidateTaskZeroParams(t *testing.T) {
 			]`,
 			retryCount:    0,
 			wantError:     true,
-			errorContains: "action parameters missing from TaskZero: [budget category]",
+			errorContains: "parameters budget, category are missing from TaskZero inputs",
 		},
 		{
 			name: "missing params - second validation (retry 1) - array format",
@@ -154,7 +154,7 @@ func TestValidateTaskZeroParams(t *testing.T) {
 			]`,
 			retryCount:    1,
 			wantError:     true,
-			errorContains: "Action parameters should only be added to TaskZero and never have their values embedded into another parameter",
+			errorContains: "parameters budget, category are missing from TaskZero. Your execution plan should include all action parameters explicitly in TaskZero",
 		},
 		{
 			name: "missing params - third validation (retry 2) - array format",
@@ -169,6 +169,7 @@ func TestValidateTaskZeroParams(t *testing.T) {
 					{
 						"id": "task1",
 						"service": "s_aodlipsfcgzmnirkyhyrlmdavwag",
+						"serviceName": "Product Search",
 						"input": {
 							"query": "$task0.query"
 						}
@@ -185,7 +186,7 @@ func TestValidateTaskZeroParams(t *testing.T) {
 			]`,
 			retryCount:    2,
 			wantError:     true,
-			errorContains: "A downstream task may require the missing action params as part of their service's input schema - these are the targeted services: [s_aodlipsfcgzmnirkyhyrlmdavwag]",
+			errorContains: "ORCHESTRATION ERROR: Action parameters [budget, category] are missing from TaskZero",
 		},
 		{
 			name: "no task0 in execution plan",
@@ -222,6 +223,7 @@ func TestValidateTaskZeroParams(t *testing.T) {
 					{
 						"id": "task1",
 						"service": "s_service1",
+						"serviceName": "Product Search",
 						"input": {
 							"query": "$task0.query"
 						}
@@ -229,6 +231,7 @@ func TestValidateTaskZeroParams(t *testing.T) {
 					{
 						"id": "task2",
 						"service": "s_service2",
+						"serviceName": "Recommendation Engine",
 						"input": {
 							"category": "$task0.category"
 						}
@@ -246,7 +249,7 @@ func TestValidateTaskZeroParams(t *testing.T) {
 			]`,
 			retryCount:    2,
 			wantError:     true,
-			errorContains: "these are the targeted services: [s_service1 s_service2]",
+			errorContains: "HOW TO FIX:",
 		},
 	}
 

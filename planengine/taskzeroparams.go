@@ -36,7 +36,19 @@ func (p *PlanEngine) validateTaskZeroParams(plan *ExecutionPlan, actionParams js
 	// Parse the original action parameters as an array of ActionParam structs
 	var params []ActionParam
 	if err := json.Unmarshal(actionParams, &params); err != nil {
-		return FailedNotRetryable, err
+		// Try as raw map as fallback
+		var paramsMap map[string]interface{}
+		if err2 := json.Unmarshal(actionParams, &paramsMap); err2 != nil {
+			return FailedNotRetryable, fmt.Errorf("failed to unmarshal action parameters: %w", err)
+		}
+
+		// Convert map to array of ActionParam
+		for field, value := range paramsMap {
+			params = append(params, ActionParam{
+				Field: field,
+				Value: value,
+			})
+		}
 	}
 
 	// Check if each original parameter exists in TaskZero's input
@@ -48,38 +60,35 @@ func (p *PlanEngine) validateTaskZeroParams(plan *ExecutionPlan, actionParams js
 		}
 	}
 
-	if len(missingParams) > 0 {
-		// Get targeted services for the third retry error message
-		var serviceIDs []string
-		if retryCount >= 2 {
-			serviceMap := make(map[string]struct{})
-			for _, task := range plan.Tasks {
-				if strings.EqualFold(task.ID, TaskZero) {
-					continue
-				}
-				serviceMap[task.Service] = struct{}{}
-			}
-
-			for serviceID := range serviceMap {
-				serviceIDs = append(serviceIDs, serviceID)
-			}
-		}
-
-		// Generate the appropriate error message based on retry count
-		switch retryCount {
-		case 0:
-			// First attempt - simple error
-			return Failed, fmt.Errorf("action parameters missing from TaskZero: %v", missingParams)
-
-		case 1:
-			// First retry - more detailed explanation
-			return Failed, fmt.Errorf("action parameters missing from TaskZero: %v. Action parameters should only be added to TaskZero and never have their values embedded into another parameter. This may be caused because no downstream task has a service that accepts those action params as inputs, which is acceptable", missingParams)
-
-		default:
-			// Final retry - suggest service schema changes
-			return Failed, fmt.Errorf("action parameters missing from TaskZero: %v. A downstream task may require the missing action params as part of their service's input schema - these are the targeted services: %v", missingParams, serviceIDs)
-		}
+	if len(missingParams) == 0 {
+		return Continue, nil
 	}
 
-	return Continue, nil
+	// Get services details for the error message
+	var serviceDetails []string
+	for _, task := range plan.Tasks {
+		if strings.EqualFold(task.ID, TaskZero) {
+			continue
+		}
+		serviceDetails = append(serviceDetails, task.Service)
+	}
+
+	// Format the missing parameters as a comma-separated list
+	paramsStr := strings.Join(missingParams, ", ")
+
+	// Generate the appropriate error message based on retry count
+	switch retryCount {
+	case 0:
+		// First attempt - simple error
+		return Failed, fmt.Errorf("parameters %s are missing from TaskZero inputs", paramsStr)
+
+	case 1:
+		// First retry - more detailed explanation
+		return Failed, fmt.Errorf("parameters %s are missing from TaskZero. Your execution plan should include all action parameters explicitly in TaskZero, not embedded inside other parameters. Make sure each parameter is a separate field in TaskZero's input", paramsStr)
+
+	default:
+		// Final retry - developer-friendly error with clear guidance
+		servicesStr := strings.Join(serviceDetails, ", ")
+		return Failed, fmt.Errorf("ORCHESTRATION ERROR: Action parameters [%s] are missing from TaskZero\n\nPROBLEM: Your LLM-generated execution plan is embedding parameters within other fields instead of keeping them as separate parameters.\n\nHOW TO FIX:\n1. Update the service schema for service in [%s] to accept these parameters\n2. OR if these parameters aren't needed, remove them from your orchestration request", paramsStr, servicesStr)
+	}
 }
