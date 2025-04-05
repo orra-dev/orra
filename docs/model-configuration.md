@@ -41,6 +41,8 @@ The Plan Engine uses environment variables for model configuration. These can be
 - Specified in the `.env` file in the `planengine` directory
 - Set in the `_env` template file when deploying
 
+> **Important**: The Plan Engine requires all model endpoints to provide an **OpenAI-compatible API**. This is the standard interface used for communicating with AI models and most modern model serving solutions support this format.
+
 ### Basic Configuration
 
 ```bash
@@ -138,6 +140,14 @@ EMBEDDINGS_API_BASE_URL=https://api.fireworks.ai/inference/v1
 **Recommended Models**:
 - `qwq-32b` for reasoning
 - `jina-embeddings-v2-small-en` for embeddings
+
+**Model Serving Requirements**:
+When self-hosting models, your model serving solution must expose an OpenAI-compatible API. Here are popular options:
+
+- **vLLM**: Provides high-performance model serving with an OpenAI-compatible interface by default
+- **Text Generation Inference (TGI)**: Can be configured with OpenAI-compatible endpoints
+- **Ollama**: Enable the OpenAI compatibility mode 
+- **LMStudio**: Offers OpenAI-compatible endpoints
 
 **Configuration Example**:
 ```bash

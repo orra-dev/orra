@@ -54,6 +54,8 @@ Select from a variety of supported models:
 - OpenAI's `text-embedding-3-small` on cloud
 - `jina-embeddings-v2-small-en` on cloud or self-hosted (on-premises or locally)
 
+> **Note**: The Plan Engine requires all model endpoints to be **OpenAI API-compatible**. Most model serving solutions (like vLLM, LMStudio, Ollama, etc.) can be configured to expose this compatible API format.
+
 **Quick Cloud Setup Example**:
 
 Update the .env based on the [_env](planengine/_env) file with one of these:
@@ -270,6 +272,8 @@ The Plan Engine fully supports self-hosted open-source models:
 
 - **Reasoning**: Deploy `deepseek-r1` or `qwq-32b` using your preferred model serving solution including on-premises 
 - **Embeddings**: Self-host `jina-embeddings-v2-small-en` for complete control
+
+> **Important**: Your model serving solution must expose an **OpenAI-compatible API**. Solutions like vLLM, LMStudio, Ollama with OpenAI compatibility mode, or Replicate all work great.
 
 → [Complete Model Configuration Guide](docs/model-configuration.md)
 
