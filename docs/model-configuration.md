@@ -1,6 +1,6 @@
-# Model Configuration for the Orra Plan Engine
+# Model Configuration for the orra Plan Engine
 
-The Orra Plan Engine supports various reasoning and embedding models to power its orchestration capabilities. This document explains the supported models, configuration options, and hosting environments.
+The orra Plan Engine supports various reasoning and embedding models to power its orchestration capabilities. This document explains the supported models, configuration options, and hosting environments.
 
 ## Supported Models
 
@@ -57,7 +57,7 @@ EMBEDDINGS_API_BASE_URL=https://api.openai.com/v1  # Default for OpenAI, change 
 
 ## Hosting Options
 
-Orra allows flexible hosting options for models to meet different operational needs.
+orra allows flexible hosting options for models to meet different operational needs.
 
 ### Cloud-based Hosting
 
