@@ -8,6 +8,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -281,7 +282,7 @@ func buildInvalidRefDetailedError(invalidRefs map[string]map[string]*invalidTask
 	}
 
 	sb.WriteString("\nEach parameter should reference exactly one task0 field without additional text.")
-	return fmt.Errorf(sb.String())
+	return errors.New(sb.String())
 }
 
 // Helper function to build comprehensive error for final retry
@@ -312,5 +313,5 @@ func buildInvalidRefFinalError(invalidRefs map[string]map[string]*invalidTaskZer
 	sb.WriteString("\nHOW TO FIX:\n")
 	sb.WriteString("If required, update each task's service's input schema for to accept these parameters\n")
 
-	return fmt.Errorf(sb.String())
+	return errors.New(sb.String())
 }

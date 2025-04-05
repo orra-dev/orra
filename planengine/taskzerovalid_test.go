@@ -434,7 +434,7 @@ func TestValidateNoCompositeTask0Refs(t *testing.T) {
 			retryCount:  0,
 			wantStatus:  Failed,
 			wantErr:     true,
-			errContains: "found composite task0 references in tasks",
+			errContains: "found invalid task0 references in tasks",
 		},
 		{
 			name: "invalid plan with composite task0 references - retry 1",
@@ -460,7 +460,7 @@ func TestValidateNoCompositeTask0Refs(t *testing.T) {
 			retryCount:  1,
 			wantStatus:  Failed,
 			wantErr:     true,
-			errContains: "found composite task0 references that should be separate parameters",
+			errContains: "found invalid task0 references that need correction",
 		},
 		{
 			name: "invalid plan with composite task0 references - retry 2+",
@@ -486,7 +486,7 @@ func TestValidateNoCompositeTask0Refs(t *testing.T) {
 			retryCount:  2,
 			wantStatus:  Failed,
 			wantErr:     true,
-			errContains: "ORCHESTRATION ERROR: Found composite task0 references in downstream tasks",
+			errContains: "ORCHESTRATION ERROR: Found invalid task0 references in downstream tasks",
 		},
 		{
 			name: "multiple composite references in different tasks",
@@ -520,7 +520,7 @@ func TestValidateNoCompositeTask0Refs(t *testing.T) {
 			retryCount:  2,
 			wantStatus:  Failed,
 			wantErr:     true,
-			errContains: "ORCHESTRATION ERROR: Found composite task0 references in downstream tasks",
+			errContains: "ORCHESTRATION ERROR: Found invalid task0 references in downstream tasks",
 		},
 		{
 			name: "non-string values should not be checked",
