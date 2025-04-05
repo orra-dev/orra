@@ -151,7 +151,7 @@ func (p *PlanEngine) PrepareOrchestration(ctx context.Context, projectID string,
 
 	// Setup retry operation
 	operation := func() error {
-		// Attempt the retryable portion of execution plan preparation
+		// Attempt the retryable portion of execution plan preparation with current retry count
 		err := p.attemptRetryablePreparation(
 			ctx,
 			orchestration,
@@ -159,6 +159,7 @@ func (p *PlanEngine) PrepareOrchestration(ctx context.Context, projectID string,
 			actionParams,
 			serviceDescriptions,
 			errorFeedback,
+			consecutiveRetries,
 		)
 		if err == nil {
 			return nil
@@ -170,6 +171,10 @@ func (p *PlanEngine) PrepareOrchestration(ctx context.Context, projectID string,
 			switch prepErr.Status {
 			case NotActionable:
 				// NotActionable errors are permanent
+				return back.Permanent(prepErr)
+
+			case FailedNotRetryable:
+				// FailedNotRetryable errors are permanent
 				return back.Permanent(prepErr)
 
 			case Failed:
@@ -233,7 +238,7 @@ func (p *PlanEngine) PrepareOrchestration(ctx context.Context, projectID string,
 	return nil
 }
 
-func (p *PlanEngine) attemptRetryablePreparation(ctx context.Context, orchestration *Orchestration, services []*ServiceInfo, actionParams json.RawMessage, serviceDescriptions string, retryCauseIfAny string) error {
+func (p *PlanEngine) attemptRetryablePreparation(ctx context.Context, orchestration *Orchestration, services []*ServiceInfo, actionParams json.RawMessage, serviceDescriptions string, retryCauseIfAny string, retryCount int) error {
 	p.Logger.Trace().Str("retryCauseIfAny", retryCauseIfAny).Msg("")
 
 	callingPlan, cachedEntryID, isCacheHit, err := p.decomposeAction(
@@ -270,6 +275,23 @@ func (p *PlanEngine) attemptRetryablePreparation(ctx context.Context, orchestrat
 	}
 
 	if !isCacheHit {
+		// Validate that all action parameters are properly included in TaskZero
+		if status, err := p.validateTaskZeroParams(callingPlan, actionParams, retryCount); err != nil {
+			p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
+			return PreparationError{
+				Status: status,
+				Err:    fmt.Errorf("execution plan action parameters validation failed: %w", err),
+			}
+		}
+
+		if status, err := p.validateNoCompositeTaskZeroRefs(callingPlan, retryCount); err != nil {
+			p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
+			return PreparationError{
+				Status: status,
+				Err:    fmt.Errorf("execution plan contains invalid composite task0 references: %w", err),
+			}
+		}
+
 		// Validate subtask inputs
 		if err = p.validateSubTaskInputs(services, onlyServicesCallingPlan.Tasks); err != nil {
 			p.VectorCache.Remove(orchestration.ProjectID, cachedEntryID)
@@ -992,22 +1014,18 @@ func (si *ServiceInfo) InputPropKeys() []string {
 }
 
 func extractValidJSONOutput(input string) (string, error) {
-	// Define the markers to locate the JSON block.
-	startMarker := "```json"
-	endMarker := "```"
-
 	// Find the start of the JSON block.
-	startIdx := strings.Index(input, startMarker)
+	startIdx := strings.Index(input, StartJsonMarker)
 	if startIdx == -1 {
 		// Return full input if the JSON start marker is not found.
 		return "", fmt.Errorf("cannot find opening JSON marker in %s", input)
 	}
 
 	// Start after the marker.
-	startIdx += len(startMarker)
+	startIdx += len(StartJsonMarker)
 
 	// Find the closing marker after the start.
-	endIdx := strings.Index(input[startIdx:], endMarker)
+	endIdx := strings.Index(input[startIdx:], EndJsonMarker)
 	if endIdx == -1 {
 		// Return full input if no closing marker is found.
 		return "", fmt.Errorf("cannot find closing JSON marker in %s", input)

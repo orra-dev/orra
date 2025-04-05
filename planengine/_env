@@ -1,7 +1,37 @@
-# Reasoning Config providers:(openai,groq) models:(o1-mini, o3-mini, deepseek-r1-distill-llama-70b)
-REASONING_PROVIDER=xxx
-REASONING_MODEL=xxx
-REASONING_API_KEY=xxx
+#========================================
+# LLM CONFIGURATION
+#========================================
 
-# Execution Plan Cache OPENAI API KEY
-PLAN_CACHE_OPENAI_API_KEY=xxx
+# Supported LLM Model (choose one: o1-mini, o3-mini, deepseek-r1, qwq-32b)
+# Examples of supported formats:
+# - Simple name: o1-mini
+# - With suffix: deepseek-r1-mlx
+# - With quantization: deepseek-r1-q4
+# - With path format: qwen/qwq-32b
+# - Case insensitive: Qwen/QwQ-32B
+# Not supported: deepseek-r1-llama-distill-70B (different model)
+LLM_MODEL=o1-mini
+LLM_API_KEY=xxx                             # Optional, leave empty for no auth
+LLM_API_BASE_URL=https://api.openai.com/v1  # Default for OpenAI, change for self-hosted/other providers
+
+#========================================
+# EMBEDDINGS CONFIGURATION
+#========================================
+
+# Supported Embeddings Model (choose one: text-embedding-3-small, jina-embeddings-v2-small-en)
+EMBEDDINGS_MODEL=text-embedding-3-small
+EMBEDDINGS_API_KEY=xxx                             # Optional, leave empty for no auth
+EMBEDDINGS_API_BASE_URL=https://api.openai.com/v1  # Default for OpenAI, change for self-hosted/other providers
+
+#========================================
+# SERVER CONFIGURATION
+#========================================
+
+# Server port (default: 8005)
+# PORT=8005
+
+# PDDL validator path (default: /usr/local/bin/Validate)
+# PDDL_VALIDATOR_PATH=/usr/local/bin/Validate
+
+# PDDL validation timeout (default: 30s)
+# PDDL_VALIDATION_TIMEOUT=30s

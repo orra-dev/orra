@@ -23,7 +23,6 @@ orra coordinates tasks across your existing stack, agents and any tools run as s
 * Continuous adjustment of Agent workflows during runtime
 * Additional language SDKs - Ruby, DotNet and Go very soon!
 * MCP integration
-* Leverage Local LLMs
 
 ## Table of Contents
 
@@ -32,7 +31,7 @@ orra coordinates tasks across your existing stack, agents and any tools run as s
 - [Guides](#guides)
 - [Explore Examples](#explore-examples)
 - [Docs](#docs)
-- [Self Hosting](#self-hosting)
+- [Self Hosting & On-premises Deployment](#self-hosting--on-premises-deployment)
 - [Support](#support)
 - [License](#license)
 
@@ -43,43 +42,53 @@ orra coordinates tasks across your existing stack, agents and any tools run as s
 - [Docker](https://docs.docker.com/desktop/) and [Docker Compose](https://docs.docker.com/compose/install/) - For running the Plan Engine
 - Set up Reasoning and Embedding Models to power task planning and execution plan caching/validation
 
-#### Setup Reasoning Models
+#### Setup Models for Plan Engine
 
-Select between Groq's [deepseek-r1-distill-llama-70b](https://groq.com/groqcloud-makes-deepseek-r1-distill-llama-70b-available/) model or OpenAI's [o1-mini / o3-mini](https://platform.openai.com/docs/guides/reasoning) models.
+Select from a variety of supported models:
 
-Update the .env file with one of these:
+**Reasoning Models**:
+- OpenAI's `o1-mini` or `o3-mini` on cloud
+- `deepseek-r1` or `qwq-32b` on cloud or self-hosted (on-premises or locally)
 
-**Groq**
-```shell
-# GROQ Reasoning
-REASONING_PROVIDER=groq
-REASONING_MODEL=deepseek-r1-distill-llama-70b
-REASONING_API_KEY=xxxx
-```
+**Embedding Models**:
+- OpenAI's `text-embedding-3-small` on cloud
+- `jina-embeddings-v2-small-en` on cloud or self-hosted (on-premises or locally)
 
-**O1-mini**
-```shell
-# OpenAI Reasoning
-REASONING_PROVIDER=openai
-REASONING_MODEL=o1-mini
-REASONING_API_KEY=xxxx
-```
+> **Note**: The Plan Engine requires all model endpoints to be **OpenAI API-compatible**. Most model serving solutions (like vLLM, LMStudio, Ollama, etc.) can be configured to expose this compatible API format.
 
-**O3-mini**
+**Quick Cloud Setup Example**:
+
+Update the .env based on the [_env](planengine/_env) file with one of these:
+
 ```shell
 # OpenAI Reasoning
-REASONING_PROVIDER=openai
-REASONING_MODEL=o3-mini
-REASONING_API_KEY=xxxx
+LLM_MODEL=o1-mini
+LLM_API_KEY=your_api_key
+LLM_API_BASE_URL=https://api.openai.com/v1
+
+# OpenAI Embeddings
+EMBEDDINGS_MODEL=text-embedding-3-small
+EMBEDDINGS_API_KEY=your_api_key
+EMBEDDINGS_API_BASE_URL=https://api.openai.com/v1
 ```
 
-#### Setup Embedding Models
+**Self-hosted/On-premises Example**:
 
-Update the .env file with:
+Update the .env based on the [_env](planengine/_env) file with one of these:
+
 ```shell
-# Execution Plan Cache and validation OPENAI API KEY
-PLAN_CACHE_OPENAI_API_KEY=xxxx
+# Self-hosted QwQ model
+LLM_MODEL=qwq-32b-q8
+LLM_API_KEY=your_internal_key  # Optional depending on your setup
+LLM_API_BASE_URL=http://your-internal-server:8000/v1
+
+# Self-hosted Jina embeddings
+EMBEDDINGS_MODEL=jina-embeddings-v2-small-en
+EMBEDDINGS_API_KEY=your_internal_key  # Optional depending on your setup
+EMBEDDINGS_API_BASE_URL=http://your-internal-server:8001/v1
 ```
+
+→ [Complete Model Configuration Documentation](docs/model-configuration.md)
 
 ### 1. Install orra CLI
 
@@ -228,11 +237,12 @@ The Plan Engine ensures:
 ## Guides
 
 - [From Fragile to Production-Ready Multi-Agent App](https://github.com/orra-dev/agent-fragile-to-prod-guide)
+- [From Fragile to Production-Ready Multi-Agent App (with Cloudflare Agents)](https://github.com/orra-dev/agent-fragile-to-prod-guide-with-cf-agents)
 
 ## Explore Examples
 
 - 🛒 [E-commerce AI Assistant (JavaScript)](examples/ecommerce-agent-app) - E-commerce customer service with a delivery specialized agent
-- 👻 [Ghostwriters (Python)](examples/crewai-ghostwriters) - Content generation example showcasing how to use orra with [CrewAI](https://www.crewai.com) 🆕🎉
+- 👻 [Ghostwriters (Python)](examples/crewai-ghostwriters) - Content generation example showcasing how to use orra with [CrewAI](https://www.crewai.com)
 - 📣 [Echo Tools as Service (JavaScript)](examples/echo-js) - Simple example showing core concepts using JS
 - 📣 [Echo Tools as Service (Python)](examples/echo-python) - Simple example showing core concepts using Python
 
@@ -244,16 +254,34 @@ The Plan Engine ensures:
 - [Domain Grounding Execution](docs/grounding.md)
 - [Execution Plan Caching](docs/plan-caching.md)
 - [Core Topics & Internals](docs/core.md)
+- [Model Configuration for the orra Plan Engine](docs/model-configuration.md)
 
-## Self Hosting
+## Self Hosting & On-premises Deployment
 
-The orra Plan Engine is packaged with a [Dockerfile](planengine/Dockerfile). [Run it as a single instance locally](#installation) using docker or docker compose.
+### Running Plan Engine
 
-**For production**, run the Plan Engine as a single instance on a Cloud Service like [Digital Ocean's App Platform](https://docs.digitalocean.com/products/app-platform/how-to/deploy-from-monorepo/) by pointing to the `planengine` folder during setup and configuring the necessary environment variables. 
+The orra Plan Engine is packaged with a [Dockerfile](planengine/Dockerfile) for easy deployment:
 
-The Plan Engine uses the [BadgerDB](https://github.com/hypermodeinc/badger) embedded database to persist all state - operational information is queryable using the [orra CLI](docs/cli.md).  
+- **Local Development**: [Run it as a single instance](#installation) using Docker or Docker Compose
+- **On-premises Deployment**: Deploy in your own infrastructure with your preferred orchestration system
+- **Cloud Service**: Run on managed container services like [Digital Ocean's App Platform](https://docs.digitalocean.com/products/app-platform/how-to/deploy-from-monorepo/) or any Kubernetes environment
 
-[Book an office hours slot](https://cal.com/orra-dev/office-hours), to get help hosting or running orra's Plan Engine for production.
+### Using Self-hosted Models (Remote or On-premises)
+
+The Plan Engine fully supports self-hosted open-source models:
+
+- **Reasoning**: Deploy `deepseek-r1` or `qwq-32b` using your preferred model serving solution including on-premises 
+- **Embeddings**: Self-host `jina-embeddings-v2-small-en` for complete control
+
+> **Important**: Your model serving solution must expose an **OpenAI-compatible API**. Solutions like vLLM, LMStudio, Ollama with OpenAI compatibility mode, or Replicate all work great.
+
+→ [Complete Model Configuration Guide](docs/model-configuration.md)
+
+### Data Storage
+
+The Plan Engine uses [BadgerDB](https://github.com/hypermodeinc/badger) embedded database to persist all state - operational information is queryable using the [orra CLI](docs/cli.md).
+
+[Book an office hours slot](https://cal.com/orra-dev/office-hours) to get help hosting or running orra's Plan Engine for production.
 
 ## Support
 

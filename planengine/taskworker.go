@@ -424,29 +424,29 @@ func (w *TaskWorker) tryExecute(ctx context.Context, orchestrationID string) (js
 		Logger()
 
 	if !isNewExecution {
-		switch {
-		case result.State == ExecutionCompleted:
+		switch result.State {
+		case ExecutionCompleted:
 			logger.Trace().Str("State", "ExecutionCompleted").Msg("OLD EXECUTION")
 			return result.Result, nil
-		case result.State == ExecutionFailed:
+		case ExecutionFailed:
 			w.Service.IdempotencyStore.ResetFailedExecution(idempotencyKey)
 			logger.Trace().Str("State", "ExecutionFailed").Msg("OLD EXECUTION")
-		case result.State == ExecutionPaused:
+		case ExecutionPaused:
 			logger.Trace().Str("State", "ExecutionPaused").Msg("OLD EXECUTION")
-		case result.State == ExecutionInProgress:
+		case ExecutionInProgress:
 			logger.Trace().Str("State", "ExecutionInProgress").Msg("DO NOTHING")
 		}
 
 	} else {
 
-		switch {
-		case result.State == ExecutionCompleted:
+		switch result.State {
+		case ExecutionCompleted:
 			logger.Trace().Str("State", "ExecutionCompleted").Msg("NEW EXECUTION")
-		case result.State == ExecutionFailed:
+		case ExecutionFailed:
 			logger.Trace().Str("State", "ExecutionFailed").Msg("NEW EXECUTION")
-		case result.State == ExecutionPaused:
+		case ExecutionPaused:
 			logger.Trace().Str("State", "ExecutionPaused").Msg("NEW EXECUTION")
-		case result.State == ExecutionInProgress:
+		case ExecutionInProgress:
 			logger.Trace().Str("State", "ExecutionInProgress").Msg("NEW EXECUTION")
 		}
 	}
@@ -557,20 +557,20 @@ func (w *TaskWorker) waitForResult(ctx context.Context, orchestrationID string, 
 				continue
 			}
 
-			switch {
-			case result.State == ExecutionCompleted:
+			switch result.State {
+			case ExecutionCompleted:
 				logger.Trace().Str("State", "ExecutionCompleted").Msg("Completed with result")
 				return result.Result, nil
-			case result.State == ExecutionFailed:
+			case ExecutionFailed:
 				if err, b := result.GetFailure(w.consecutiveErrs); b {
 					logger.Trace().Str("State", "ExecutionFailed").Msg("Failed - RETRY")
 					return nil, RetryableError{Err: err}
 				}
 				logger.Trace().Str("State", "ExecutionFailed").Msg("Failed but no failure entry- DO NOTHING")
-			case result.State == ExecutionPaused:
+			case ExecutionPaused:
 				logger.Trace().Str("State", "ExecutionPaused").Msg("PAUSED - Trigger Pause")
 				return nil, RetryableError{Err: errors.New(PauseExecutionCode)}
-			case result.State == ExecutionInProgress:
+			case ExecutionInProgress:
 				interimResults := w.Service.IdempotencyStore.PopAnyInterimResults(key)
 				w.processInterimTaskResults(orchestrationID, interimResults)
 			}

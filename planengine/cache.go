@@ -304,7 +304,7 @@ func (c *VectorCache) Remove(projectID, id string) bool {
 	c.logger.Debug().
 		Str("projectID", projectID).
 		Str("id", id).
-		Msg("About removed cache entry")
+		Msg("About to remove cache entry")
 
 	if len(id) == 0 {
 		return false

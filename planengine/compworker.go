@@ -201,27 +201,29 @@ func (w *CompensationWorker) tryExecuteCompensation(ctx context.Context, candida
 	}
 
 	if !isNewExecution {
-		switch {
-		case execution.State == ExecutionCompleted:
+		switch execution.State {
+		case ExecutionCompleted:
 			logger.Trace().Str("State", "ExecutionCompleted").Msg("OLD EXECUTION")
 			return execution.Result, nil
-		case execution.State == ExecutionFailed:
+		case ExecutionFailed:
 			service.IdempotencyStore.ResetFailedExecution(idempotencyKey)
 			logger.Trace().Str("State", "ExecutionFailed").Msg("OLD EXECUTION")
-		case execution.State == ExecutionInProgress:
+		case ExecutionInProgress:
 			logger.Trace().Str("State", "ExecutionInProgress").Msg("DO NOTHING")
+		case ExecutionPaused:
+			logger.Trace().Str("State", "ExecutionPaused").Msg("DO NOTHING")
 		}
 
 	} else {
 
-		switch {
-		case execution.State == ExecutionCompleted:
+		switch execution.State {
+		case ExecutionCompleted:
 			logger.Trace().Str("State", "ExecutionCompleted").Msg("NEW EXECUTION")
-		case execution.State == ExecutionFailed:
+		case ExecutionFailed:
 			logger.Trace().Str("State", "ExecutionFailed").Msg("NEW EXECUTION")
-		case execution.State == ExecutionPaused:
+		case ExecutionPaused:
 			logger.Trace().Str("State", "ExecutionPaused").Msg("NEW EXECUTION")
-		case execution.State == ExecutionInProgress:
+		case ExecutionInProgress:
 			logger.Trace().Str("State", "ExecutionInProgress").Msg("NEW EXECUTION")
 		}
 	}
@@ -307,16 +309,18 @@ func (w *CompensationWorker) waitForCompensationResult(
 				continue
 			}
 
-			switch {
-			case execution.State == ExecutionCompleted:
+			switch execution.State {
+			case ExecutionCompleted:
 				logger.Trace().Str("State", "Compensation ExecutionCompleted").Msg("Completed with result")
 				return execution.Result, nil
-			case execution.State == ExecutionFailed:
+			case ExecutionFailed:
 				if err, b := execution.GetFailure(w.attemptCounts[taskID]); b {
 					logger.Trace().Str("State", "Compensation ExecutionFailed").Msg("Failed - RETRY")
 					return nil, err
 				}
 				logger.Trace().Str("State", "Compensation ExecutionFailed").Msg("Failed but no failure entry- DO NOTHING")
+			case ExecutionInProgress:
+			case ExecutionPaused:
 			}
 		}
 	}
