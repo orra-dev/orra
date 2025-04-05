@@ -61,12 +61,11 @@ Orra allows flexible hosting options for models to meet different operational ne
 
 ### Cloud-based Hosting
 
-**Providers**: OpenAI, Azure OpenAI, Together AI, Fireworks AI, HuggingFace
+#### OpenAI and Azure
 
 **Recommended Models**: 
 - `o1-mini` and `o3-mini` via OpenAI or Azure
 - `text-embedding-3-small` via OpenAI or Azure
-- All supported models via model hosting providers
 
 **Configuration Example for OpenAI**:
 ```bash
@@ -78,6 +77,61 @@ EMBEDDINGS_MODEL=text-embedding-3-small
 EMBEDDINGS_API_KEY=your_openai_key
 EMBEDDINGS_API_BASE_URL=https://api.openai.com/v1
 ```
+
+**Configuration Example for Azure**:
+```bash
+LLM_MODEL=o1-mini
+LLM_API_KEY=your_azure_key
+LLM_API_BASE_URL=https://your-resource.openai.azure.com/openai/deployments/your-deployment/completions?api-version=2023-05-15
+
+EMBEDDINGS_MODEL=text-embedding-3-small
+EMBEDDINGS_API_KEY=your_azure_key
+EMBEDDINGS_API_BASE_URL=https://your-resource.openai.azure.com/openai/deployments/your-embedding-deployment/embeddings?api-version=2023-05-15
+```
+
+#### AI Model Hosting Platforms
+
+AI model hosting platforms provide an excellent option for accessing open source models without managing infrastructure. This is particularly useful for `deepseek-r1`, `qwq-32b`, and `jina-embeddings-v2-small-en`.
+
+**Popular Platforms**:
+- [Together AI](https://www.together.ai)
+- [Fireworks AI](https://fireworks.ai)
+- [HuggingFace Inference API](https://huggingface.co/inference-api)
+- [Replicate](https://replicate.com)
+
+**Configuration Example for Together AI**:
+```bash
+# For DeepSeek-R1
+LLM_MODEL=deepseek-r1
+LLM_API_KEY=your_together_ai_key
+LLM_API_BASE_URL=https://api.together.xyz/v1
+
+# For Jina Embeddings
+EMBEDDINGS_MODEL=jina-embeddings-v2-small-en
+EMBEDDINGS_API_KEY=your_together_ai_key
+EMBEDDINGS_API_BASE_URL=https://api.together.xyz/v1
+```
+
+**Configuration Example for Fireworks AI**:
+```bash
+# For QwQ-32B
+LLM_MODEL=qwq-32b
+LLM_API_KEY=your_fireworks_key
+LLM_API_BASE_URL=https://api.fireworks.ai/inference/v1
+
+# For Jina Embeddings
+EMBEDDINGS_MODEL=jina-embeddings-v2-small-en
+EMBEDDINGS_API_KEY=your_fireworks_key
+EMBEDDINGS_API_BASE_URL=https://api.fireworks.ai/inference/v1
+```
+
+**Benefits of Using AI Hosting Platforms**:
+
+1. **Quick Setup**: No need to manage infrastructure or worry about hardware requirements
+2. **Cost Efficiency**: Pay-as-you-go pricing models often make these platforms cost-effective
+3. **Model Availability**: Easy access to the latest open-source models without deployment hassles
+4. **Scalability**: Built-in scaling based on your usage patterns
+5. **API Compatibility**: These platforms typically offer OpenAI-compatible APIs, making integration seamless
 
 ### On-premises Deployment
 
@@ -132,13 +186,3 @@ When choosing your model configuration, consider these factors:
 4. **Resource Constraints**: For resource-limited environments:
    - Use quantized models (models with `-q4` or `-q8` suffixes)
    - Consider hardware-optimized versions (e.g., `-mlx` for Apple Silicon)
-
-## Further References
-
-For the most current information about model deployments and specific hardware requirements, refer to the respective model providers:
-
-- [OpenAI API Documentation](https://platform.openai.com/docs/api-reference)
-- [Azure OpenAI Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/)
-- [DeepSeek AI Model Hub](https://github.com/deepseek-ai/DeepSeek-Coder)
-- [QwQ Models Documentation](https://github.com/QwenLM/QwQ)
-- [Jina AI Embeddings Documentation](https://jina.ai/embedding/)
