@@ -235,6 +235,7 @@ The Plan Engine ensures:
 ## Guides
 
 - [From Fragile to Production-Ready Multi-Agent App](https://github.com/orra-dev/agent-fragile-to-prod-guide)
+- [From Fragile to Production-Ready Multi-Agent App (with Cloudflare Agents)](https://github.com/orra-dev/agent-fragile-to-prod-guide-with-cf-agents)
 
 ## Explore Examples
 
@@ -251,6 +252,7 @@ The Plan Engine ensures:
 - [Domain Grounding Execution](docs/grounding.md)
 - [Execution Plan Caching](docs/plan-caching.md)
 - [Core Topics & Internals](docs/core.md)
+- [Model Configuration for the orra Plan Engine](docs/model-configuration.md)
 
 ## Self Hosting & On-premises Deployment
 
