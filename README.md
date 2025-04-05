@@ -240,7 +240,7 @@ The Plan Engine ensures:
 ## Explore Examples
 
 - 🛒 [E-commerce AI Assistant (JavaScript)](examples/ecommerce-agent-app) - E-commerce customer service with a delivery specialized agent
-- 👻 [Ghostwriters (Python)](examples/crewai-ghostwriters) - Content generation example showcasing how to use orra with [CrewAI](https://www.crewai.com) 🆕🎉
+- 👻 [Ghostwriters (Python)](examples/crewai-ghostwriters) - Content generation example showcasing how to use orra with [CrewAI](https://www.crewai.com)
 - 📣 [Echo Tools as Service (JavaScript)](examples/echo-js) - Simple example showing core concepts using JS
 - 📣 [Echo Tools as Service (Python)](examples/echo-python) - Simple example showing core concepts using Python
 
