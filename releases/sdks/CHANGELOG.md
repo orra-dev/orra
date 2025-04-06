@@ -1,3 +1,15 @@
+## SDKs v0.2.4
+
+### Features
+- Configurable WebSocket implementation for JS SDK
+
+### Javascript SDK v0.2.3
+
+#### Features
+- Made WebSocket implementation configurable on JS SDK initialization
+    - Required for running in Cloudflare environments
+    - Better compatibility with different JavaScript environments
+
 ## SDKs v0.2.3
 
 ### Features

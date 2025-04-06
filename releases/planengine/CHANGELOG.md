@@ -1,3 +1,36 @@
+## Plan Engine v0.2.4
+
+### Breaking Changes
+Simplified LLM and embeddings configuration to center around supported models rather than providers
+- Changed environment variable scheme from `REASONING_PROVIDER`/`REASONING_MODEL`/`REASONING_API_KEY` and `PLAN_CACHE_OPENAI_API_KEY` to a more cohesive approach with:
+  - `LLM_MODEL`/`LLM_API_KEY`/`LLM_API_BASE_URL` for reasoning models
+  - `EMBEDDINGS_MODEL`/`EMBEDDINGS_API_KEY`/`EMBEDDINGS_API_BASE_URL` for embedding models
+- Dropped support for `deepseek-r1-distill-llama-70b` model
+- Added support for self-hosted models with new configuration structure in `_env` template
+
+### Features
+- Added support for running the Plan Engine using self-hosted LLMs and embedding models
+  - Added support for `deepseek-r1` and `qwq-32b` as reasoning models
+  - Added support for `jina-embeddings-v2-small-en` as embedding model
+  - All model endpoints must be OpenAI API-compatible
+- Improved plan validation with better action parameters handling
+  - Added validation to ensure all action parameters are properly included in Task Zero
+  - Added validation against composite references in generated plans
+
+### Bug fixes
+- Fixed ordering of generated PDDL domain action parameters to prevent non-deterministic map key iteration
+- Fixed issue where execution plan non-task referenced inputs were not properly added to task zero
+- Increased grounding threshold to make grounding work at an acceptable level
+- Updated prompt to clarify expected task input pattern and required JSON markers in output
+
+### Documentation
+- Added extensive documentation on model configuration and self-hosting options
+- Added comprehensive guide for model configuration and self-hosting
+- Fixed typos and improved wording throughout documentation
+- Project README: Added new guide: "From Fragile to Production-Ready Multi-Agent App (with Cloudflare Agents)"
+- Project README: Updated with improved instructions for self-hosting and on-premises deployment
+- Project README: Removed "alpha" labels and updated coming soon sections
+
 ## Plan Engine v0.2.3
 
 ### Features
