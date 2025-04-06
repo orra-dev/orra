@@ -31,7 +31,7 @@ chmod +x /usr/local/bin/orra
 
 # Verify installation
 orra version
-# Client Version: v0.2.3
+# Client Version: v0.2.4
 ```
 
 ## CLI Commands Reference
