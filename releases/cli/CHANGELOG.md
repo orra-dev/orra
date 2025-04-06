@@ -1,3 +1,11 @@
+## CLI v0.2.4
+
+### Features
+- Increased CLI timeout to support using local LLMs for Plan Engine
+
+# Documentation
+- Added CLI reasoning traces example to documentation for better debugging
+
 ## CLI v0.2.3
 
 ### Features
