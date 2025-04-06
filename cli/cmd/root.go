@@ -79,7 +79,7 @@ func NewOrraCommand(opts *CliOpts) *cobra.Command {
 
 func Execute() {
 	opts := &CliOpts{
-		ApiClient: api.NewClient().SetTimeout(30 * time.Second),
+		ApiClient: api.NewClient().SetTimeout(5 * time.Minute),
 	}
 
 	rootCmd := NewOrraCommand(opts)
