@@ -150,49 +150,78 @@ func (w *TaskWorker) processEntry(ctx context.Context, entry LogEntry, orchestra
 	}
 
 	// Execute our task
-	taskOutput, err := w.executeTaskWithRetry(ctx, orchestrationID)
+	taskOutput, finalStatus, err := w.executeTaskWithRetry(ctx, orchestrationID)
 	if err != nil {
 		w.LogManager.Logger.Error().Err(err).Msgf("Cannot execute task %s for orchestration %s", w.TaskID, orchestrationID)
 		failedTs := time.Now().UTC()
-		if err := w.LogManager.AppendTaskStatusEvent(orchestrationID, w.TaskID, w.Service.ID, Failed, err, failedTs, w.consecutiveErrs); err != nil {
+		if err := w.LogManager.AppendTaskStatusEvent(orchestrationID, w.TaskID, w.Service.ID, finalStatus, err, failedTs, w.consecutiveErrs); err != nil {
 			return err
 		}
-		if err := w.LogManager.MarkTask(orchestrationID, w.TaskID, Failed, failedTs); err != nil {
+		if err := w.LogManager.MarkTask(orchestrationID, w.TaskID, finalStatus, failedTs); err != nil {
 			return err
 		}
 		return w.LogManager.AppendTaskFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error(), w.consecutiveErrs, false)
 	}
 
-	if err := w.processTaskResult(orchestrationID, taskOutput); err != nil {
-		w.LogManager.Logger.Error().Err(err).Msgf("Cannot process task %s result for orchestration %s", w.TaskID, orchestrationID)
-		return w.LogManager.AppendTaskFailureToLog(
-			orchestrationID,
-			w.TaskID,
-			w.Service.ID,
-			err.Error(),
-			w.consecutiveErrs,
-			false,
-		)
-	}
+	switch finalStatus {
+	case Aborted:
+		if err := w.processAbortedTaskResult(orchestrationID, taskOutput); err != nil {
+			w.LogManager.Logger.Error().Err(err).Msgf("Cannot process aborted task %s result for orchestration %s", w.TaskID, orchestrationID)
+			if err := w.LogManager.AppendTaskFailureToLog(
+				orchestrationID,
+				w.TaskID,
+				w.Service.ID,
+				err.Error(),
+				w.consecutiveErrs,
+				false,
+			); err != nil {
+				return err
+			}
 
-	// Mark this entry as processed
-	w.logState.Processed[entry.GetID()] = true
+			abortedTs := time.Now().UTC()
+			if err := w.LogManager.AppendTaskStatusEvent(orchestrationID, w.TaskID, w.Service.ID, finalStatus, err, abortedTs, w.consecutiveErrs); err != nil {
+				return err
+			}
+			if err := w.LogManager.MarkTask(orchestrationID, w.TaskID, finalStatus, abortedTs); err != nil {
+				return err
+			}
+		}
 
-	completedTs := time.Now().UTC()
-	if err = w.LogManager.AppendTaskStatusEvent(orchestrationID, w.TaskID, w.Service.ID, Completed, nil, completedTs, w.consecutiveErrs); err != nil {
-		return err
-	}
+	default:
 
-	if err := w.LogManager.MarkTaskCompleted(orchestrationID, entry.GetID(), completedTs); err != nil {
-		w.LogManager.Logger.Error().Err(err).Msgf("Cannot mark task %s completed for orchestration %s", w.TaskID, orchestrationID)
-		return w.LogManager.AppendTaskFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error(), w.consecutiveErrs, false)
+		if err := w.processTaskResult(orchestrationID, taskOutput); err != nil {
+			w.LogManager.Logger.Error().Err(err).Msgf("Cannot process task %s result for orchestration %s", w.TaskID, orchestrationID)
+			return w.LogManager.AppendTaskFailureToLog(
+				orchestrationID,
+				w.TaskID,
+				w.Service.ID,
+				err.Error(),
+				w.consecutiveErrs,
+				false,
+			)
+		}
+
+		// Mark this entry as processed
+		w.logState.Processed[entry.GetID()] = true
+
+		completedTs := time.Now().UTC()
+		if err = w.LogManager.AppendTaskStatusEvent(orchestrationID, w.TaskID, w.Service.ID, finalStatus, nil, completedTs, w.consecutiveErrs); err != nil {
+			return err
+		}
+
+		if err := w.LogManager.MarkTaskCompleted(orchestrationID, entry.GetID(), completedTs); err != nil {
+			w.LogManager.Logger.Error().Err(err).Msgf("Cannot mark task %s completed for orchestration %s", w.TaskID, orchestrationID)
+			return w.LogManager.AppendTaskFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error(), w.consecutiveErrs, false)
+		}
 	}
 
 	return nil
 }
 
-func (w *TaskWorker) executeTaskWithRetry(ctx context.Context, orchestrationID string) (json.RawMessage, error) {
+func (w *TaskWorker) executeTaskWithRetry(ctx context.Context, orchestrationID string) (json.RawMessage, Status, error) {
 	var result json.RawMessage
+	var executionStatus Status
+
 	w.consecutiveErrs = 0
 
 	operation := func() error {
@@ -210,7 +239,8 @@ func (w *TaskWorker) executeTaskWithRetry(ctx context.Context, orchestrationID s
 		}
 
 		var err error
-		result, err = w.tryExecute(ctx, orchestrationID)
+
+		result, executionStatus, err = w.tryExecute(ctx, orchestrationID)
 		if err != nil {
 			if w.triggerPauseExecution(err) {
 				return err
@@ -259,10 +289,10 @@ func (w *TaskWorker) executeTaskWithRetry(ctx context.Context, orchestrationID s
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	return result, nil
+	return result, executionStatus, nil
 }
 
 func (w *TaskWorker) triggerPauseExecution(err error) bool {
@@ -309,6 +339,41 @@ func (w *TaskWorker) processInterimTaskResults(orchestrationID string, outputs [
 			Interface("InterimResultPayload", resultPayload).
 			Msg("Appended interim task result payload to Log")
 	}
+}
+
+func (w *TaskWorker) processAbortedTaskResult(orchestrationID string, output json.RawMessage) error {
+	var resultPayload TaskResultPayload
+	if err := json.Unmarshal(output, &resultPayload); err != nil {
+		w.LogManager.Logger.
+			Error().
+			Err(err).
+			Str("OrchestrationID", orchestrationID).
+			Str("TaskID", w.TaskID).
+			Str("Service", w.Service.Name).
+			Interface("ResultPayload", resultPayload).
+			Msg("Failed to unmarshal abort task result payload")
+		return err
+	}
+
+	// Log the aborted output but don't mark as complete
+	abortedID := fmt.Sprintf("task_aborted_%s_%s", strings.ToLower(w.TaskID), short.New())
+
+	w.LogManager.AppendToLog(
+		orchestrationID,
+		"task_aborted_output",
+		abortedID,
+		resultPayload.Task,
+		w.Service.ID,
+		w.consecutiveErrs,
+	)
+
+	w.LogManager.Logger.Trace().Str("OrchestrationID", orchestrationID).
+		Str("TaskID", w.TaskID).
+		Str("Service", w.Service.Name).
+		Interface("InterimResultPayload", resultPayload).
+		Msg("Appended aborted task result payload to Log")
+
+	return nil
 }
 
 func (w *TaskWorker) processTaskResult(orchestrationID string, output json.RawMessage) error {
@@ -405,14 +470,14 @@ func (w *TaskWorker) checkServiceHealth(orchestrationID string) error {
 	return RetryableError{Err: fmt.Errorf("service %s is not healthy - pause %s", w.Service.ID, w.TaskID)}
 }
 
-func (w *TaskWorker) tryExecute(ctx context.Context, orchestrationID string) (json.RawMessage, error) {
+func (w *TaskWorker) tryExecute(ctx context.Context, orchestrationID string) (json.RawMessage, Status, error) {
 	idempotencyKey := w.generateIdempotencyKey(orchestrationID)
 	executionID := fmt.Sprintf("e_%s", short.New())
 
 	// Initialize or get existing execution
 	result, isNewExecution, err := w.Service.IdempotencyStore.InitializeOrGetExecution(idempotencyKey, executionID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize execution: %w", err)
+		return nil, 0, fmt.Errorf("failed to initialize execution: %w", err)
 	}
 
 	logger := w.LogManager.Logger.With().
@@ -427,7 +492,7 @@ func (w *TaskWorker) tryExecute(ctx context.Context, orchestrationID string) (js
 		switch result.State {
 		case ExecutionCompleted:
 			logger.Trace().Str("State", "ExecutionCompleted").Msg("OLD EXECUTION")
-			return result.Result, nil
+			return result.Result, 0, nil
 		case ExecutionFailed:
 			w.Service.IdempotencyStore.ResetFailedExecution(idempotencyKey)
 			logger.Trace().Str("State", "ExecutionFailed").Msg("OLD EXECUTION")
@@ -435,10 +500,13 @@ func (w *TaskWorker) tryExecute(ctx context.Context, orchestrationID string) (js
 			logger.Trace().Str("State", "ExecutionPaused").Msg("OLD EXECUTION")
 		case ExecutionInProgress:
 			logger.Trace().Str("State", "ExecutionInProgress").Msg("DO NOTHING")
+		case ExecutionAborted:
+			logger.Trace().Str("State", "ExecutionAborted").Msg("DO NOTHING")
 		}
 
 	} else {
 
+		// For purposes of logging only
 		switch result.State {
 		case ExecutionCompleted:
 			logger.Trace().Str("State", "ExecutionCompleted").Msg("NEW EXECUTION")
@@ -448,6 +516,8 @@ func (w *TaskWorker) tryExecute(ctx context.Context, orchestrationID string) (js
 			logger.Trace().Str("State", "ExecutionPaused").Msg("NEW EXECUTION")
 		case ExecutionInProgress:
 			logger.Trace().Str("State", "ExecutionInProgress").Msg("NEW EXECUTION")
+		case ExecutionAborted:
+			logger.Trace().Str("State", "ExecutionAborted").Msg("NEW EXECUTION")
 		}
 	}
 
@@ -460,10 +530,10 @@ func (w *TaskWorker) tryExecute(ctx context.Context, orchestrationID string) (js
 	return w.executeTask(ctx, orchestrationID, idempotencyKey, executionID)
 }
 
-func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string, key IdempotencyKey, executionID string) (json.RawMessage, error) {
+func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string, key IdempotencyKey, executionID string) (json.RawMessage, Status, error) {
 	input, err := mergeValueMapsToJson(w.logState.DependencyState, w.Dependencies)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal input: %w", err)
+		return nil, 0, fmt.Errorf("failed to marshal input: %w", err)
 	}
 
 	logger := w.LogManager.Logger.
@@ -502,7 +572,7 @@ func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string, ke
 
 		// Pause execution before returning error
 		w.Service.IdempotencyStore.PauseExecution(key)
-		return nil, RetryableError{Err: fmt.Errorf("failed to send task: %w", err)}
+		return nil, 0, RetryableError{Err: fmt.Errorf("failed to send task: %w", err)}
 	}
 
 	if err := w.LogManager.AppendTaskStatusEvent(
@@ -520,7 +590,7 @@ func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string, ke
 	return w.waitForResult(ctx, orchestrationID, key, executionID)
 }
 
-func (w *TaskWorker) waitForResult(ctx context.Context, orchestrationID string, key IdempotencyKey, executionID string) (json.RawMessage, error) {
+func (w *TaskWorker) waitForResult(ctx context.Context, orchestrationID string, key IdempotencyKey, executionID string) (json.RawMessage, Status, error) {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -541,12 +611,12 @@ func (w *TaskWorker) waitForResult(ctx context.Context, orchestrationID string, 
 		case <-ctx.Done():
 			logger.Trace().Msg("Task request cancelled - ctx.Done()")
 			w.Service.IdempotencyStore.PauseExecution(key)
-			return nil, ctx.Err()
+			return nil, Cancelled, ctx.Err()
 
 		case <-maxWait:
 			logger.Trace().Msg("Task request has reached Max Wait - RETRY")
 			w.Service.IdempotencyStore.PauseExecution(key)
-			return nil, RetryableError{Err: fmt.Errorf("task execution timed out waiting for result")}
+			return nil, Cancelled, RetryableError{Err: fmt.Errorf("task execution timed out waiting for result")}
 
 		case <-ticker.C:
 			result, exists := w.Service.IdempotencyStore.GetExecutionWithResult(key)
@@ -560,19 +630,22 @@ func (w *TaskWorker) waitForResult(ctx context.Context, orchestrationID string, 
 			switch result.State {
 			case ExecutionCompleted:
 				logger.Trace().Str("State", "ExecutionCompleted").Msg("Completed with result")
-				return result.Result, nil
+				return result.Result, Completed, nil
 			case ExecutionFailed:
 				if err, b := result.GetFailure(w.consecutiveErrs); b {
 					logger.Trace().Str("State", "ExecutionFailed").Msg("Failed - RETRY")
-					return nil, RetryableError{Err: err}
+					return nil, Failed, RetryableError{Err: err}
 				}
 				logger.Trace().Str("State", "ExecutionFailed").Msg("Failed but no failure entry- DO NOTHING")
 			case ExecutionPaused:
 				logger.Trace().Str("State", "ExecutionPaused").Msg("PAUSED - Trigger Pause")
-				return nil, RetryableError{Err: errors.New(PauseExecutionCode)}
+				return nil, Paused, RetryableError{Err: errors.New(PauseExecutionCode)}
 			case ExecutionInProgress:
 				interimResults := w.Service.IdempotencyStore.PopAnyInterimResults(key)
 				w.processInterimTaskResults(orchestrationID, interimResults)
+			case ExecutionAborted:
+				logger.Trace().Str("State", "ExecutionAborted").Msg("Aborted with result")
+				return result.AbortResult, Aborted, nil
 			}
 		}
 	}

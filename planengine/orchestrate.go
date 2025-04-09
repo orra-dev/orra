@@ -356,6 +356,7 @@ func (p *PlanEngine) FinalizeOrchestration(
 	status Status,
 	reason json.RawMessage,
 	results []json.RawMessage,
+	abortData json.RawMessage,
 	skipWebhook bool,
 ) error {
 	p.orchestrationStoreMu.Lock()
@@ -370,6 +371,7 @@ func (p *PlanEngine) FinalizeOrchestration(
 	orchestration.Timestamp = time.Now().UTC()
 	orchestration.Error = reason
 	orchestration.Results = results
+	orchestration.AbortData = abortData
 
 	// Persist updated state
 	if err := p.orchestrationStorage.StoreOrchestration(orchestration); err != nil {
@@ -763,15 +765,15 @@ func (p *PlanEngine) createAndStartWorkers(ctx context.Context, orchestrationID 
 	aggCtx, cancel := context.WithCancel(ctx)
 	p.logWorkers[orchestrationID][ResultAggregatorID] = cancel
 
-	fTracker := NewFailureTracker(p.LogManager)
+	iTracker := NewIncidentTracker(p.LogManager)
 	fCtx, fCancel := context.WithCancel(ctx)
-	p.logWorkers[orchestrationID][FailureTrackerID] = fCancel
+	p.logWorkers[orchestrationID][IncidentTrackerID] = fCancel
 
 	p.Logger.Debug().Str("orchestrationID", orchestrationID).Msg("Starting result aggregator for orchestration")
 	go aggregator.Start(aggCtx, orchestrationID)
 
 	p.Logger.Debug().Str("orchestrationID", orchestrationID).Msg("Starting failure tracker for orchestration")
-	go fTracker.Start(fCtx, orchestrationID)
+	go iTracker.Start(fCtx, orchestrationID)
 }
 
 func (p *PlanEngine) cleanupLogWorkers(orchestrationID string) {
@@ -902,11 +904,13 @@ func (p *PlanEngine) triggerWebhook(orchestration *Orchestration) error {
 		Results         []json.RawMessage `json:"results"`
 		Status          Status            `json:"status"`
 		Error           json.RawMessage   `json:"error,omitempty"`
+		AbortedData     json.RawMessage   `json:"abortedData,omitempty"`
 	}{
 		OrchestrationID: orchestration.ID,
 		Results:         orchestration.Results,
 		Status:          orchestration.Status,
 		Error:           orchestration.Error,
+		AbortedData:     orchestration.AbortData,
 	}
 
 	jsonPayload, err := json.Marshal(payload)
@@ -929,7 +933,7 @@ func (p *PlanEngine) triggerWebhook(orchestration *Orchestration) error {
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Orra/1.0")
+	req.Header.Set("User-Agent", "orra/1.0")
 
 	// Create an HTTP client with a timeout
 	client := &http.Client{

@@ -162,7 +162,7 @@ type ResultAggregator struct {
 	logState     *LogState
 }
 
-type FailureTracker struct {
+type IncidentTracker struct {
 	LogManager *LogManager
 	logState   *LogState
 }
@@ -294,6 +294,7 @@ type Orchestration struct {
 	Webhook                string            `json:"webhook"`
 	TaskZero               json.RawMessage   `json:"taskZero"`
 	GroundingHit           *GroundingHit     `json:"groundingHit,omitempty"`
+	AbortData              json.RawMessage   `json:"abortData,omitempty"`
 }
 
 type Duration struct {
