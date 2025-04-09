@@ -205,7 +205,9 @@ func (s *IdempotencyStore) TrackAbortResult(key IdempotencyKey, abortResult json
 	if execution, exists := s.executions[key]; exists &&
 		execution.State == ExecutionInProgress {
 		execution.State = ExecutionAborted
-		execution.AbortResult = abortResult
+		if abortResult != nil {
+			execution.AbortResult = abortResult
+		}
 		execution.Timestamp = time.Now().UTC()
 	}
 }
