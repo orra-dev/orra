@@ -161,6 +161,55 @@ class OrraSDK {
 		});
 	}
 	
+	abort(taskId, executionId, idempotencyKey, abortData) {
+		if (!taskId || !executionId || !idempotencyKey) {
+			this.logger.error('Cannot abort: taskId, executionId and idempotencyKey are all required', {
+				taskId,
+				executionId,
+				idempotencyKey
+			});
+			return Promise.reject(new Error('Both taskId, executionId and idempotencyKey are required for aborting tasks'));
+		}
+		
+		if (!this.serviceId) {
+			this.logger.error('Cannot abort: service not registered', {
+				taskId,
+				executionId,
+				idempotencyKey
+			});
+			return Promise.reject(new Error('Service must be registered for tasks to be aborted'));
+		}
+		
+		if (this.#userInitiatedClose) {
+			this.logger.error('Cannot abort: SDK is shutting down', {
+				taskId,
+				executionId,
+				idempotencyKey
+			});
+			return Promise.reject(new Error('SDK is shutting down'));
+		}
+		
+		return new Promise((resolve, reject) => {
+			try {
+				// Wrap the update data in the expected format
+				const payload = {
+					task: abortData
+				};
+				
+				this.#sendAbortTaskResult(taskId, executionId, this.serviceId, idempotencyKey, payload);
+				resolve();
+			} catch (error) {
+				this.logger.error('Failed to abort', {
+					taskId,
+					executionId,
+					idempotencyKey,
+					error: error.message
+				});
+				reject(error);
+			}
+		});
+	}
+	
 	async #registerServiceOrAgent(name, kind, opts = {
 		description: undefined,
 		revertible: undefined,
@@ -369,6 +418,10 @@ class OrraSDK {
 		task.pushUpdate = (updateData) => {
 			return this.pushUpdate(taskId, executionId, idempotencyKey, updateData);
 		};
+		
+		task.abort = (abortData) => {
+			return this.abort(taskId, executionId, idempotencyKey, abortData);
+		}
 		
 		this.logger.trace('Task handling initiated', {
 			taskId,
@@ -645,6 +698,18 @@ class OrraSDK {
 	#sendInterimTaskResult(taskId, executionId, serviceId, idempotencyKey, result) {
 		const message = {
 			type: 'task_interim_result',
+			taskId,
+			executionId,
+			serviceId,
+			idempotencyKey,
+			result
+		};
+		this.#sendMessage(message);
+	}
+	
+	#sendAbortTaskResult(taskId, executionId, serviceId, idempotencyKey, result) {
+		const message = {
+			type: 'task_abort_result',
 			taskId,
 			executionId,
 			serviceId,
