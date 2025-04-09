@@ -14,8 +14,8 @@ import (
 	"time"
 )
 
-func NewFailureTracker(logManager *LogManager) LogWorker {
-	return &FailureTracker{
+func NewIncidentTracker(logManager *LogManager) LogWorker {
+	return &IncidentTracker{
 		LogManager: logManager,
 		logState: &LogState{
 			LastOffset: 0,
@@ -24,10 +24,10 @@ func NewFailureTracker(logManager *LogManager) LogWorker {
 	}
 }
 
-func (f *FailureTracker) Start(ctx context.Context, orchestrationID string) {
-	logStream := f.LogManager.GetLog(orchestrationID)
+func (t *IncidentTracker) Start(ctx context.Context, orchestrationID string) {
+	logStream := t.LogManager.GetLog(orchestrationID)
 	if logStream == nil {
-		f.LogManager.Logger.Error().Str("orchestrationID", orchestrationID).Msg("Log stream not found for orchestration")
+		t.LogManager.Logger.Error().Str("orchestrationID", orchestrationID).Msg("Log stream not found for orchestration")
 		return
 	}
 
@@ -35,14 +35,14 @@ func (f *FailureTracker) Start(ctx context.Context, orchestrationID string) {
 	entriesChan := make(chan LogEntry, 100)
 
 	// Start a goroutine for continuous polling
-	go f.PollLog(ctx, orchestrationID, logStream, entriesChan)
+	go t.PollLog(ctx, orchestrationID, logStream, entriesChan)
 
 	// Process entries as they come in
 	for {
 		select {
 		case entry := <-entriesChan:
-			if err := f.processEntry(entry, orchestrationID); err != nil {
-				f.LogManager.Logger.
+			if err := t.processEntry(entry, orchestrationID); err != nil {
+				t.LogManager.Logger.
 					Error().
 					Err(err).
 					Str("orchestrationID", orchestrationID).
@@ -51,13 +51,13 @@ func (f *FailureTracker) Start(ctx context.Context, orchestrationID string) {
 				return
 			}
 		case <-ctx.Done():
-			f.LogManager.Logger.Info().Msgf("Failure tracker in orchestration %s is stopping", orchestrationID)
+			t.LogManager.Logger.Info().Msgf("Failure tracker in orchestration %s is stopping", orchestrationID)
 			return
 		}
 	}
 }
 
-func (f *FailureTracker) PollLog(ctx context.Context, _ string, logStream *Log, entriesChan chan<- LogEntry) {
+func (t *IncidentTracker) PollLog(ctx context.Context, _ string, logStream *Log, entriesChan chan<- LogEntry) {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -65,15 +65,15 @@ func (f *FailureTracker) PollLog(ctx context.Context, _ string, logStream *Log, 
 		select {
 		case <-ticker.C:
 
-			entries := logStream.ReadFrom(f.logState.LastOffset)
+			entries := logStream.ReadFrom(t.logState.LastOffset)
 			for _, entry := range entries {
-				if !f.shouldProcess(entry) {
+				if !t.shouldProcess(entry) {
 					continue
 				}
 
 				select {
 				case entriesChan <- entry:
-					f.logState.LastOffset = entry.GetOffset() + 1
+					t.logState.LastOffset = entry.GetOffset() + 1
 				case <-ctx.Done():
 					return
 				}
@@ -85,48 +85,66 @@ func (f *FailureTracker) PollLog(ctx context.Context, _ string, logStream *Log, 
 	}
 }
 
-func (f *FailureTracker) shouldProcess(entry LogEntry) bool {
-	return entry.GetEntryType() == "task_failure"
+func (t *IncidentTracker) shouldProcess(entry LogEntry) bool {
+	return entry.GetEntryType() == "task_failure" || entry.GetEntryType() == "task_aborted_output"
 }
 
-func (f *FailureTracker) processEntry(entry LogEntry, orchestrationID string) error {
+func (t *IncidentTracker) processEntry(entry LogEntry, orchestrationID string) error {
 	// Mark this entry as processed
-	f.logState.Processed[entry.GetID()] = true
+	t.logState.Processed[entry.GetID()] = true
 
-	var failure LoggedFailure
-	if err := json.Unmarshal(entry.GetValue(), &failure); err != nil {
-		return fmt.Errorf("failure tracker failed to unmarshal entry: %w", err)
+	switch entry.GetEntryType() {
+	case "task_aborted_output":
+		aborted := t.LogManager.MarkOrchestrationAborted(orchestrationID)
+		if err := t.LogManager.FinalizeOrchestration(orchestrationID, aborted, nil, nil, entry.Value, false); err != nil {
+			isWebHookErr := strings.Contains(err.Error(), "failed to trigger webhook")
+			return t.LogManager.AppendTaskFailureToLog(
+				orchestrationID,
+				IncidentTrackerID,
+				IncidentTrackerID,
+				err.Error(),
+				0,
+				isWebHookErr,
+			)
+		}
+
+	default:
+		var failure LoggedFailure
+		if err := json.Unmarshal(entry.GetValue(), &failure); err != nil {
+			return fmt.Errorf("failure tracker failed to unmarshal entry: %w", err)
+		}
+
+		var errorPayload = struct {
+			Id              string `json:"id"`
+			ProducerID      string `json:"producer"`
+			OrchestrationID string `json:"orchestration"`
+			Error           string `json:"error"`
+		}{
+			Id:              entry.GetID(),
+			ProducerID:      entry.GetProducerID(),
+			OrchestrationID: orchestrationID,
+			Error:           failure.Failure,
+		}
+
+		reason, err := json.Marshal(errorPayload)
+		if err != nil {
+			return fmt.Errorf("failure tracker failed to marshal error payload: %w", err)
+		}
+
+		failed := t.LogManager.MarkOrchestrationFailed(orchestrationID, failure.Failure)
+
+		if err := t.LogManager.FinalizeOrchestration(orchestrationID, failed, reason, nil, nil, failure.SkipWebhook); err != nil {
+			isWebHookErr := strings.Contains(err.Error(), "failed to trigger webhook")
+			return t.LogManager.AppendTaskFailureToLog(
+				orchestrationID,
+				IncidentTrackerID,
+				IncidentTrackerID,
+				fmt.Errorf("%s:%w", failure.Failure, err).Error(),
+				0,
+				isWebHookErr,
+			)
+		}
 	}
 
-	var errorPayload = struct {
-		Id              string `json:"id"`
-		ProducerID      string `json:"producer"`
-		OrchestrationID string `json:"orchestration"`
-		Error           string `json:"error"`
-	}{
-		Id:              entry.GetID(),
-		ProducerID:      entry.GetProducerID(),
-		OrchestrationID: orchestrationID,
-		Error:           failure.Failure,
-	}
-
-	reason, err := json.Marshal(errorPayload)
-	if err != nil {
-		return fmt.Errorf("failure tracker failed to marshal error payload: %w", err)
-	}
-
-	failed := f.LogManager.MarkOrchestrationFailed(orchestrationID, failure.Failure)
-
-	if err := f.LogManager.FinalizeOrchestration(orchestrationID, failed, reason, nil, failure.SkipWebhook); err != nil {
-		isWebHookErr := strings.Contains(err.Error(), "failed to trigger webhook")
-		return f.LogManager.AppendTaskFailureToLog(
-			orchestrationID,
-			FailureTrackerID,
-			FailureTrackerID,
-			fmt.Errorf("%s:%w", failure.Failure, err).Error(),
-			0,
-			isWebHookErr,
-		)
-	}
 	return nil
 }
