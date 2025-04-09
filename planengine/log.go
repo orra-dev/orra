@@ -143,6 +143,10 @@ func (lm *LogManager) MarkOrchestrationCompleted(orchestrationID string) Status 
 	return lm.MarkOrchestration(orchestrationID, Completed, nil)
 }
 
+func (lm *LogManager) MarkOrchestrationAborted(orchestrationID string) Status {
+	return lm.MarkOrchestration(orchestrationID, Aborted, nil)
+}
+
 func (lm *LogManager) MarkOrchestrationFailed(orchestrationID string, reason string) Status {
 	return lm.MarkOrchestration(orchestrationID, Failed, []byte(reason))
 }
@@ -380,14 +384,22 @@ func (lm *LogManager) AppendCompensationFailure(
 func (lm *LogManager) FinalizeOrchestration(
 	orchestrationID string,
 	status Status,
-	reason, result json.RawMessage,
+	reason, result, abortData json.RawMessage,
 	skipWebhook bool,
 ) error {
-	if err := lm.planEngine.FinalizeOrchestration(orchestrationID, status, reason, []json.RawMessage{result}, skipWebhook); err != nil {
+	if err := lm.planEngine.FinalizeOrchestration(
+		orchestrationID,
+		status,
+		reason,
+		[]json.RawMessage{result},
+		abortData,
+		skipWebhook,
+	); err != nil {
 		return fmt.Errorf("failed to finalize orchestration: %w", err)
 	}
 
-	if status != Failed {
+	shouldCompensate := status == Failed || status == Aborted
+	if !shouldCompensate {
 		return nil
 	}
 
