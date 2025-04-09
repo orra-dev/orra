@@ -93,6 +93,9 @@ func (wsm *WebSocketManager) HandleMessage(s *melody.Session, msg []byte, fn Ser
 	case "task_interim_result":
 		wsm.UpdateServiceHealth(messagePayload.ServiceID, true)
 		wsm.handleInterimTaskResult(messagePayload, fn)
+	case "task_abort_result":
+		wsm.UpdateServiceHealth(messagePayload.ServiceID, true)
+		wsm.handleAbortTaskResult(messagePayload, fn)
 	case "task_result":
 		wsm.UpdateServiceHealth(messagePayload.ServiceID, true)
 		wsm.handleTaskResult(messagePayload, fn)
@@ -148,6 +151,24 @@ func (wsm *WebSocketManager) handleInterimTaskResult(message TaskResult, fn Serv
 		Str("ServiceID", message.ServiceID).
 		Str("TaskID", message.TaskID).
 		Msg("Received interim task result")
+}
+
+func (wsm *WebSocketManager) handleAbortTaskResult(message TaskResult, fn ServiceFinder) {
+	service, err := fn(message.ServiceID)
+	if err != nil {
+		wsm.logger.Error().
+			Err(err).
+			Str("serviceID", message.ServiceID).
+			Msg("Failed to get service when handling abort task result")
+		return
+	}
+
+	service.IdempotencyStore.TrackAbortResult(message.IdempotencyKey, message.Result)
+	wsm.logger.Debug().
+		Str("IdempotencyKey", string(message.IdempotencyKey)).
+		Str("ServiceID", message.ServiceID).
+		Str("TaskID", message.TaskID).
+		Msg("Received abort task result")
 }
 
 func (wsm *WebSocketManager) handleTaskResult(message TaskResult, fn ServiceFinder) {

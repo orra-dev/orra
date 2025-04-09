@@ -21,6 +21,7 @@ const (
 	ExecutionPaused
 	ExecutionCompleted
 	ExecutionFailed
+	ExecutionAborted
 )
 
 const (
@@ -44,6 +45,7 @@ type Execution struct {
 	Result         json.RawMessage   `json:"result,omitempty"`
 	Failures       []error           `json:"error,omitempty"`
 	InterimResults []json.RawMessage `json:"interimResults,omitempty"`
+	AbortResult    json.RawMessage   `json:"abortResult,omitempty"`
 	State          ExecutionState    `json:"state"`
 	Timestamp      time.Time         `json:"timestamp"`
 	StartedAt      time.Time         `json:"startedAt"`
@@ -84,7 +86,7 @@ func (s *IdempotencyStore) InitializeOrGetExecution(key IdempotencyKey, executio
 
 	if execution, exists := s.executions[key]; exists {
 		switch execution.State {
-		case ExecutionCompleted, ExecutionFailed:
+		case ExecutionCompleted, ExecutionFailed, ExecutionAborted:
 			return execution, false, nil
 
 		case ExecutionPaused:
@@ -193,6 +195,18 @@ func (s *IdempotencyStore) TrackInterimResult(key IdempotencyKey, interimResult 
 		execution.Timestamp = time.Now().UTC()
 		// Extend the lease to prevent timeout during long-running tasks
 		execution.LeaseExpiry = time.Now().UTC().Add(defaultLeaseDuration)
+	}
+}
+
+func (s *IdempotencyStore) TrackAbortResult(key IdempotencyKey, abortResult json.RawMessage) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if execution, exists := s.executions[key]; exists &&
+		execution.State == ExecutionInProgress {
+		execution.State = ExecutionAborted
+		execution.AbortResult = abortResult
+		execution.Timestamp = time.Now().UTC()
 	}
 }
 
