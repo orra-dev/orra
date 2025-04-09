@@ -215,6 +215,7 @@ const (
 	Paused
 	Cancelled
 	Continue
+	Aborted
 )
 
 func (s Status) String() string {
@@ -241,6 +242,8 @@ func (s Status) String() string {
 		return "cancelled"
 	case Continue:
 		return "continue"
+	case Aborted:
+		return "aborted"
 	default:
 		return ""
 	}
@@ -278,6 +281,8 @@ func (s *Status) UnmarshalJSON(data []byte) error {
 		*s = Cancelled
 	case "continue":
 		*s = Continue
+	case "aborted":
+		*s = Aborted
 	default:
 		return fmt.Errorf("invalid Status: %s", s)
 	}
