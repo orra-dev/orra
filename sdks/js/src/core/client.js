@@ -6,6 +6,7 @@
 
 import DefaultWebSocket from 'ws';
 import { OrraLogger } from './logger.js';
+import { TaskAbortedError } from './errors.js'
 
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -196,24 +197,8 @@ class OrraSDK {
 					task: abortData
 				};
 				
-				// Remove the task from in-progress tasks to clean up state
-				if (this.#inProgressTasks.has(idempotencyKey)) {
-					this.logger.trace('Removing aborted task from in-progress tasks', {
-						taskId,
-						executionId,
-						idempotencyKey
-					});
-					this.#inProgressTasks.delete(idempotencyKey);
-					
-					// Optionally: Add to processed tasks cache with abort status
-					this.#processedTasksCache.set(idempotencyKey, {
-						result: { task: abortData, status: 'aborted' },
-						timestamp: Date.now()
-					});
-				}
-				
 				this.#sendAbortTaskResult(taskId, executionId, this.serviceId, idempotencyKey, payload);
-				resolve();
+				resolve(abortData);
 			} catch (error) {
 				this.logger.error('Failed to abort', {
 					taskId,
@@ -436,7 +421,10 @@ class OrraSDK {
 		};
 		
 		task.abort = (abortData) => {
-			return this.abort(taskId, executionId, idempotencyKey, abortData);
+			return this.abort(taskId, executionId, idempotencyKey, abortData).then(abortData => {
+				// Throw the error here to terminate the handler
+				throw new TaskAbortedError(abortData);
+			});
 		}
 		
 		this.logger.trace('Task handling initiated', {
@@ -463,7 +451,11 @@ class OrraSDK {
 		});
 		
 		const processedResult = this.#processedTasksCache.get(idempotencyKey);
-		if (processedResult && processedResult?.status !== 'aborted') {
+		if (processedResult && processedResult?.status === 'aborted') {
+			return;
+		}
+		
+		if (processedResult) {
 			this.logger.debug('Cache hit found', {
 				taskId,
 				idempotencyKey,
@@ -544,18 +536,34 @@ class OrraSDK {
 				this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, result);
 			})
 			.catch((error) => {
-				const processingTime = Date.now() - startTime;
-				this.logger.trace('Task processing failed', {
-					taskId,
-					executionId,
-					idempotencyKey,
-					processingTimeMs: processingTime,
-					errorType: error.constructor.name,
-					errorMessage: error.message,
-					stackTrace: error.stack
-				});
-				this.#inProgressTasks.delete(idempotencyKey);
-				this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, null, error.message);
+				if (error instanceof TaskAbortedError) {
+					// Handle task abortion - this is the single place where it's handled
+					this.logger.debug('Task execution aborted', {
+						taskId, executionId, idempotencyKey
+					});
+					
+					// Clean up in-progress task
+					this.#inProgressTasks.delete(idempotencyKey);
+					
+					// Add to processed tasks cache with abort status
+					this.#processedTasksCache.set(idempotencyKey, {
+						result: { task: error.abortData, status: 'aborted' },
+						timestamp: Date.now()
+					});
+				}else{
+					const processingTime = Date.now() - startTime;
+					this.logger.trace('Task processing failed', {
+						taskId,
+						executionId,
+						idempotencyKey,
+						processingTimeMs: processingTime,
+						errorType: error.constructor.name,
+						errorMessage: error.message,
+						stackTrace: error.stack
+					});
+					this.#inProgressTasks.delete(idempotencyKey);
+					this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, null, error.message);
+				}
 			});
 	}
 	
