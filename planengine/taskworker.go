@@ -289,7 +289,7 @@ func (w *TaskWorker) executeTaskWithRetry(ctx context.Context, orchestrationID s
 	})
 
 	if err != nil {
-		return nil, 0, err
+		return nil, Failed, err
 	}
 
 	return result, executionStatus, nil
@@ -477,7 +477,7 @@ func (w *TaskWorker) tryExecute(ctx context.Context, orchestrationID string) (js
 	// Initialize or get existing execution
 	result, isNewExecution, err := w.Service.IdempotencyStore.InitializeOrGetExecution(idempotencyKey, executionID)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to initialize execution: %w", err)
+		return nil, Failed, fmt.Errorf("failed to initialize execution: %w", err)
 	}
 
 	logger := w.LogManager.Logger.With().
@@ -533,7 +533,7 @@ func (w *TaskWorker) tryExecute(ctx context.Context, orchestrationID string) (js
 func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string, key IdempotencyKey, executionID string) (json.RawMessage, Status, error) {
 	input, err := mergeValueMapsToJson(w.logState.DependencyState, w.Dependencies)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to marshal input: %w", err)
+		return nil, Failed, fmt.Errorf("failed to marshal input: %w", err)
 	}
 
 	logger := w.LogManager.Logger.
@@ -572,7 +572,7 @@ func (w *TaskWorker) executeTask(ctx context.Context, orchestrationID string, ke
 
 		// Pause execution before returning error
 		w.Service.IdempotencyStore.PauseExecution(key)
-		return nil, 0, RetryableError{Err: fmt.Errorf("failed to send task: %w", err)}
+		return nil, Failed, RetryableError{Err: fmt.Errorf("failed to send task: %w", err)}
 	}
 
 	if err := w.LogManager.AppendTaskStatusEvent(
