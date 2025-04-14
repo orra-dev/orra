@@ -236,6 +236,7 @@ func (s *IdempotencyStore) GetExecutionWithResult(key IdempotencyKey) (*Executio
 			ExecutionID: result.ExecutionID,
 			Result:      result.Result,
 			Failures:    result.Failures,
+			AbortResult: result.AbortResult,
 			State:       result.State,
 			Timestamp:   result.Timestamp,
 			StartedAt:   result.StartedAt,
