@@ -196,6 +196,22 @@ class OrraSDK {
 					task: abortData
 				};
 				
+				// Remove the task from in-progress tasks to clean up state
+				if (this.#inProgressTasks.has(idempotencyKey)) {
+					this.logger.trace('Removing aborted task from in-progress tasks', {
+						taskId,
+						executionId,
+						idempotencyKey
+					});
+					this.#inProgressTasks.delete(idempotencyKey);
+					
+					// Optionally: Add to processed tasks cache with abort status
+					this.#processedTasksCache.set(idempotencyKey, {
+						result: { task: abortData, status: 'aborted' },
+						timestamp: Date.now()
+					});
+				}
+				
 				this.#sendAbortTaskResult(taskId, executionId, this.serviceId, idempotencyKey, payload);
 				resolve();
 			} catch (error) {
@@ -447,7 +463,7 @@ class OrraSDK {
 		});
 		
 		const processedResult = this.#processedTasksCache.get(idempotencyKey);
-		if (processedResult) {
+		if (processedResult && processedResult?.status !== 'aborted') {
 			this.logger.debug('Cache hit found', {
 				taskId,
 				idempotencyKey,
