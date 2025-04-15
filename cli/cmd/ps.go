@@ -25,6 +25,7 @@ const (
 	symbolFailed        = "✕ " // Cross for failed
 	symbolNotActionable = "⊘ " // Prohibited circle for not actionable
 	symbolPaused        = "⏸ " // Pause icon for paused
+	symbolAborted       = "⊟ " // Crossed box for aborted
 )
 
 func newPsCmd(opts *CliOpts) *cobra.Command {
@@ -181,6 +182,8 @@ func formatStatus(status string) string {
 		return symbolFailed + status
 	case "not actionable":
 		return symbolNotActionable + status
+	case "aborted":
+		return symbolAborted + status
 	default:
 		return "  " + status // Double space to align with other symbols
 	}
