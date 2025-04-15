@@ -77,7 +77,7 @@ example_dirs=(
   "ecommerce-agent-app/chat-ui"
   "ecommerce-agent-app/customer-svc"
   "ecommerce-agent-app/delivery-agent"
-  "ecommerce-agent-app/inventory-svc"
+  "ecommerce-agent-app/inventory-mgr"
   "crewai-ghostwriters"
 )
 
