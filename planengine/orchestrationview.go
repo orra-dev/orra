@@ -38,6 +38,7 @@ type OrchestrationListView struct {
 	Completed     []OrchestrationView `json:"completed,omitempty"`
 	Failed        []OrchestrationView `json:"failed,omitempty"`
 	NotActionable []OrchestrationView `json:"notActionable,omitempty"`
+	Aborted       []OrchestrationView `json:"aborted,omitempty"`
 }
 
 type OrchestrationInspectResponse struct {
@@ -114,7 +115,7 @@ func (p *PlanEngine) GetOrchestrationList(projectID string) OrchestrationListVie
 			Timestamp: o.Timestamp,
 		}
 
-		if o.Status == Failed {
+		if o.Status == Failed || o.Status == Aborted {
 			if log := p.LogManager.GetLog(o.ID); log != nil {
 				entries := log.ReadFrom(0)
 				view.Compensation = p.processCompensationSummary(entries, o.Plan)
@@ -137,6 +138,7 @@ func (p *PlanEngine) GetOrchestrationList(projectID string) OrchestrationListVie
 		Completed:     grouped[Completed],
 		Failed:        grouped[Failed],
 		NotActionable: grouped[NotActionable],
+		Aborted:       grouped[Aborted],
 	}
 }
 

@@ -112,6 +112,7 @@ type OrchestrationListView struct {
 	Completed     []OrchestrationView `json:"completed,omitempty"`
 	Failed        []OrchestrationView `json:"failed,omitempty"`
 	NotActionable []OrchestrationView `json:"notActionable,omitempty"`
+	Aborted       []OrchestrationView `json:"aborted,omitempty"`
 }
 
 // OrchestrationInspectResponse represents the detailed inspection view of an orchestration
@@ -485,5 +486,6 @@ func (v OrchestrationListView) Empty() bool {
 		len(v.Processing) == 0 &&
 		len(v.Completed) == 0 &&
 		len(v.Failed) == 0 &&
-		len(v.NotActionable) == 0
+		len(v.NotActionable) == 0 &&
+		len(v.Aborted) == 0
 }
