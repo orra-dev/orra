@@ -112,6 +112,10 @@ func (lm *LogManager) MarkTaskCompleted(orchestrationID, taskID string, timestam
 	return lm.MarkTask(orchestrationID, taskID, Completed, timestamp)
 }
 
+func (lm *LogManager) MarkTaskAborted(orchestrationID, taskID string, timestamp time.Time) error {
+	return lm.MarkTask(orchestrationID, taskID, Aborted, timestamp)
+}
+
 func (lm *LogManager) MarkTask(orchestrationID, taskID string, s Status, timestamp time.Time) error {
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
