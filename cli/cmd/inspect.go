@@ -212,6 +212,8 @@ func getStatusSuffix(status api.Status) string {
 		return "[FAILED]"
 	case "not_actionable":
 		return "[NOT ACTIONABLE]"
+	case "aborted":
+		return "[ABORTED]"
 	default:
 		return ""
 	}
