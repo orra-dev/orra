@@ -370,7 +370,7 @@ func (w *TaskWorker) processAbortedTaskResult(orchestrationID string, output jso
 	w.LogManager.Logger.Trace().Str("OrchestrationID", orchestrationID).
 		Str("TaskID", w.TaskID).
 		Str("Service", w.Service.Name).
-		Interface("InterimResultPayload", resultPayload).
+		Interface("AbortedResultPayload", resultPayload).
 		Msg("Appended aborted task result payload to Log")
 
 	return nil
