@@ -41,12 +41,28 @@ type OrchestrationListView struct {
 	Aborted       []OrchestrationView `json:"aborted,omitempty"`
 }
 
+type LogEntriesResult struct {
+	TaskOutputs    map[string]json.RawMessage
+	TaskStatuses   map[string][]TaskStatusEvent
+	InterimResults map[string][]TaskInterimResult
+	AbortPayloads  map[string]json.RawMessage // Explicit map for abort payloads
+}
+
+// AbortInfo contains information about an aborted orchestration
+type AbortInfo struct {
+	TaskID      string          `json:"taskId"`
+	ServiceID   string          `json:"serviceId"`
+	ServiceName string          `json:"serviceName"`
+	Payload     json.RawMessage `json:"payload,omitempty"`
+}
+
 type OrchestrationInspectResponse struct {
 	ID        string                `json:"id"`
 	Status    Status                `json:"status"`
 	Action    string                `json:"action"`
 	Timestamp time.Time             `json:"timestamp"`
 	Error     json.RawMessage       `json:"error,omitempty"`
+	AbortInfo *AbortInfo            `json:"abortInfo,omitempty"` // Added abort info
 	Tasks     []TaskInspectResponse `json:"tasks,omitempty"`
 	Results   []json.RawMessage     `json:"results,omitempty"`
 	Duration  time.Duration         `json:"duration"` // Time since orchestration started
@@ -60,6 +76,7 @@ type TaskInspectResponse struct {
 	StatusHistory       []TaskStatusEvent         `json:"statusHistory"`
 	Input               json.RawMessage           `json:"input,omitempty"`
 	Output              json.RawMessage           `json:"output,omitempty"`
+	AbortPayload        json.RawMessage           `json:"abortPayload,omitempty"` // Added abort payload
 	Error               string                    `json:"error,omitempty"`
 	Duration            time.Duration             `json:"duration"` // Time between first Processing and last status
 	InterimResults      []TaskInterimResult       `json:"interimResults,omitempty"`
@@ -96,6 +113,7 @@ type taskLookupMaps struct {
 	taskOutputs        map[string]json.RawMessage
 	taskStatuses       map[string][]TaskStatusEvent
 	taskInterimResults map[string][]TaskInterimResult
+	abortPayloads      map[string]json.RawMessage // Added explicit map for abort payloads
 }
 
 type task0Values map[string]interface{}
@@ -274,8 +292,8 @@ func (p *PlanEngine) InspectOrchestration(orchestrationID string) (*Orchestratio
 		return nil, err
 	}
 
-	// Build task responses
-	tasks, err := p.buildTaskResponses(orchestration, lookupMaps)
+	// Build task responses and get abort info if any
+	tasks, abortInfo, err := p.buildTaskResponses(orchestration, lookupMaps)
 	if err != nil {
 		return nil, err
 	}
@@ -283,6 +301,7 @@ func (p *PlanEngine) InspectOrchestration(orchestrationID string) (*Orchestratio
 	p.Logger.Trace().
 		Str("OrchestrationID", orchestrationID).
 		Interface("Tasks", tasks).
+		Interface("AbortInfo", abortInfo).
 		Msg("task responses")
 
 	// Construct final response
@@ -292,6 +311,7 @@ func (p *PlanEngine) InspectOrchestration(orchestrationID string) (*Orchestratio
 		Action:    orchestration.Action.Content,
 		Timestamp: orchestration.Timestamp,
 		Error:     orchestration.Error,
+		AbortInfo: abortInfo,
 		Tasks:     tasks,
 		Duration:  time.Since(orchestration.Timestamp),
 		Results:   orchestration.Results,
@@ -322,14 +342,15 @@ func (p *PlanEngine) buildLookupMaps(orchestrationID string, orchestration *Orch
 		return nil, fmt.Errorf("log not found for orchestration %s", orchestrationID)
 	}
 
-	// Process log entries to build output and status maps
-	taskOutputs, taskStatuses, taskInterimResults := p.processLogEntries(log)
+	// Process log entries to build all data maps
+	logEntries := p.processLogEntries(log)
 
 	return &taskLookupMaps{
 		serviceNames:       serviceNames,
-		taskOutputs:        taskOutputs,
-		taskStatuses:       taskStatuses,
-		taskInterimResults: taskInterimResults,
+		taskOutputs:        logEntries.TaskOutputs,
+		taskStatuses:       logEntries.TaskStatuses,
+		taskInterimResults: logEntries.InterimResults,
+		abortPayloads:      logEntries.AbortPayloads,
 	}, nil
 }
 
@@ -346,25 +367,40 @@ func (p *PlanEngine) getServiceNames(orchestration *Orchestration) (map[string]s
 	return serviceNames, nil
 }
 
-func (p *PlanEngine) processLogEntries(log *Log) (map[string]json.RawMessage, map[string][]TaskStatusEvent, map[string][]TaskInterimResult) {
-	taskOutputs := make(map[string]json.RawMessage)
-	taskStatuses := make(map[string][]TaskStatusEvent)
-	interimResults := make(map[string][]TaskInterimResult)
+func (p *PlanEngine) processLogEntries(log *Log) LogEntriesResult {
+	result := LogEntriesResult{
+		TaskOutputs:    make(map[string]json.RawMessage),
+		TaskStatuses:   make(map[string][]TaskStatusEvent),
+		InterimResults: make(map[string][]TaskInterimResult),
+		AbortPayloads:  make(map[string]json.RawMessage),
+	}
 
 	entries := log.ReadFrom(0)
 	p.Logger.Trace().Interface("Log Entries", entries).Msg("processing log entries for orchestration inspection")
 	for _, entry := range entries {
 		switch entry.GetEntryType() {
 		case "task_output":
-			taskOutputs[entry.GetID()] = entry.GetValue()
+			result.TaskOutputs[entry.GetID()] = entry.GetValue()
 		case "task_status":
-			processStatusEntry(entry, taskStatuses, p.Logger)
+			processStatusEntry(entry, result.TaskStatuses, p.Logger)
 		case "task_interim_output":
-			processTaskInterimResultEntry(entry, interimResults)
+			processTaskInterimResultEntry(entry, result.InterimResults)
+		case "task_aborted_output":
+			// Extract the task ID from the entry ID format
+			// Format: "aborted_taskid_short"
+			parts := strings.Split(entry.GetID(), "_")
+			if len(parts) >= 2 {
+				taskID := parts[1]
+				result.AbortPayloads[taskID] = entry.GetValue()
+				p.Logger.Trace().
+					Str("taskID", taskID).
+					RawJSON("abortPayload", entry.GetValue()).
+					Msg("Found abort payload for task")
+			}
 		}
 	}
 
-	return taskOutputs, taskStatuses, interimResults
+	return result
 }
 
 func processTaskInterimResultEntry(entry LogEntry, interimOutput map[string][]TaskInterimResult) {
@@ -438,8 +474,9 @@ func insertStatusEvent(events []TaskStatusEvent, event TaskStatusEvent, idx int)
 	)...)
 }
 
-func (p *PlanEngine) buildTaskResponses(orchestration *Orchestration, lookupMaps *taskLookupMaps) ([]TaskInspectResponse, error) {
+func (p *PlanEngine) buildTaskResponses(orchestration *Orchestration, lookupMaps *taskLookupMaps) ([]TaskInspectResponse, *AbortInfo, error) {
 	var tasks []TaskInspectResponse
+	var abortInfo *AbortInfo
 
 	for _, task := range orchestration.Plan.Tasks {
 		if task.ID == "task0" {
@@ -448,13 +485,23 @@ func (p *PlanEngine) buildTaskResponses(orchestration *Orchestration, lookupMaps
 
 		taskResp, err := p.buildSingleTaskResponse(orchestration, task, lookupMaps)
 		if err != nil {
-			return nil, fmt.Errorf("error building response for task %s: %w", task.ID, err)
+			return nil, nil, fmt.Errorf("error building response for task %s: %w", task.ID, err)
+		}
+
+		// If task was aborted and has abort payload, populate AbortInfo
+		if taskResp.Status == Aborted && taskResp.AbortPayload != nil {
+			abortInfo = &AbortInfo{
+				TaskID:      taskResp.ID,
+				ServiceID:   taskResp.ServiceID,
+				ServiceName: taskResp.ServiceName,
+				Payload:     taskResp.AbortPayload,
+			}
 		}
 
 		tasks = append(tasks, taskResp)
 	}
 
-	return tasks, nil
+	return tasks, abortInfo, nil
 }
 
 func (p *PlanEngine) buildSingleTaskResponse(
@@ -513,6 +560,11 @@ func (p *PlanEngine) buildSingleTaskResponse(
 	// Add output if available
 	if output, ok := lookupMaps.taskOutputs[task.ID]; ok {
 		taskResp.Output = output
+	}
+
+	// Add abort payload if available - now using the explicit map
+	if abortOutput, ok := lookupMaps.abortPayloads[task.ID]; ok && finalStatus == Aborted {
+		taskResp.AbortPayload = abortOutput
 	}
 
 	// Set error if present in last status
