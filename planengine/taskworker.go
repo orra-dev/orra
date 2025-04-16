@@ -356,7 +356,7 @@ func (w *TaskWorker) processAbortedTaskResult(orchestrationID string, output jso
 	}
 
 	// Log the aborted output but don't mark as complete
-	abortedID := fmt.Sprintf("task_aborted_%s_%s", strings.ToLower(w.TaskID), short.New())
+	abortedID := fmt.Sprintf("aborted_%s_%s", strings.ToLower(w.TaskID), short.New())
 
 	w.LogManager.AppendToLog(
 		orchestrationID,
