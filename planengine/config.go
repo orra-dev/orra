@@ -83,13 +83,13 @@ var (
 
 type LLMConfig struct {
 	Model      string `envconfig:"default=o1-mini"`
-	ApiKey     string
+	ApiKey     string `envconfig:"optional"`
 	ApiBaseURL string `envconfig:"default=https://api.openai.com/v1"`
 }
 
 type EmbeddingsConfig struct {
 	Model      string `envconfig:"default=text-embedding-3-small"`
-	ApiKey     string
+	ApiKey     string `envconfig:"optional"`
 	ApiBaseURL string `envconfig:"default=https://api.openai.com/v1"`
 }
 
