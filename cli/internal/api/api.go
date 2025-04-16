@@ -115,6 +115,14 @@ type OrchestrationListView struct {
 	Aborted       []OrchestrationView `json:"aborted,omitempty"`
 }
 
+// AbortInfo contains information about an aborted orchestration
+type AbortInfo struct {
+	TaskID      string          `json:"taskId"`
+	ServiceID   string          `json:"serviceId"`
+	ServiceName string          `json:"serviceName"`
+	Payload     json.RawMessage `json:"payload,omitempty"`
+}
+
 // OrchestrationInspectResponse represents the detailed inspection view of an orchestration
 type OrchestrationInspectResponse struct {
 	ID        string                `json:"id"`
@@ -122,6 +130,7 @@ type OrchestrationInspectResponse struct {
 	Action    string                `json:"action"`
 	Timestamp time.Time             `json:"timestamp"`
 	Error     json.RawMessage       `json:"error,omitempty"`
+	AbortInfo *AbortInfo            `json:"abortInfo,omitempty"`
 	Tasks     []TaskInspectResponse `json:"tasks,omitempty"`
 	Results   []json.RawMessage     `json:"results,omitempty"`
 	Duration  time.Duration         `json:"duration"`
@@ -136,6 +145,7 @@ type TaskInspectResponse struct {
 	StatusHistory       []TaskStatusEvent         `json:"statusHistory"`
 	Input               json.RawMessage           `json:"input,omitempty"`
 	Output              json.RawMessage           `json:"output,omitempty"`
+	AbortPayload        json.RawMessage           `json:"abortPayload,omitempty"`
 	Error               string                    `json:"error,omitempty"`
 	Duration            time.Duration             `json:"duration"`
 	InterimResults      []InterimTaskResult       `json:"interimResults,omitempty"`

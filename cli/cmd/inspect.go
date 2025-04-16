@@ -11,8 +11,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/ezodude/orra/cli/internal/api"
 	"github.com/ezodude/orra/cli/internal/config"
@@ -60,6 +62,48 @@ func newInspectCmd(opts *CliOpts) *cobra.Command {
 				fmt.Printf("│ Error:   %s\n", string(inspection.Error))
 			}
 			fmt.Printf("└─────\n")
+
+			// Add Abort Information section if this is an aborted orchestration
+			if inspection.Status == "aborted" {
+				fmt.Printf("\n┌─ Abort Information\n")
+
+				if inspection.AbortInfo != nil {
+					fmt.Printf("│ Task:      %s\n", inspection.AbortInfo.TaskID)
+					fmt.Printf("│ Service:   %s\n", inspection.AbortInfo.ServiceName)
+
+					// Format all fields in the abort payload
+					if inspection.AbortInfo.Payload != nil {
+						fields := formatAbortPayload(inspection.AbortInfo.Payload)
+						if len(fields) > 0 {
+							for _, field := range fields {
+								// Format field name with first letter capitalized
+								fmt.Printf("│ %-10s %s\n", capitalizeFirst(field.Key)+":", field.Value)
+							}
+						} else {
+							fmt.Printf("│ Payload:   %s\n", string(inspection.AbortInfo.Payload))
+						}
+					}
+				} else {
+					// Handle case where orchestration was aborted but no AbortInfo is available
+					// Find the aborted task
+					var abortedTask *api.TaskInspectResponse
+					for i := range inspection.Tasks {
+						if inspection.Tasks[i].Status == "aborted" {
+							abortedTask = &inspection.Tasks[i]
+							break
+						}
+					}
+
+					if abortedTask != nil {
+						fmt.Printf("│ Task:      %s\n", abortedTask.ID)
+						fmt.Printf("│ Service:   %s\n", abortedTask.ServiceName)
+						fmt.Printf("│ Details:   No additional information available\n")
+					} else {
+						fmt.Printf("│ Details:   No information available about the abort\n")
+					}
+				}
+				fmt.Printf("└─────\n")
+			}
 
 			// Tasks Table
 			if len(inspection.Tasks) > 0 {
@@ -172,6 +216,12 @@ func newInspectCmd(opts *CliOpts) *cobra.Command {
 						printJSONWithPrefix(task.Output, "│   ")
 					}
 
+					// Display Abort Payload if task was aborted
+					if task.Status == "aborted" && task.AbortPayload != nil {
+						fmt.Printf("│\n│ Abort Payload:\n")
+						printJSONWithPrefix(task.AbortPayload, "│   ")
+					}
+
 					// Add spacing between tasks
 					if i < len(inspection.Tasks)-1 {
 						fmt.Printf("│\n│ %s\n", strings.Repeat("· ", 25))
@@ -217,6 +267,81 @@ func getStatusSuffix(status api.Status) string {
 	default:
 		return ""
 	}
+}
+
+// capitalizeFirst capitalizes the first letter of a string
+func capitalizeFirst(s string) string {
+	if s == "" {
+		return ""
+	}
+	r := []rune(s)
+	r[0] = unicode.ToUpper(r[0])
+	return string(r)
+}
+
+// formatAbortPayload formats the abort payload for display in the CLI
+// It extracts all fields and returns them sorted alphabetically
+func formatAbortPayload(payload json.RawMessage) []struct {
+	Key   string
+	Value string
+} {
+	if payload == nil {
+		return nil
+	}
+
+	var data map[string]interface{}
+	if err := json.Unmarshal(payload, &data); err != nil {
+		return nil
+	}
+
+	// Extract all fields as strings
+	var fields []struct {
+		Key   string
+		Value string
+	}
+
+	for k, v := range data {
+		// Convert value to string representation
+		var strValue string
+		switch val := v.(type) {
+		case string:
+			strValue = val
+		case bool:
+			strValue = fmt.Sprintf("%t", val)
+		case float64:
+			// If it's an integer, format without decimal
+			if val == float64(int(val)) {
+				strValue = fmt.Sprintf("%d", int(val))
+			} else {
+				strValue = fmt.Sprintf("%g", val)
+			}
+		case nil:
+			strValue = "<nil>"
+		default:
+			// For complex types, use JSON representation
+			rawJSON, err := json.Marshal(val)
+			if err != nil {
+				strValue = fmt.Sprintf("%v", val)
+			} else {
+				strValue = string(rawJSON)
+			}
+		}
+
+		fields = append(fields, struct {
+			Key   string
+			Value string
+		}{
+			Key:   k,
+			Value: strValue,
+		})
+	}
+
+	// Sort alphabetically by key
+	sort.Slice(fields, func(i, j int) bool {
+		return fields[i].Key < fields[j].Key
+	})
+
+	return fields
 }
 
 func printJSONWithPrefix(data json.RawMessage, prefix string) {
