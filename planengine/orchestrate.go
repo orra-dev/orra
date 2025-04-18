@@ -356,7 +356,7 @@ func (p *PlanEngine) FinalizeOrchestration(
 	status Status,
 	reason json.RawMessage,
 	results []json.RawMessage,
-	abortData json.RawMessage,
+	abortPayload json.RawMessage,
 	skipWebhook bool,
 ) error {
 	p.orchestrationStoreMu.Lock()
@@ -371,7 +371,7 @@ func (p *PlanEngine) FinalizeOrchestration(
 	orchestration.Timestamp = time.Now().UTC()
 	orchestration.Error = reason
 	orchestration.Results = results
-	orchestration.AbortData = abortData
+	orchestration.AbortPayload = abortPayload
 
 	// Persist updated state
 	if err := p.orchestrationStorage.StoreOrchestration(orchestration); err != nil {
@@ -910,7 +910,7 @@ func (p *PlanEngine) triggerWebhook(orchestration *Orchestration) error {
 		Results:         orchestration.Results,
 		Status:          orchestration.Status,
 		Error:           orchestration.Error,
-		AbortedData:     orchestration.AbortData,
+		AbortedData:     orchestration.AbortPayload,
 	}
 
 	jsonPayload, err := json.Marshal(payload)

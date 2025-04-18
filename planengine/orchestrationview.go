@@ -563,8 +563,8 @@ func (p *PlanEngine) buildSingleTaskResponse(
 	}
 
 	// Add abort payload if available - now using the explicit map
-	if abortOutput, ok := lookupMaps.abortPayloads[task.ID]; ok && finalStatus == Aborted {
-		taskResp.AbortPayload = abortOutput
+	if abortPayload, ok := lookupMaps.abortPayloads[task.ID]; ok && finalStatus == Aborted {
+		taskResp.AbortPayload = abortPayload
 	}
 
 	// Set error if present in last status

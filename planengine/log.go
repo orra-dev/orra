@@ -388,7 +388,7 @@ func (lm *LogManager) AppendCompensationFailure(
 func (lm *LogManager) FinalizeOrchestration(
 	orchestrationID string,
 	status Status,
-	reason, result, abortData json.RawMessage,
+	reason, result, abortPayload json.RawMessage,
 	skipWebhook bool,
 ) error {
 	if err := lm.planEngine.FinalizeOrchestration(
@@ -396,7 +396,7 @@ func (lm *LogManager) FinalizeOrchestration(
 		status,
 		reason,
 		[]json.RawMessage{result},
-		abortData,
+		abortPayload,
 		skipWebhook,
 	); err != nil {
 		return fmt.Errorf("failed to finalize orchestration: %w", err)
