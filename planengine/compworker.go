@@ -82,10 +82,10 @@ func (w *CompensationWorker) Start(ctx context.Context, orchestrationID string) 
 					Err(err).
 					Msg("Failed to log compensation failure")
 			}
-			webhooks := w.getProjectCompensationWebhooks(w.ProjectID)
+			webhooks := w.getProjectCompensationFailureWebhooks(w.ProjectID)
 			if len(webhooks) > 0 {
 				// Create a simple webhook payload
-				payload := CompensationWebhookPayload{
+				payload := CompensationFailureWebhookPayload{
 					OrchestrationID: orchestrationID,
 					TaskID:          candidate.TaskID,
 					ServiceID:       candidate.Service.ID,
@@ -356,15 +356,15 @@ func (w *CompensationWorker) waitForCompensationResult(
 	}
 }
 
-func (w *CompensationWorker) getProjectCompensationWebhooks(projectID string) []string {
+func (w *CompensationWorker) getProjectCompensationFailureWebhooks(projectID string) []string {
 	if project, exists := w.LogManager.planEngine.projects[projectID]; exists {
-		return project.CompensationWebhooks
+		return project.CompensationFailureWebhooks
 	}
 	return nil
 }
 
 // sendWebhookNotification sends the webhook payload to a single webhook endpoint
-func (w *CompensationWorker) sendWebhookNotification(webhookURL string, payload CompensationWebhookPayload) {
+func (w *CompensationWorker) sendWebhookNotification(webhookURL string, payload CompensationFailureWebhookPayload) {
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
 		w.LogManager.Logger.Error().

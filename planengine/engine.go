@@ -471,14 +471,14 @@ func (p *PlanEngine) AddProjectWebhook(projectID string, webhookUrl string) erro
 	return nil
 }
 
-func (p *PlanEngine) AddProjectCompensationWebhook(projectID string, webhookUrl string) error {
-	if err := p.pStorage.AddProjectCompensationWebhook(projectID, webhookUrl); err != nil {
+func (p *PlanEngine) AddProjectCompensationFailureWebhook(projectID string, webhookUrl string) error {
+	if err := p.pStorage.AddProjectCompensationFailureWebhook(projectID, webhookUrl); err != nil {
 		return fmt.Errorf("failed to add compensation webhook: %w", err)
 	}
 
 	// Update in-memory state
 	if project, exists := p.projects[projectID]; exists {
-		project.CompensationWebhooks = append(project.CompensationWebhooks, webhookUrl)
+		project.CompensationFailureWebhooks = append(project.CompensationFailureWebhooks, webhookUrl)
 	}
 
 	return nil

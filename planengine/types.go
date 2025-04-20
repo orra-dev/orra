@@ -81,19 +81,19 @@ type ProjectStorage interface {
 	// AddProjectWebhook adds a new webhook URL to a project
 	AddProjectWebhook(projectID string, webhook string) error
 
-	// AddProjectCompensationWebhook adds a new compensation webhook URL to a project
-	AddProjectCompensationWebhook(projectID string, webhook string) error
+	// AddProjectCompensationFailureWebhook adds a new compensation webhook URL to a project
+	AddProjectCompensationFailureWebhook(projectID string, webhook string) error
 }
 
 type Project struct {
-	ID                   string    `json:"id"`
-	Name                 string    `json:"name"`
-	APIKey               string    `json:"apiKey"`
-	AdditionalAPIKeys    []string  `json:"additionalAPIKeys"`
-	Webhooks             []string  `json:"webhooks"`
-	CompensationWebhooks []string  `json:"compensationWebhooks"`
-	CreatedAt            time.Time `json:"createdAt"`
-	UpdatedAt            time.Time `json:"updatedAt"`
+	ID                          string    `json:"id"`
+	Name                        string    `json:"name"`
+	APIKey                      string    `json:"apiKey"`
+	AdditionalAPIKeys           []string  `json:"additionalAPIKeys"`
+	Webhooks                    []string  `json:"webhooks"`
+	CompensationFailureWebhooks []string  `json:"compensationFailureWebhooks"`
+	CreatedAt                   time.Time `json:"createdAt"`
+	UpdatedAt                   time.Time `json:"updatedAt"`
 }
 
 type OrchestrationState struct {
@@ -455,8 +455,8 @@ type CompensationContext struct {
 	Timestamp       time.Time       `json:"timestamp"`
 }
 
-// CompensationWebhookPayload represents the data sent to compensation webhooks
-type CompensationWebhookPayload struct {
+// CompensationFailureWebhookPayload represents the data sent to compensation failure webhooks
+type CompensationFailureWebhookPayload struct {
 	OrchestrationID string               `json:"orchestrationId"`
 	TaskID          string               `json:"taskId"`
 	ServiceID       string               `json:"serviceId"`

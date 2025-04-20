@@ -186,7 +186,7 @@ func (b *BadgerDB) AddProjectWebhook(projectID string, webhook string) error {
 	})
 }
 
-func (b *BadgerDB) AddProjectCompensationWebhook(projectID string, webhook string) error {
+func (b *BadgerDB) AddProjectCompensationFailureWebhook(projectID string, webhook string) error {
 	return b.db.Update(func(txn *badger.Txn) error {
 		// First load the project
 		project, err := b.LoadProject(projectID)
@@ -195,7 +195,7 @@ func (b *BadgerDB) AddProjectCompensationWebhook(projectID string, webhook strin
 		}
 
 		// Add the new compensation webhook
-		project.CompensationWebhooks = append(project.CompensationWebhooks, webhook)
+		project.CompensationFailureWebhooks = append(project.CompensationFailureWebhooks, webhook)
 		project.UpdatedAt = time.Now().UTC()
 
 		// Store the updated project

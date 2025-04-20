@@ -53,7 +53,7 @@ func (app *App) configureRoutes() *App {
 	app.Router.HandleFunc("/register/project", app.RegisterProject).Methods(http.MethodPost)
 	app.Router.HandleFunc("/apikeys", app.APIKeyMiddleware(app.CreateAdditionalApiKey)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/webhooks", app.APIKeyMiddleware(app.AddWebhook)).Methods(http.MethodPost)
-	app.Router.HandleFunc("/compensation-webhooks", app.APIKeyMiddleware(app.AddCompensationWebhook)).Methods(http.MethodPost)
+	app.Router.HandleFunc("/compensation-failure-webhooks", app.APIKeyMiddleware(app.AddCompensationFailureWebhook)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/register/service", app.APIKeyMiddleware(app.RegisterService)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/orchestrations", app.APIKeyMiddleware(app.OrchestrationsHandler)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/orchestrations", app.APIKeyMiddleware(app.ListOrchestrationsHandler)).Methods(http.MethodGet)
@@ -357,7 +357,7 @@ func (app *App) AddWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (app *App) AddCompensationWebhook(w http.ResponseWriter, r *http.Request) {
+func (app *App) AddCompensationFailureWebhook(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Context().Value(apiKeyContextKey).(string)
 	project, err := app.Engine.GetProjectByApiKey(apiKey)
 	if err != nil {
@@ -378,7 +378,7 @@ func (app *App) AddCompensationWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := app.Engine.AddProjectCompensationWebhook(project.ID, webhook.Url); err != nil {
+	if err := app.Engine.AddProjectCompensationFailureWebhook(project.ID, webhook.Url); err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(ProjectWebhookAdditionFailedErrCode), err))
 		return
 	}
