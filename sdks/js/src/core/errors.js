@@ -5,11 +5,9 @@
  */
 
 export class TaskAbortedError extends Error {
-	constructor(abortData) {
+	constructor(abortPayload) {
 		super('Task aborted');
 		this.name = 'TaskAbortedError';
-		this.abortData = abortData;
+		this.abortPayload = abortPayload;
 	}
 }
-
-

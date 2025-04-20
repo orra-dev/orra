@@ -162,7 +162,7 @@ class OrraSDK {
 		});
 	}
 	
-	abort(taskId, executionId, idempotencyKey, abortData) {
+	abort(taskId, executionId, idempotencyKey, abortPayload) {
 		if (!taskId || !executionId || !idempotencyKey) {
 			this.logger.error('Cannot abort: taskId, executionId and idempotencyKey are all required', {
 				taskId,
@@ -194,11 +194,11 @@ class OrraSDK {
 			try {
 				// Wrap the update data in the expected format
 				const payload = {
-					task: abortData
+					task: abortPayload
 				};
 				
 				this.#sendAbortTaskResult(taskId, executionId, this.serviceId, idempotencyKey, payload);
-				resolve(abortData);
+				resolve(abortPayload);
 			} catch (error) {
 				this.logger.error('Failed to abort', {
 					taskId,
@@ -420,10 +420,10 @@ class OrraSDK {
 			return this.pushUpdate(taskId, executionId, idempotencyKey, updateData);
 		};
 		
-		task.abort = (abortData) => {
-			return this.abort(taskId, executionId, idempotencyKey, abortData).then(abortData => {
+		task.abort = (abortPayload) => {
+			return this.abort(taskId, executionId, idempotencyKey, abortPayload).then(abortPayload => {
 				// Throw the error here to terminate the handler
-				throw new TaskAbortedError(abortData);
+				throw new TaskAbortedError(abortPayload);
 			});
 		}
 		
@@ -547,7 +547,7 @@ class OrraSDK {
 					
 					// Add to processed tasks cache with abort status
 					this.#processedTasksCache.set(idempotencyKey, {
-						result: { task: error.abortData, status: 'aborted' },
+						result: { task: error.abortPayload, status: 'aborted' },
 						timestamp: Date.now()
 					});
 				}else{
