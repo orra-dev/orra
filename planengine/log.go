@@ -397,53 +397,13 @@ func (lm *LogManager) FinalizeOrchestration(orchestrationID string, status Statu
 		return fmt.Errorf("failed to finalize orchestration: %w", err)
 	}
 
-	shouldCompensate := status == Failed || status == Aborted
-	if !shouldCompensate {
+	if !shouldCompensate(status) {
 		return nil
 	}
-
-	var payload json.RawMessage
-	if status == Failed {
-		payload = reason
-	} else {
-		payload = abortPayload
-	}
-
-	compContext := &CompensationContext{
-		OrchestrationID: orchestrationID,
-		Reason:          status,
-		Payload:         payload,
-		Timestamp:       ts,
-	}
-
-	log := lm.GetLog(orchestrationID)
-	entries := log.ReadFrom(0)
-
-	var candidates []CompensationCandidate
-	for _, entry := range entries {
-		if entry.EntryType != CompensationDataStoredLogType {
-			continue
-		}
-
-		svc, err := lm.planEngine.GetServiceByID(entry.ProducerID)
-		if err != nil {
-			return err
-		}
-		if !svc.Revertible {
-			continue
-		}
-
-		taskID, _ := strings.CutPrefix(entry.Id, "comp_data_")
-		var compensation CompensationData
-		if err := json.Unmarshal(entry.GetValue(), &compensation); err != nil {
-			return err
-		}
-		compensation.Context = compContext
-		candidates = append(candidates, CompensationCandidate{
-			TaskID:       taskID,
-			Service:      svc,
-			Compensation: &compensation,
-		})
+	compContext := lm.prepareCompensationContext(orchestrationID, status, reason, abortPayload, ts)
+	candidates, err := lm.prepareCompensationCandidates(orchestrationID, compContext)
+	if err != nil {
+		return err
 	}
 
 	if len(candidates) == 0 {
@@ -465,6 +425,59 @@ func (lm *LogManager) FinalizeOrchestration(orchestrationID string, status Statu
 	lm.triggerCompensation(orchestrationID, candidates)
 
 	return nil
+}
+
+func shouldCompensate(status Status) bool {
+	return status == Failed || status == Aborted
+}
+
+func (lm *LogManager) prepareCompensationContext(orchestrationID string, status Status, reason json.RawMessage, abortPayload json.RawMessage, ts time.Time) *CompensationContext {
+	var payload json.RawMessage
+	if status == Failed {
+		payload = reason
+	} else {
+		payload = abortPayload
+	}
+
+	return &CompensationContext{
+		OrchestrationID: orchestrationID,
+		Reason:          status,
+		Payload:         payload,
+		Timestamp:       ts,
+	}
+}
+
+func (lm *LogManager) prepareCompensationCandidates(orchestrationID string, compContext *CompensationContext) ([]CompensationCandidate, error) {
+	log := lm.GetLog(orchestrationID)
+	entries := log.ReadFrom(0)
+
+	var candidates []CompensationCandidate
+	for _, entry := range entries {
+		if entry.EntryType != CompensationDataStoredLogType {
+			continue
+		}
+
+		svc, err := lm.planEngine.GetServiceByID(entry.ProducerID)
+		if err != nil {
+			return nil, err
+		}
+		if !svc.Revertible {
+			continue
+		}
+
+		taskID, _ := strings.CutPrefix(entry.Id, "comp_data_")
+		var compensation CompensationData
+		if err := json.Unmarshal(entry.GetValue(), &compensation); err != nil {
+			return nil, err
+		}
+		compensation.Context = compContext
+		candidates = append(candidates, CompensationCandidate{
+			TaskID:       taskID,
+			Service:      svc,
+			Compensation: &compensation,
+		})
+	}
+	return candidates, nil
 }
 
 func (lm *LogManager) triggerCompensation(orchestrationID string, candidates []CompensationCandidate) {
