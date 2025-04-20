@@ -86,6 +86,7 @@ func (w *CompensationWorker) Start(ctx context.Context, orchestrationID string) 
 			if len(webhooks) > 0 {
 				// Create a simple webhook payload
 				payload := CompensationFailureWebhookPayload{
+					ProjectID:       w.ProjectID,
 					OrchestrationID: orchestrationID,
 					TaskID:          candidate.TaskID,
 					ServiceID:       candidate.Service.ID,
@@ -393,6 +394,7 @@ func (w *CompensationWorker) sendWebhookNotification(webhookURL string, payload 
 		w.LogManager.Logger.Error().
 			Err(err).
 			Str("webhookURL", webhookURL).
+			Str("projectID", payload.ProjectID).
 			Msg("Failed to send compensation webhook")
 		return
 	}
@@ -404,6 +406,9 @@ func (w *CompensationWorker) sendWebhookNotification(webhookURL string, payload 
 		w.LogManager.Logger.Warn().
 			Int("statusCode", resp.StatusCode).
 			Str("webhookURL", webhookURL).
+			Str("projectID", payload.ProjectID).
+			Str("orchestrationID", payload.OrchestrationID).
+			Str("taskID", payload.TaskID).
 			Msg("Compensation webhook returned non-success status code")
 	}
 }

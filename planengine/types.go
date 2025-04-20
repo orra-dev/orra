@@ -457,6 +457,7 @@ type CompensationContext struct {
 
 // CompensationFailureWebhookPayload represents the data sent to compensation failure webhooks
 type CompensationFailureWebhookPayload struct {
+	ProjectID       string               `json:"projectId"`
 	OrchestrationID string               `json:"orchestrationId"`
 	TaskID          string               `json:"taskId"`
 	ServiceID       string               `json:"serviceId"`

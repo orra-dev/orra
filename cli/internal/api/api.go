@@ -345,6 +345,28 @@ func (c *Client) AddWebhook(ctx context.Context, webhookUrl string) (*Webhook, e
 	return &response, nil
 }
 
+func (c *Client) AddCompensationFailureWebhook(ctx context.Context, webhookUrl string) (*Webhook, error) {
+	var response Webhook
+	var apiErr ErrorResponse
+
+	err := requests.
+		URL(c.baseURL).
+		Path("/compensation-failure-webhooks").
+		Method(http.MethodPost).
+		Client(c.httpClient).
+		BodyJSON(Webhook{Url: webhookUrl}).
+		Header("Authorization", "Bearer "+c.apiKey).
+		ToJSON(&response).
+		ErrorJSON(&apiErr).
+		Fetch(ctx)
+
+	if err != nil {
+		return nil, FormatAPIError(apiErr, "compensation failure webhook")
+	}
+
+	return &response, nil
+}
+
 // ListOrchestrations retrieves all orchestrations for a project
 func (c *Client) ListOrchestrations(ctx context.Context) (*OrchestrationListView, error) {
 	var response OrchestrationListView
