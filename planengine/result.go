@@ -13,8 +13,9 @@ import (
 	"time"
 )
 
-func NewResultAggregator(dependencies DependencyKeySet, logManager *LogManager) LogWorker {
+func NewResultAggregator(projectID string, dependencies DependencyKeySet, logManager *LogManager) LogWorker {
 	return &ResultAggregator{
+		ProjectID:    projectID,
 		Dependencies: dependencies,
 		LogManager:   logManager,
 		logState: &LogState{
@@ -123,7 +124,7 @@ func (r *ResultAggregator) processEntry(entry LogEntry, orchestrationID string) 
 	completed := r.LogManager.MarkOrchestrationCompleted(orchestrationID)
 	results := r.logState.DependencyState.SortedValues()
 
-	if err := r.LogManager.FinalizeOrchestration(orchestrationID, completed, nil, results[len(results)-1], nil, entry.GetTimestamp(), false); err != nil {
+	if err := r.LogManager.FinalizeOrchestration(r.ProjectID, orchestrationID, completed, nil, results[len(results)-1], nil, entry.GetTimestamp(), false); err != nil {
 		skipWebhook := strings.Contains(err.Error(), "failed to trigger webhook")
 		return r.LogManager.AppendTaskFailureToLog(
 			orchestrationID,

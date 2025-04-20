@@ -161,12 +161,14 @@ type LogWorker interface {
 }
 
 type ResultAggregator struct {
+	ProjectID    string
 	Dependencies DependencyKeySet
 	LogManager   *LogManager
 	logState     *LogState
 }
 
 type IncidentTracker struct {
+	ProjectID  string
 	LogManager *LogManager
 	logState   *LogState
 }
@@ -477,6 +479,7 @@ type CompensationCandidate struct {
 }
 
 type CompensationWorker struct {
+	ProjectID       string
 	OrchestrationID string
 	LogManager      *LogManager
 	Candidates      []CompensationCandidate

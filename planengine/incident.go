@@ -14,8 +14,9 @@ import (
 	"time"
 )
 
-func NewIncidentTracker(logManager *LogManager) LogWorker {
+func NewIncidentTracker(projectID string, logManager *LogManager) LogWorker {
 	return &IncidentTracker{
+		ProjectID:  projectID,
 		LogManager: logManager,
 		logState: &LogState{
 			LastOffset: 0,
@@ -96,7 +97,7 @@ func (t *IncidentTracker) processEntry(entry LogEntry, orchestrationID string) e
 	switch entry.GetEntryType() {
 	case "task_aborted_output":
 		aborted := t.LogManager.MarkOrchestrationAborted(orchestrationID)
-		if err := t.LogManager.FinalizeOrchestration(orchestrationID, aborted, nil, nil, entry.GetValue(), entry.GetTimestamp(), false); err != nil {
+		if err := t.LogManager.FinalizeOrchestration(t.ProjectID, orchestrationID, aborted, nil, nil, entry.GetValue(), entry.GetTimestamp(), false); err != nil {
 			isWebHookErr := strings.Contains(err.Error(), "failed to trigger webhook")
 			return t.LogManager.AppendTaskFailureToLog(
 				orchestrationID,
@@ -131,7 +132,7 @@ func (t *IncidentTracker) processEntry(entry LogEntry, orchestrationID string) e
 
 		failed := t.LogManager.MarkOrchestrationFailed(orchestrationID, failure.Failure)
 
-		if err := t.LogManager.FinalizeOrchestration(orchestrationID, failed, reason, nil, nil, entry.GetTimestamp(), failure.SkipWebhook); err != nil {
+		if err := t.LogManager.FinalizeOrchestration(t.ProjectID, orchestrationID, failed, reason, nil, nil, entry.GetTimestamp(), failure.SkipWebhook); err != nil {
 			isWebHookErr := strings.Contains(err.Error(), "failed to trigger webhook")
 			return t.LogManager.AppendTaskFailureToLog(
 				orchestrationID,

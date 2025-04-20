@@ -359,6 +359,7 @@ func (lm *LogManager) AppendCompensationComplete(
 }
 
 func (lm *LogManager) AppendCompensationFailure(
+	id,
 	orchestrationID,
 	taskID string,
 	logType string,
@@ -373,11 +374,10 @@ func (lm *LogManager) AppendCompensationFailure(
 		return fmt.Errorf("failed to marshal compensation failure for log entry: %w", err)
 	}
 
-	failureID := fmt.Sprintf("comp_fail_%s", strings.ToLower(taskID))
 	lm.AppendToLog(
 		orchestrationID,
 		logType,
-		failureID,
+		id,
 		value,
 		taskID,
 		attemptNo,
@@ -385,7 +385,7 @@ func (lm *LogManager) AppendCompensationFailure(
 	return nil
 }
 
-func (lm *LogManager) FinalizeOrchestration(orchestrationID string, status Status, reason, result, abortPayload json.RawMessage, ts time.Time, skipWebhook bool) error {
+func (lm *LogManager) FinalizeOrchestration(projectID, orchestrationID string, status Status, reason, result, abortPayload json.RawMessage, ts time.Time, skipWebhook bool) error {
 	if err := lm.planEngine.FinalizeOrchestration(
 		orchestrationID,
 		status,
@@ -422,7 +422,7 @@ func (lm *LogManager) FinalizeOrchestration(orchestrationID string, status Statu
 		Str("OrchestrationID", orchestrationID).
 		Msg("Preparing sorted compensation candidates")
 
-	lm.triggerCompensation(orchestrationID, candidates)
+	lm.triggerCompensation(projectID, orchestrationID, candidates)
 
 	return nil
 }
@@ -480,9 +480,9 @@ func (lm *LogManager) prepareCompensationCandidates(orchestrationID string, comp
 	return candidates, nil
 }
 
-func (lm *LogManager) triggerCompensation(orchestrationID string, candidates []CompensationCandidate) {
+func (lm *LogManager) triggerCompensation(projectID string, orchestrationID string, candidates []CompensationCandidate) {
 	ctx, cancel := context.WithCancel(context.Background())
-	worker := NewCompensationWorker(orchestrationID, lm, candidates, cancel)
+	worker := NewCompensationWorker(projectID, orchestrationID, lm, candidates, cancel)
 	go worker.Start(ctx, orchestrationID)
 }
 

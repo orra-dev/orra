@@ -7,10 +7,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -24,7 +27,7 @@ const (
 	CompensationBackoffMax  = 1 * time.Minute
 )
 
-func NewCompensationWorker(orchestrationID string, logManager *LogManager, candidates []CompensationCandidate, cancel context.CancelFunc) LogWorker {
+func NewCompensationWorker(projectID, orchestrationID string, logManager *LogManager, candidates []CompensationCandidate, cancel context.CancelFunc) LogWorker {
 	expBackoff := back.NewExponentialBackOff()
 	expBackoff.InitialInterval = 2 * time.Second
 	expBackoff.MaxInterval = CompensationBackoffMax
@@ -33,6 +36,7 @@ func NewCompensationWorker(orchestrationID string, logManager *LogManager, candi
 	expBackoff.MaxElapsedTime = 0        // No max elapsed time - we'll control via attempts
 
 	return &CompensationWorker{
+		ProjectID:       projectID,
 		OrchestrationID: orchestrationID,
 		LogManager:      logManager,
 		Candidates:      candidates,
@@ -64,7 +68,10 @@ func (w *CompensationWorker) Start(ctx context.Context, orchestrationID string) 
 				Status: status,
 				Error:  err.Error(),
 			}
+
+			failureID := fmt.Sprintf("comp_fail_%s", strings.ToLower(candidate.TaskID))
 			if err := w.LogManager.AppendCompensationFailure(
+				failureID,
 				orchestrationID,
 				candidate.TaskID,
 				logType,
@@ -74,6 +81,28 @@ func (w *CompensationWorker) Start(ctx context.Context, orchestrationID string) 
 				w.LogManager.Logger.Error().
 					Err(err).
 					Msg("Failed to log compensation failure")
+			}
+			webhooks := w.getProjectCompensationWebhooks(w.ProjectID)
+			if len(webhooks) > 0 {
+				// Create a simple webhook payload
+				payload := CompensationWebhookPayload{
+					OrchestrationID: orchestrationID,
+					TaskID:          candidate.TaskID,
+					ServiceID:       candidate.Service.ID,
+					ServiceName:     candidate.Service.Name,
+					CompensationID:  failureID,
+					Status:          status,
+					Error:           err.Error(),
+					Timestamp:       time.Now().UTC(),
+					Context:         candidate.Compensation.Context,
+					AttemptsMade:    w.attemptCounts[candidate.TaskID],
+					MaxAttempts:     MaxCompensationAttempts,
+				}
+
+				// Send to all webhooks asynchronously
+				for _, webhook := range webhooks {
+					go w.sendWebhookNotification(webhook, payload)
+				}
 			}
 		}
 	}
@@ -324,5 +353,57 @@ func (w *CompensationWorker) waitForCompensationResult(
 			case ExecutionPaused:
 			}
 		}
+	}
+}
+
+func (w *CompensationWorker) getProjectCompensationWebhooks(projectID string) []string {
+	if project, exists := w.LogManager.planEngine.projects[projectID]; exists {
+		return project.CompensationWebhooks
+	}
+	return nil
+}
+
+// sendWebhookNotification sends the webhook payload to a single webhook endpoint
+func (w *CompensationWorker) sendWebhookNotification(webhookURL string, payload CompensationWebhookPayload) {
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		w.LogManager.Logger.Error().
+			Err(err).
+			Str("webhookURL", webhookURL).
+			Msg("Failed to marshal compensation webhook payload")
+		return
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequest("POST", webhookURL, bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		w.LogManager.Logger.Error().
+			Err(err).
+			Str("webhookURL", webhookURL).
+			Msg("Failed to create compensation webhook request")
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "orra/1.0")
+	req.Header.Set("X-Orra-Event", "compensation.failed")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		w.LogManager.Logger.Error().
+			Err(err).
+			Str("webhookURL", webhookURL).
+			Msg("Failed to send compensation webhook")
+		return
+	}
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		w.LogManager.Logger.Warn().
+			Int("statusCode", resp.StatusCode).
+			Str("webhookURL", webhookURL).
+			Msg("Compensation webhook returned non-success status code")
 	}
 }

@@ -336,6 +336,7 @@ func (p *PlanEngine) ExecuteOrchestration(ctx context.Context, orchestration *Or
 	p.Logger.Debug().Msgf("About to create and start workers for orchestration %s", orchestration.ID)
 	p.createAndStartWorkers(
 		ctx,
+		orchestration.ProjectID,
 		orchestration.ID,
 		orchestration.Plan,
 		orchestration.GetTimeout(),
@@ -691,7 +692,7 @@ func (p *PlanEngine) enhanceWithServiceDetails(services []*ServiceInfo, subTasks
 	return nil
 }
 
-func (p *PlanEngine) createAndStartWorkers(ctx context.Context, orchestrationID string, plan *ExecutionPlan, taskTimeout, healthCheckGracePeriod time.Duration) {
+func (p *PlanEngine) createAndStartWorkers(ctx context.Context, projectID, orchestrationID string, plan *ExecutionPlan, taskTimeout, healthCheckGracePeriod time.Duration) {
 	p.workerMu.Lock()
 	defer p.workerMu.Unlock()
 
@@ -761,11 +762,11 @@ func (p *PlanEngine) createAndStartWorkers(ctx context.Context, orchestrationID 
 		}).
 		Msg("Result Aggregator extracted dependencies")
 
-	aggregator := NewResultAggregator(resultAggregatorDeps, p.LogManager)
+	aggregator := NewResultAggregator(projectID, resultAggregatorDeps, p.LogManager)
 	aggCtx, cancel := context.WithCancel(ctx)
 	p.logWorkers[orchestrationID][ResultAggregatorID] = cancel
 
-	iTracker := NewIncidentTracker(p.LogManager)
+	iTracker := NewIncidentTracker(projectID, p.LogManager)
 	fCtx, fCancel := context.WithCancel(ctx)
 	p.logWorkers[orchestrationID][IncidentTrackerID] = fCancel
 
