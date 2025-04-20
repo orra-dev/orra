@@ -123,7 +123,7 @@ func (r *ResultAggregator) processEntry(entry LogEntry, orchestrationID string) 
 	completed := r.LogManager.MarkOrchestrationCompleted(orchestrationID)
 	results := r.logState.DependencyState.SortedValues()
 
-	if err := r.LogManager.FinalizeOrchestration(orchestrationID, completed, nil, results[len(results)-1], nil, false); err != nil {
+	if err := r.LogManager.FinalizeOrchestration(orchestrationID, completed, nil, results[len(results)-1], nil, entry.GetTimestamp(), false); err != nil {
 		skipWebhook := strings.Contains(err.Error(), "failed to trigger webhook")
 		return r.LogManager.AppendTaskFailureToLog(
 			orchestrationID,

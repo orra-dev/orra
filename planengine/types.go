@@ -196,15 +196,16 @@ type TaskStatusEvent struct {
 }
 
 type Task struct {
-	Type            string          `json:"type"`
-	ID              string          `json:"id"`
-	Input           json.RawMessage `json:"input"`
-	ExecutionID     string          `json:"executionId"`
-	IdempotencyKey  IdempotencyKey  `json:"idempotencyKey"`
-	ServiceID       string          `json:"serviceId"`
-	OrchestrationID string          `json:"-"`
-	ProjectID       string          `json:"-"`
-	Status          Status          `json:"-"`
+	Type                string               `json:"type"`
+	ID                  string               `json:"id"`
+	Input               json.RawMessage      `json:"input"`
+	CompensationContext *CompensationContext `json:"compensationContext,omitempty"`
+	ExecutionID         string               `json:"executionId"`
+	IdempotencyKey      IdempotencyKey       `json:"idempotencyKey"`
+	ServiceID           string               `json:"serviceId"`
+	OrchestrationID     string               `json:"-"`
+	ProjectID           string               `json:"-"`
+	Status              Status               `json:"-"`
 }
 
 type TaskResult struct {
@@ -294,7 +295,7 @@ type Orchestration struct {
 	Webhook                string            `json:"webhook"`
 	TaskZero               json.RawMessage   `json:"taskZero"`
 	GroundingHit           *GroundingHit     `json:"groundingHit,omitempty"`
-	AbortData              json.RawMessage   `json:"abortData,omitempty"`
+	AbortPayload           json.RawMessage   `json:"abortReason,omitempty"`
 }
 
 type Duration struct {
@@ -436,8 +437,16 @@ type PartialCompensation struct {
 
 // CompensationData wraps the data needed for compensation with metadata
 type CompensationData struct {
-	Input json.RawMessage `json:"data"`
-	TTLMs int64           `json:"ttl"`
+	Input   json.RawMessage      `json:"data"`
+	Context *CompensationContext `json:"context"`
+	TTLMs   int64                `json:"ttl"`
+}
+
+type CompensationContext struct {
+	OrchestrationID string          `json:"orchestrationId"`
+	Reason          Status          `json:"reason"`
+	Payload         json.RawMessage `json:"payload,omitempty"`
+	Timestamp       time.Time       `json:"timestamp"`
 }
 
 type CompensationCandidate struct {

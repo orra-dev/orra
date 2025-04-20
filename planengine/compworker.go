@@ -229,15 +229,16 @@ func (w *CompensationWorker) tryExecuteCompensation(ctx context.Context, candida
 	}
 
 	task := &Task{
-		Type:            "compensation_request",
-		ID:              taskID,
-		ExecutionID:     executionID,
-		IdempotencyKey:  idempotencyKey,
-		ServiceID:       service.ID,
-		Input:           compData.Input,
-		OrchestrationID: w.OrchestrationID,
-		ProjectID:       service.ProjectID,
-		Status:          Processing,
+		Type:                "compensation_request",
+		ID:                  taskID,
+		ExecutionID:         executionID,
+		IdempotencyKey:      idempotencyKey,
+		ServiceID:           service.ID,
+		Input:               compData.Input,
+		CompensationContext: compData.Context,
+		OrchestrationID:     w.OrchestrationID,
+		ProjectID:           service.ProjectID,
+		Status:              Processing,
 	}
 
 	if err := w.LogManager.AppendCompensationAttempted(

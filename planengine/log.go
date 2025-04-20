@@ -385,12 +385,7 @@ func (lm *LogManager) AppendCompensationFailure(
 	return nil
 }
 
-func (lm *LogManager) FinalizeOrchestration(
-	orchestrationID string,
-	status Status,
-	reason, result, abortPayload json.RawMessage,
-	skipWebhook bool,
-) error {
+func (lm *LogManager) FinalizeOrchestration(orchestrationID string, status Status, reason, result, abortPayload json.RawMessage, ts time.Time, skipWebhook bool) error {
 	if err := lm.planEngine.FinalizeOrchestration(
 		orchestrationID,
 		status,
@@ -405,6 +400,20 @@ func (lm *LogManager) FinalizeOrchestration(
 	shouldCompensate := status == Failed || status == Aborted
 	if !shouldCompensate {
 		return nil
+	}
+
+	var payload json.RawMessage
+	if status == Failed {
+		payload = reason
+	} else {
+		payload = abortPayload
+	}
+
+	compContext := &CompensationContext{
+		OrchestrationID: orchestrationID,
+		Reason:          status,
+		Payload:         payload,
+		Timestamp:       ts,
 	}
 
 	log := lm.GetLog(orchestrationID)
@@ -429,6 +438,7 @@ func (lm *LogManager) FinalizeOrchestration(
 		if err := json.Unmarshal(entry.GetValue(), &compensation); err != nil {
 			return err
 		}
+		compensation.Context = compContext
 		candidates = append(candidates, CompensationCandidate{
 			TaskID:       taskID,
 			Service:      svc,

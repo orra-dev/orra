@@ -96,7 +96,7 @@ func (t *IncidentTracker) processEntry(entry LogEntry, orchestrationID string) e
 	switch entry.GetEntryType() {
 	case "task_aborted_output":
 		aborted := t.LogManager.MarkOrchestrationAborted(orchestrationID)
-		if err := t.LogManager.FinalizeOrchestration(orchestrationID, aborted, nil, nil, entry.Value, false); err != nil {
+		if err := t.LogManager.FinalizeOrchestration(orchestrationID, aborted, nil, nil, entry.GetValue(), entry.GetTimestamp(), false); err != nil {
 			isWebHookErr := strings.Contains(err.Error(), "failed to trigger webhook")
 			return t.LogManager.AppendTaskFailureToLog(
 				orchestrationID,
@@ -115,15 +115,13 @@ func (t *IncidentTracker) processEntry(entry LogEntry, orchestrationID string) e
 		}
 
 		var errorPayload = struct {
-			Id              string `json:"id"`
-			ProducerID      string `json:"producer"`
-			OrchestrationID string `json:"orchestration"`
-			Error           string `json:"error"`
+			Id         string `json:"id"`
+			ProducerID string `json:"producer"`
+			Error      string `json:"error"`
 		}{
-			Id:              entry.GetID(),
-			ProducerID:      entry.GetProducerID(),
-			OrchestrationID: orchestrationID,
-			Error:           failure.Failure,
+			Id:         entry.GetID(),
+			ProducerID: entry.GetProducerID(),
+			Error:      failure.Failure,
 		}
 
 		reason, err := json.Marshal(errorPayload)
@@ -133,7 +131,7 @@ func (t *IncidentTracker) processEntry(entry LogEntry, orchestrationID string) e
 
 		failed := t.LogManager.MarkOrchestrationFailed(orchestrationID, failure.Failure)
 
-		if err := t.LogManager.FinalizeOrchestration(orchestrationID, failed, reason, nil, nil, failure.SkipWebhook); err != nil {
+		if err := t.LogManager.FinalizeOrchestration(orchestrationID, failed, reason, nil, nil, entry.GetTimestamp(), failure.SkipWebhook); err != nil {
 			isWebHookErr := strings.Contains(err.Error(), "failed to trigger webhook")
 			return t.LogManager.AppendTaskFailureToLog(
 				orchestrationID,

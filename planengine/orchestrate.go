@@ -904,13 +904,13 @@ func (p *PlanEngine) triggerWebhook(orchestration *Orchestration) error {
 		Results         []json.RawMessage `json:"results"`
 		Status          Status            `json:"status"`
 		Error           json.RawMessage   `json:"error,omitempty"`
-		AbortedData     json.RawMessage   `json:"abortedData,omitempty"`
+		AbortedPayload  json.RawMessage   `json:"abortReason,omitempty"`
 	}{
 		OrchestrationID: orchestration.ID,
 		Results:         orchestration.Results,
 		Status:          orchestration.Status,
 		Error:           orchestration.Error,
-		AbortedData:     orchestration.AbortPayload,
+		AbortedPayload:  orchestration.AbortPayload,
 	}
 
 	jsonPayload, err := json.Marshal(payload)

@@ -550,7 +550,7 @@ class OrraSDK {
 						result: { task: error.abortPayload, status: 'aborted' },
 						timestamp: Date.now()
 					});
-				}else{
+				} else {
 					const processingTime = Date.now() - startTime;
 					this.logger.trace('Task processing failed', {
 						taskId,
@@ -568,7 +568,7 @@ class OrraSDK {
 	}
 	
 	#handleRevert(task) {
-		const { id: taskId, executionId, idempotencyKey, input } = task;
+		const { id: taskId, executionId, idempotencyKey, input, compensationContext = null } = task;
 		
 		this.logger.trace('Revert task handling initiated', {
 			taskId,
@@ -645,7 +645,7 @@ class OrraSDK {
 		this.#inProgressTasks.set(idempotencyKey, { startTime });
 		
 		Promise.resolve()
-			.then(() => this.#revertHandler(input.originalTask, input.taskResult))
+			.then(() => this.#revertHandler(input.originalTask, input.taskResult, compensationContext))
 			.then((rawResult) => {
 				const result = processRevertResult(rawResult, this.logger, taskId, executionId);
 				
