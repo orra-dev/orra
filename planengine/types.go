@@ -80,16 +80,20 @@ type ProjectStorage interface {
 
 	// AddProjectWebhook adds a new webhook URL to a project
 	AddProjectWebhook(projectID string, webhook string) error
+
+	// AddProjectCompensationWebhook adds a new compensation webhook URL to a project
+	AddProjectCompensationWebhook(projectID string, webhook string) error
 }
 
 type Project struct {
-	ID                string    `json:"id"`
-	Name              string    `json:"name"`
-	APIKey            string    `json:"apiKey"`
-	AdditionalAPIKeys []string  `json:"additionalAPIKeys"`
-	Webhooks          []string  `json:"webhooks"`
-	CreatedAt         time.Time `json:"createdAt"`
-	UpdatedAt         time.Time `json:"updatedAt"`
+	ID                   string    `json:"id"`
+	Name                 string    `json:"name"`
+	APIKey               string    `json:"apiKey"`
+	AdditionalAPIKeys    []string  `json:"additionalAPIKeys"`
+	Webhooks             []string  `json:"webhooks"`
+	CompensationWebhooks []string  `json:"compensationWebhooks"`
+	CreatedAt            time.Time `json:"createdAt"`
+	UpdatedAt            time.Time `json:"updatedAt"`
 }
 
 type OrchestrationState struct {
@@ -447,6 +451,23 @@ type CompensationContext struct {
 	Reason          Status          `json:"reason"`
 	Payload         json.RawMessage `json:"payload,omitempty"`
 	Timestamp       time.Time       `json:"timestamp"`
+}
+
+// CompensationWebhookPayload represents the data sent to compensation webhooks
+type CompensationWebhookPayload struct {
+	OrchestrationID string               `json:"orchestrationId"`
+	TaskID          string               `json:"taskId"`
+	ServiceID       string               `json:"serviceId"`
+	ServiceName     string               `json:"serviceName"`
+	CompensationID  string               `json:"compensationId"` // Typically comp_fail_<taskId>
+	Status          CompensationStatus   `json:"status"`
+	Error           string               `json:"error,omitempty"`
+	Timestamp       time.Time            `json:"timestamp"`
+	Context         *CompensationContext `json:"context"`
+	AttemptsMade    int                  `json:"attemptsMade"`
+	MaxAttempts     int                  `json:"maxAttempts"`
+	Partial         *PartialCompensation `json:"partial,omitempty"`
+	ActionCommand   string               `json:"actionCommand,omitempty"`
 }
 
 type CompensationCandidate struct {

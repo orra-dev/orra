@@ -458,14 +458,27 @@ func (p *PlanEngine) AddProjectAPIKey(projectID string, apiKey string) error {
 	return nil
 }
 
-func (p *PlanEngine) AddProjectWebhook(projectID string, webhook string) error {
-	if err := p.pStorage.AddProjectWebhook(projectID, webhook); err != nil {
+func (p *PlanEngine) AddProjectWebhook(projectID string, webhookUrl string) error {
+	if err := p.pStorage.AddProjectWebhook(projectID, webhookUrl); err != nil {
 		return fmt.Errorf("failed to add webhook: %w", err)
 	}
 
 	// Update in-memory state
 	if project, exists := p.projects[projectID]; exists {
-		project.Webhooks = append(project.Webhooks, webhook)
+		project.Webhooks = append(project.Webhooks, webhookUrl)
+	}
+
+	return nil
+}
+
+func (p *PlanEngine) AddProjectCompensationWebhook(projectID string, webhookUrl string) error {
+	if err := p.pStorage.AddProjectCompensationWebhook(projectID, webhookUrl); err != nil {
+		return fmt.Errorf("failed to add compensation webhook: %w", err)
+	}
+
+	// Update in-memory state
+	if project, exists := p.projects[projectID]; exists {
+		project.CompensationWebhooks = append(project.CompensationWebhooks, webhookUrl)
 	}
 
 	return nil

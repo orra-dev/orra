@@ -53,6 +53,7 @@ func (app *App) configureRoutes() *App {
 	app.Router.HandleFunc("/register/project", app.RegisterProject).Methods(http.MethodPost)
 	app.Router.HandleFunc("/apikeys", app.APIKeyMiddleware(app.CreateAdditionalApiKey)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/webhooks", app.APIKeyMiddleware(app.AddWebhook)).Methods(http.MethodPost)
+	app.Router.HandleFunc("/compensation-webhooks", app.APIKeyMiddleware(app.AddCompensationWebhook)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/register/service", app.APIKeyMiddleware(app.RegisterService)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/orchestrations", app.APIKeyMiddleware(app.OrchestrationsHandler)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/orchestrations", app.APIKeyMiddleware(app.ListOrchestrationsHandler)).Methods(http.MethodGet)
@@ -349,6 +350,40 @@ func (app *App) AddWebhook(w http.ResponseWriter, r *http.Request) {
 	project.Webhooks = append(project.Webhooks, webhook.Url)
 
 	// Return the new key
+	w.WriteHeader(http.StatusCreated)
+	if err := json.NewEncoder(w).Encode(webhook); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
+		return
+	}
+}
+
+func (app *App) AddCompensationWebhook(w http.ResponseWriter, r *http.Request) {
+	apiKey := r.Context().Value(apiKeyContextKey).(string)
+	project, err := app.Engine.GetProjectByApiKey(apiKey)
+	if err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
+		return
+	}
+
+	var webhook struct {
+		Url string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&webhook); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(JSONMarshalingFailErrCode), err))
+		return
+	}
+
+	if _, err := url.ParseRequestURI(webhook.Url); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Validation, err))
+		return
+	}
+
+	if err := app.Engine.AddProjectCompensationWebhook(project.ID, webhook.Url); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, errs.Code(ProjectWebhookAdditionFailedErrCode), err))
+		return
+	}
+
+	// Return the webhook information
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(webhook); err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
