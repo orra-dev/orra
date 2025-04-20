@@ -38,13 +38,14 @@ async function startService() {
 			schema
 		});
 		
-		invToolAsSvc.onRevert(async (task, result) => {
+		invToolAsSvc.onRevert(async (task, result, context) => {
 			if(shouldDemoRevertFail === 'true') {
 				console.log('Configured to demonstrate revert failure.');
 				throw Error('Failed to revert inventory product hold from: ' + result?.hold + ' to: ' + false);
 			}
 			console.log('Reverting inventory product for task:', task.id);
 			console.log('Reverting inventory product hold from:', result?.hold, 'to:', false);
+			console.log('Reverting inventory for context with reason:', context?.reason, 'payload:', context?.payload);
 		})
 		
 		invToolAsSvc.start(async (task) => {
