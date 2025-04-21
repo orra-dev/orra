@@ -383,6 +383,48 @@ func (s *CompensationStatus) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+type CompensationResolutionState int
+
+const (
+	ResolutionPending CompensationResolutionState = iota
+	ResolutionResolved
+	ResolutionIgnored
+)
+
+func (s CompensationResolutionState) String() string {
+	switch s {
+	case ResolutionPending:
+		return "pending"
+	case ResolutionResolved:
+		return "resolved"
+	case ResolutionIgnored:
+		return "ignored"
+	default:
+		return "unknown"
+	}
+}
+
+func (s CompensationResolutionState) MarshalJSON() ([]byte, error) { return json.Marshal(s.String()) }
+
+func (s *CompensationResolutionState) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+
+	switch str {
+	case "pending":
+		*s = ResolutionPending
+	case "resolved":
+		*s = ResolutionResolved
+	case "ignored":
+		*s = ResolutionIgnored
+	default:
+		return fmt.Errorf("invalid Compensation Resolution Status: %s", s)
+	}
+	return nil
+}
+
 type PddlValidationErrorType int
 
 const (
