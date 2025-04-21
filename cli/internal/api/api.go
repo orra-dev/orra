@@ -245,6 +245,22 @@ type GroundingSpec struct {
 	Constraints []string           `json:"constraints" yaml:"constraints"`
 }
 
+// FailedCompensation represents a compensation operation that failed
+type FailedCompensation struct {
+	ID              string    `json:"id"`
+	ProjectID       string    `json:"projectId"`
+	OrchestrationID string    `json:"orchestrationId"`
+	TaskID          string    `json:"taskId"`
+	ServiceID       string    `json:"serviceId"`
+	ServiceName     string    `json:"serviceName"`
+	Status          string    `json:"status"`
+	ResolutionState string    `json:"resolutionState"`
+	Failure         string    `json:"failure,omitempty"`
+	AttemptsMade    int       `json:"attemptsMade"`
+	MaxAttempts     int       `json:"maxAttempts"`
+	Timestamp       time.Time `json:"timestamp"`
+}
+
 type NotFoundError struct {
 	Err error
 }
@@ -511,6 +527,28 @@ func (c *Client) RemoveGroundingSpec(ctx context.Context, specName string) error
 	}
 
 	return err
+}
+
+// ListFailedCompensations retrieves all failed compensations for a project
+func (c *Client) ListFailedCompensations(ctx context.Context) ([]FailedCompensation, error) {
+	var response []FailedCompensation
+	var apiErr ErrorResponse
+
+	err := requests.
+		URL(c.baseURL).
+		Path("/compensation-failures").
+		Method(http.MethodGet).
+		Client(c.httpClient).
+		Header("Authorization", "Bearer "+c.apiKey).
+		ToJSON(&response).
+		ErrorJSON(&apiErr).
+		Fetch(ctx)
+
+	if err != nil {
+		return nil, FormatAPIError(apiErr, "failed compensations")
+	}
+
+	return response, nil
 }
 
 func (v OrchestrationListView) Empty() bool {

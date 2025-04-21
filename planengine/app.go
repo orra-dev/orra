@@ -54,6 +54,7 @@ func (app *App) configureRoutes() *App {
 	app.Router.HandleFunc("/apikeys", app.APIKeyMiddleware(app.CreateAdditionalApiKey)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/webhooks", app.APIKeyMiddleware(app.AddWebhook)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/compensation-failure-webhooks", app.APIKeyMiddleware(app.AddCompensationFailureWebhook)).Methods(http.MethodPost)
+	app.Router.HandleFunc("/compensation-failures", app.APIKeyMiddleware(app.ListCompensationFailuresHandler)).Methods(http.MethodGet)
 	app.Router.HandleFunc("/register/service", app.APIKeyMiddleware(app.RegisterService)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/orchestrations", app.APIKeyMiddleware(app.OrchestrationsHandler)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/orchestrations", app.APIKeyMiddleware(app.ListOrchestrationsHandler)).Methods(http.MethodGet)
@@ -551,4 +552,28 @@ func (app *App) RemoveAllGrounding(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// ListCompensationFailuresHandler retrieves all failed compensations for a project
+func (app *App) ListCompensationFailuresHandler(w http.ResponseWriter, r *http.Request) {
+	apiKey := r.Context().Value(apiKeyContextKey).(string)
+	project, err := app.Engine.GetProjectByApiKey(apiKey)
+	if err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
+		return
+	}
+
+	compensations, err := app.Engine.ListProjectFailedCompensations(project.ID)
+	if err != nil {
+		app.Logger.Error().Err(err).Str("projectID", project.ID).Msg("Failed to list failed compensations")
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(compensations); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Internal, err))
+		return
+	}
 }

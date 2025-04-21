@@ -10,7 +10,9 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 
+	"github.com/ezodude/orra/cli/internal/api"
 	"github.com/ezodude/orra/cli/internal/config"
 	"github.com/spf13/cobra"
 )
@@ -25,6 +27,7 @@ func newCompFailCmd(opts *CliOpts) *cobra.Command {
 	}
 
 	cmd.AddCommand(newCompFailWebhooksCmd(opts))
+	cmd.AddCommand(newCompFailListCmd(opts))
 
 	return cmd
 }
@@ -125,5 +128,138 @@ func newCompFailWebhookListCmd(opts *CliOpts) *cobra.Command {
 			}
 			return nil
 		},
+	}
+}
+
+// Define symbols for the status and resolution state columns
+const (
+	symbolResolutionPending  = "○ " // Empty circle for pending resolution
+	symbolResolutionResolved = "● " // Filled circle for resolved
+	symbolResolutionIgnored  = "⊖ " // Circled minus for ignored
+)
+
+func newCompFailListCmd(opts *CliOpts) *cobra.Command {
+	return &cobra.Command{
+		Use:     "ls",
+		Aliases: []string{"list"},
+		Short:   "List failed compensations for a project",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			proj, projectName, err := config.GetProject(opts.Config, opts.ProjectID)
+			if err != nil {
+				return err
+			}
+
+			client := opts.ApiClient.
+				SetBaseUrl(proj.ServerAddr).
+				SetApiKey(proj.CliAuth)
+
+			ctx, cancel := context.WithTimeout(cmd.Context(), client.GetTimeout())
+			defer cancel()
+
+			compensations, err := client.ListFailedCompensations(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to list compensation failures - %w", err)
+			}
+
+			// Project Info Section
+			fmt.Printf("Project: %s\nServer:  %s\n", projectName, proj.ServerAddr)
+
+			if len(compensations) == 0 {
+				fmt.Println("\nNo failed compensations found")
+				return nil
+			}
+
+			// Define columns for the table
+			columns := []compFailColumn{
+				{"ID", func(c api.FailedCompensation) string { return c.ID }, 20},
+				{"ORCHESTRATION", func(c api.FailedCompensation) string { return c.OrchestrationID }, 20},
+				{"SERVICE", func(c api.FailedCompensation) string { return c.ServiceName }, 20},
+				{"STATUS", func(c api.FailedCompensation) string { return formatCompensationStatus(c.Status) }, 20},
+				{"RESOLUTION", func(c api.FailedCompensation) string { return formatResolutionState(c.ResolutionState) }, 20},
+				{"CREATED", func(c api.FailedCompensation) string { return getRelativeTime(c.Timestamp) }, 10},
+			}
+
+			// Print table with styling
+			fmt.Printf("\n┌─ Failed Compensations\n")
+
+			// Header
+			headerFmt := buildCompFailFormatString(columns)
+			fmt.Printf("│ "+headerFmt+"\n", toInterfaceSlice(getCompFailHeaders(columns))...)
+			fmt.Printf("│ %s\n", strings.Repeat("─", calculateCompFailLineWidth(columns)))
+
+			// Rows
+			for _, comp := range compensations {
+				values := make([]interface{}, len(columns))
+				for i, col := range columns {
+					values[i] = col.value(comp)
+				}
+				fmt.Printf("│ "+headerFmt+"\n", values...)
+			}
+			fmt.Printf("└─────\n")
+
+			return nil
+		},
+	}
+}
+
+type compFailColumn struct {
+	header string
+	value  func(c api.FailedCompensation) string
+	width  int
+}
+
+func calculateCompFailLineWidth(columns []compFailColumn) int {
+	width := len(columns) + 1 // Account for spacing between columns
+	for _, col := range columns {
+		width += col.width
+	}
+	return width
+}
+
+func buildCompFailFormatString(columns []compFailColumn) string {
+	formats := make([]string, len(columns))
+	for i, col := range columns {
+		formats[i] = fmt.Sprintf("%%-%ds", col.width)
+	}
+	return strings.Join(formats, " ")
+}
+
+func getCompFailHeaders(columns []compFailColumn) []string {
+	headers := make([]string, len(columns))
+	for i, col := range columns {
+		headers[i] = col.header
+	}
+	return headers
+}
+
+func formatCompensationStatus(status string) string {
+	switch strings.ToLower(status) {
+	case "pending":
+		return symbolPending + status
+	case "processing":
+		return symbolProcessing + status
+	case "completed":
+		return symbolCompleted + status
+	case "failed":
+		return symbolFailed + status
+	case "partial":
+		return symbolProcessing + status // Use processing symbol for partial
+	case "expired":
+		return symbolFailed + status // Use failed symbol for expired
+	default:
+		return "  " + status // Double space to align with other symbols
+	}
+}
+
+func formatResolutionState(state string) string {
+	switch strings.ToLower(state) {
+	case "pending":
+		return symbolResolutionPending + state
+	case "resolved":
+		return symbolResolutionResolved + state
+	case "ignored":
+		return symbolResolutionIgnored + state
+	default:
+		return "  " + state // Double space to align with other symbols
 	}
 }

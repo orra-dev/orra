@@ -23,7 +23,7 @@ import (
 
 const (
 	DefaultCompensationTTL  = 24 * time.Hour
-	MaxCompensationAttempts = 10
+	MaxCompensationAttempts = 2
 	CompensationBackoffMax  = 1 * time.Minute
 )
 
