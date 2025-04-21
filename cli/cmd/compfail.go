@@ -28,6 +28,7 @@ func newCompFailCmd(opts *CliOpts) *cobra.Command {
 
 	cmd.AddCommand(newCompFailWebhooksCmd(opts))
 	cmd.AddCommand(newCompFailListCmd(opts))
+	cmd.AddCommand(newCompFailInspectCmd(opts))
 
 	return cmd
 }
@@ -340,4 +341,104 @@ func filterCompensations(compensations []api.FailedCompensation, orchestrationID
 	}
 
 	return filtered
+}
+
+// newCompFailInspectCmd returns a new inspect command for compensation failures
+func newCompFailInspectCmd(opts *CliOpts) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "inspect [compensation-id]",
+		Short: "Show detailed information about a compensation failure",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			proj, projectName, err := config.GetProject(opts.Config, opts.ProjectID)
+			if err != nil {
+				return err
+			}
+
+			client := opts.ApiClient.
+				SetBaseUrl(proj.ServerAddr).
+				SetApiKey(proj.CliAuth)
+
+			ctx, cancel := context.WithTimeout(cmd.Context(), client.GetTimeout())
+			defer cancel()
+
+			compensationID := args[0]
+			comp, err := client.GetFailedCompensation(ctx, compensationID)
+			if err != nil {
+				return fmt.Errorf("failed to get compensation failure details - %w", err)
+			}
+
+			// Project Info Section
+			fmt.Printf("Project: %s\nServer:  %s\n", projectName, proj.ServerAddr)
+
+			// Compensation Overview
+			fmt.Printf("\n┌─ Compensation Failure\n")
+			fmt.Printf("│ ID:             %s\n", comp.ID)
+			fmt.Printf("│ Orchestration:  %s\n", comp.OrchestrationID)
+			fmt.Printf("│ Service:        %s (%s)\n", comp.ServiceName, comp.ServiceID)
+			fmt.Printf("│ Task:           %s\n", comp.TaskID)
+			fmt.Printf("│ Status:         %s\n", formatCompensationStatus(comp.Status))
+			fmt.Printf("│ Resolution:     %s\n", formatResolutionState(comp.ResolutionState))
+			fmt.Printf("│ Failed:         %s ago (%s)\n",
+				getRelativeTime(comp.Timestamp),
+				comp.Timestamp.Format("2006-01-02 15:04:05"))
+			fmt.Printf("│ Attempts:       %d of %d\n", comp.AttemptsMade, comp.MaxAttempts)
+			fmt.Printf("└─────\n")
+
+			// Failure Information
+			fmt.Printf("\n┌─ Failure Information\n")
+			fmt.Printf("│ Error: %s\n", comp.Failure)
+
+			// Add an explanation for error format if there's a colon in the error
+			if strings.Contains(comp.Failure, ":") {
+				parts := strings.SplitN(comp.Failure, ":", 2)
+				fmt.Printf("│\n│ The error above contains:\n")
+				fmt.Printf("│   - System info: \"%s\"\n", strings.TrimSpace(parts[0]))
+				fmt.Printf("│   - Service error: \"%s\"\n", strings.TrimSpace(parts[1]))
+			}
+			fmt.Printf("└─────\n")
+
+			// Compensation Context
+			if comp.CompensationData.Context != nil {
+				ctx := comp.CompensationData.Context
+				fmt.Printf("\n┌─ Compensation Context\n")
+				fmt.Printf("│ Triggered by:   [%s] Orchestration\n", ctx.Reason)
+				fmt.Printf("│ Timestamp:      %s\n", ctx.Timestamp.Format("2006-01-02 15:04:05"))
+
+				// Show context payload if available
+				if ctx.Payload != nil && len(ctx.Payload) > 0 {
+					fmt.Printf("│\n│ Payload:\n")
+					printJSONWithPrefix(ctx.Payload, "│   ")
+				}
+				fmt.Printf("└─────\n")
+			}
+
+			// Compensation Data
+			if comp.CompensationData.Input != nil {
+				fmt.Printf("\n┌─ Compensation Log\n")
+				fmt.Printf("│\n│ Payload used for compensation attempt:\n")
+				printJSONWithPrefix(comp.CompensationData.Input, "│   ")
+				fmt.Printf("└─────\n")
+			}
+
+			// Related Information
+			fmt.Printf("\n┌─ Related Information\n")
+			fmt.Printf("│\n│ View orchestration details:\n")
+			fmt.Printf("│   orra inspect -d %s\n", comp.OrchestrationID)
+			fmt.Printf("└─────\n")
+
+			// Resolution Management
+			fmt.Printf("\n┌─ Management Options\n")
+			fmt.Printf("│\n│ Commands:\n")
+			fmt.Printf("│   Mark as resolved:\n")
+			fmt.Printf("│     orra comp-fail resolve %s --reason \"Manually fixed\"\n", comp.ID)
+			fmt.Printf("│\n│   Ignore this failure:\n")
+			fmt.Printf("│     orra comp-fail ignore %s --reason \"Test transaction\"\n", comp.ID)
+			fmt.Printf("└─────\n")
+
+			return nil
+		},
+	}
+
+	return cmd
 }

@@ -124,12 +124,13 @@ func (p *PlanEngine) IgnoreFailedCompensation(id string, reason string) error {
 func (p *PlanEngine) GetFailedCompensation(id string) (*FailedCompensation, error) {
 	// Try memory cache first
 	p.failedCompsMu.RLock()
-	defer p.failedCompsMu.RUnlock()
 	for _, projectComps := range p.failedCompensations {
 		if comp, exists := projectComps[id]; exists {
+			p.failedCompsMu.RUnlock()
 			return comp, nil
 		}
 	}
+	p.failedCompsMu.RUnlock()
 
 	// Fall back to storage
 	return p.failedCompStorage.LoadFailedCompensation(id)

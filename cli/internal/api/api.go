@@ -245,20 +245,35 @@ type GroundingSpec struct {
 	Constraints []string           `json:"constraints" yaml:"constraints"`
 }
 
-// FailedCompensation represents a compensation operation that failed
+type CompensationData struct {
+	Input   json.RawMessage      `json:"data"`
+	Context *CompensationContext `json:"context"`
+	TTLMs   int64                `json:"ttl"`
+}
+
+type CompensationContext struct {
+	OrchestrationID string          `json:"orchestrationId"`
+	Reason          Status          `json:"reason"`
+	Payload         json.RawMessage `json:"payload,omitempty"`
+	Timestamp       time.Time       `json:"timestamp"`
+}
+
 type FailedCompensation struct {
-	ID              string    `json:"id"`
-	ProjectID       string    `json:"projectId"`
-	OrchestrationID string    `json:"orchestrationId"`
-	TaskID          string    `json:"taskId"`
-	ServiceID       string    `json:"serviceId"`
-	ServiceName     string    `json:"serviceName"`
-	Status          string    `json:"status"`
-	ResolutionState string    `json:"resolutionState"`
-	Failure         string    `json:"failure,omitempty"`
-	AttemptsMade    int       `json:"attemptsMade"`
-	MaxAttempts     int       `json:"maxAttempts"`
-	Timestamp       time.Time `json:"timestamp"`
+	ID               string           `json:"id"`
+	ProjectID        string           `json:"projectId"`
+	OrchestrationID  string           `json:"orchestrationId"`
+	TaskID           string           `json:"taskId"`
+	ServiceID        string           `json:"serviceId"`
+	ServiceName      string           `json:"serviceName"`
+	CompensationData CompensationData `json:"compensationData"`
+	Status           string           `json:"status"`
+	ResolutionState  string           `json:"resolutionState"`
+	Failure          string           `json:"failure,omitempty"`
+	Resolution       string           `json:"resolution,omitempty"`
+	AttemptsMade     int              `json:"attemptsMade"`
+	MaxAttempts      int              `json:"maxAttempts"`
+	Timestamp        time.Time        `json:"timestamp"`
+	ResolvedAt       time.Time        `json:"resolvedAt,omitempty"`
 }
 
 type NotFoundError struct {
@@ -549,6 +564,28 @@ func (c *Client) ListFailedCompensations(ctx context.Context) ([]FailedCompensat
 	}
 
 	return response, nil
+}
+
+// GetFailedCompensation retrieves a specific failed compensation by ID
+func (c *Client) GetFailedCompensation(ctx context.Context, id string) (*FailedCompensation, error) {
+	var response FailedCompensation
+	var apiErr ErrorResponse
+
+	err := requests.
+		URL(c.baseURL).
+		Pathf("/compensation-failures/%s", id).
+		Method(http.MethodGet).
+		Client(c.httpClient).
+		Header("Authorization", "Bearer "+c.apiKey).
+		ToJSON(&response).
+		ErrorJSON(&apiErr).
+		Fetch(ctx)
+
+	if err != nil {
+		return nil, FormatAPIError(apiErr, "failed compensation")
+	}
+
+	return &response, nil
 }
 
 func (v OrchestrationListView) Empty() bool {

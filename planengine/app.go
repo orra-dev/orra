@@ -55,6 +55,7 @@ func (app *App) configureRoutes() *App {
 	app.Router.HandleFunc("/webhooks", app.APIKeyMiddleware(app.AddWebhook)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/compensation-failure-webhooks", app.APIKeyMiddleware(app.AddCompensationFailureWebhook)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/compensation-failures", app.APIKeyMiddleware(app.ListCompensationFailuresHandler)).Methods(http.MethodGet)
+	app.Router.HandleFunc("/compensation-failures/{id}", app.APIKeyMiddleware(app.GetCompensationFailureHandler)).Methods(http.MethodGet)
 	app.Router.HandleFunc("/register/service", app.APIKeyMiddleware(app.RegisterService)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/orchestrations", app.APIKeyMiddleware(app.OrchestrationsHandler)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/orchestrations", app.APIKeyMiddleware(app.ListOrchestrationsHandler)).Methods(http.MethodGet)
@@ -573,6 +574,43 @@ func (app *App) ListCompensationFailuresHandler(w http.ResponseWriter, r *http.R
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(compensations); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Internal, err))
+		return
+	}
+}
+
+// GetCompensationFailureHandler retrieves a specific failed compensation by ID
+func (app *App) GetCompensationFailureHandler(w http.ResponseWriter, r *http.Request) {
+	apiKey := r.Context().Value(apiKeyContextKey).(string)
+	project, err := app.Engine.GetProjectByApiKey(apiKey)
+	if err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
+		return
+	}
+
+	vars := mux.Vars(r)
+	id := vars["id"]
+	if id == "" {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, "compensation failure ID is required"))
+		return
+	}
+
+	comp, err := app.Engine.GetFailedCompensation(id)
+	if err != nil {
+		app.Logger.Error().Err(err).Str("id", id).Msg("Failed to get compensation failure")
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.NotExist, err))
+		return
+	}
+
+	// Verify that the compensation belongs to the project
+	if comp.ProjectID != project.ID {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unauthorized, "compensation failure does not belong to this project"))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(comp); err != nil {
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Internal, err))
 		return
 	}
