@@ -219,30 +219,13 @@ func newCompFailListCmd(opts *CliOpts) *cobra.Command {
 				}
 			}
 
-			// Count how many of each resolution state we have in the prefiltered results
-			hiddenResolved := 0
-			hiddenIgnored := 0
-
-			// Only count hidden items if we're not showing all and not explicitly filtering by resolution
-			if !showAllFlag && resolutionFlag == "" {
-				for _, comp := range prefiltered {
-					if strings.ToLower(comp.ResolutionState) == "resolved" {
-						hiddenResolved++
-					} else if strings.ToLower(comp.ResolutionState) == "ignored" {
-						hiddenIgnored++
-					}
-				}
-			}
-
 			if len(filtered) == 0 {
 				if totalCompensations > 0 {
-					if len(prefiltered) > 0 && hiddenResolved+hiddenIgnored > 0 {
-						fmt.Println("\nNo pending compensations match the applied filters\n")
-						fmt.Printf("There are %d resolved and %d ignored compensations that match your other filters.\n",
-							hiddenResolved, hiddenIgnored)
-						fmt.Println("Use --all flag to include them, or --resolution=resolved/ignored to see specific states.")
-					} else {
-						fmt.Println("\nNo failed compensations match the applied filters")
+					fmt.Println("\nNo failed compensations found")
+					if !showAllFlag && resolutionFlag == "" {
+						fmt.Println("")
+						fmt.Println("Note: By default, only failed compensations PENDING resolution are shown.")
+						fmt.Println("Use --all to show all states, or --resolution=resolved/ignored for specific states.")
 					}
 				} else {
 					fmt.Println("\nNo failed compensations found")
@@ -261,11 +244,7 @@ func newCompFailListCmd(opts *CliOpts) *cobra.Command {
 			}
 
 			// Print table with styling
-			fmt.Printf("\n┌─ Failed Compensations (%d", len(filtered))
-			if hiddenResolved > 0 || hiddenIgnored > 0 {
-				fmt.Printf(" pending of %d total", hiddenResolved+hiddenIgnored+len(filtered))
-			}
-			fmt.Printf(")\n")
+			fmt.Printf("\n┌─ Failed Compensations (%d)\n", len(filtered))
 
 			// Header
 			headerFmt := buildCompFailFormatString(columns)
@@ -282,11 +261,9 @@ func newCompFailListCmd(opts *CliOpts) *cobra.Command {
 			}
 			fmt.Printf("└─────\n")
 
-			// Show message about hidden items if applicable
-			if (hiddenResolved > 0 || hiddenIgnored > 0) && resolutionFlag == "" && !showAllFlag {
-				fmt.Printf("\nNote: %d resolved and %d ignored compensations are hidden.\n",
-					hiddenResolved, hiddenIgnored)
-				fmt.Println("Use --all to show all states, or --resolution=resolved/ignored for specific states.")
+			// Show a simple reminder about default filtering when applicable
+			if resolutionFlag == "" && !showAllFlag {
+				fmt.Println("\nNote: Only showing failed compensations PENDING resolution. Use --all to show all states.")
 			}
 
 			// Show message if results were limited
