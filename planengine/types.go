@@ -44,6 +44,9 @@ type PlanEngine struct {
 	svcStorage           ServiceStorage
 	orchestrationStorage OrchestrationStorage
 	groundingStorage     GroundingStorage
+	failedCompStorage    FailedCompensationStorage
+	failedCompensations  map[string]map[string]*FailedCompensation // projectID -> compID -> FailedCompensation
+	failedCompsMu        sync.RWMutex
 	Logger               zerolog.Logger
 }
 
@@ -499,6 +502,27 @@ type GroundingStorage interface {
 	ListGroundings() ([]*GroundingSpec, error)
 	RemoveGrounding(projectID, name string) error
 	RemoveProjectGroundings(projectID string) error
+}
+
+// FailedCompensationStorage defines the interface for persisting failed compensations
+type FailedCompensationStorage interface {
+	// StoreFailedCompensation persists a failed compensation
+	StoreFailedCompensation(comp *FailedCompensation) error
+
+	// UpdateFailedCompensation updates a failed compensation (e.g. its resolution state)
+	UpdateFailedCompensation(comp *FailedCompensation) error
+
+	// LoadFailedCompensation retrieves a failed compensation by its ID
+	LoadFailedCompensation(id string) (*FailedCompensation, error)
+
+	// ListProjectFailedCompensations returns all failed compensations for a project
+	ListProjectFailedCompensations(projectID string) ([]*FailedCompensation, error)
+
+	// ListOrchestrationFailedCompensations returns all failed compensations for an orchestration
+	ListOrchestrationFailedCompensations(orchestrationID string) ([]*FailedCompensation, error)
+
+	// ListFailedCompensations returns all failed compensations
+	ListFailedCompensations() ([]*FailedCompensation, error)
 }
 
 // GroundingUseCase represents grounding of how an action should be handled

@@ -80,24 +80,30 @@ func (w *CompensationWorker) Start(ctx context.Context, orchestrationID string) 
 					Err(err).
 					Msg("Failed to log compensation failure")
 			}
+
+			payload := FailedCompensation{
+				ID:               candidate.ID,
+				ProjectID:        w.ProjectID,
+				OrchestrationID:  orchestrationID,
+				TaskID:           candidate.TaskID,
+				ServiceID:        candidate.Service.ID,
+				ServiceName:      candidate.Service.Name,
+				Status:           status,
+				Failure:          err.Error(),
+				Timestamp:        time.Now().UTC(),
+				CompensationData: candidate.Compensation,
+				AttemptsMade:     w.attemptCounts[candidate.TaskID],
+				MaxAttempts:      MaxCompensationAttempts,
+				ResolutionState:  ResolutionPending,
+			}
+
+			// Store the failed compensation
+			if err := w.LogManager.planEngine.StoreFailedCompensation(&payload); err != nil {
+				w.LogManager.Logger.Error().Err(err).Msg("Failed to store failed compensation")
+			}
+
 			webhooks := w.getProjectCompensationFailureWebhooks(w.ProjectID)
 			if len(webhooks) > 0 {
-				// Create a simple webhook payload
-				payload := FailedCompensation{
-					ID:               candidate.ID,
-					ProjectID:        w.ProjectID,
-					OrchestrationID:  orchestrationID,
-					TaskID:           candidate.TaskID,
-					ServiceID:        candidate.Service.ID,
-					ServiceName:      candidate.Service.Name,
-					Status:           status,
-					Failure:          err.Error(),
-					Timestamp:        time.Now().UTC(),
-					CompensationData: candidate.Compensation,
-					AttemptsMade:     w.attemptCounts[candidate.TaskID],
-					MaxAttempts:      MaxCompensationAttempts,
-				}
-
 				// Send to all webhooks asynchronously
 				for _, webhook := range webhooks {
 					go w.sendWebhookNotification(webhook, payload)

@@ -41,11 +41,12 @@ func (e SpecVersionError) Error() string {
 
 func NewPlanEngine() *PlanEngine {
 	plane := &PlanEngine{
-		projects:           make(map[string]*Project),
-		services:           make(map[string]map[string]*ServiceInfo),
-		orchestrationStore: make(map[string]*Orchestration),
-		logWorkers:         make(map[string]map[string]context.CancelFunc),
-		groundings:         make(map[string]map[string]*GroundingSpec),
+		projects:            make(map[string]*Project),
+		services:            make(map[string]map[string]*ServiceInfo),
+		orchestrationStore:  make(map[string]*Orchestration),
+		logWorkers:          make(map[string]map[string]context.CancelFunc),
+		groundings:          make(map[string]map[string]*GroundingSpec),
+		failedCompensations: make(map[string]map[string]*FailedCompensation),
 	}
 	return plane
 }
@@ -56,6 +57,7 @@ func (p *PlanEngine) Initialise(
 	svcStorage ServiceStorage,
 	orchestrationStorage OrchestrationStorage,
 	groundingStorage GroundingStorage,
+	failedCompStorage FailedCompensationStorage,
 	logMgr *LogManager,
 	wsManager *WebSocketManager,
 	vCache *VectorCache,
@@ -67,6 +69,7 @@ func (p *PlanEngine) Initialise(
 	p.svcStorage = svcStorage
 	p.orchestrationStorage = orchestrationStorage
 	p.groundingStorage = groundingStorage
+	p.failedCompStorage = failedCompStorage
 	p.LogManager = logMgr
 	p.Logger = Logger
 	p.WebSocketManager = wsManager
@@ -127,6 +130,30 @@ func (p *PlanEngine) Initialise(
 				p.groundings[grounding.ProjectID] = projectGroundings
 			}
 			projectGroundings[grounding.Name] = grounding
+		}
+	}
+
+	// Load existing failed compensations
+	if failedCompStorage != nil {
+		if failedComps, err := failedCompStorage.ListFailedCompensations(); err == nil {
+			p.failedCompsMu.Lock()
+			defer p.failedCompsMu.Unlock()
+
+			p.Logger.Debug().Msgf("Loading %d failed compensations", len(failedComps))
+
+			for _, comp := range failedComps {
+				// Organize by project ID
+				projectComps, exists := p.failedCompensations[comp.ProjectID]
+				if !exists {
+					projectComps = make(map[string]*FailedCompensation)
+					p.failedCompensations[comp.ProjectID] = projectComps
+				}
+				projectComps[comp.ID] = comp
+
+				p.Logger.Trace().Str("CompID", comp.ID).Str("ProjectID", comp.ProjectID).Str("OrchestrationID", comp.OrchestrationID).Msg("Loaded failed compensation")
+			}
+		} else {
+			p.Logger.Warn().Err(err).Msg("Failed to load failed compensations")
 		}
 	}
 
