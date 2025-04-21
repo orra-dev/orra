@@ -147,6 +147,7 @@ func newCompFailListCmd(opts *CliOpts) *cobra.Command {
 		serviceFlag       string
 		resolutionFlag    string
 		limitFlag         int
+		showAllFlag       bool
 	)
 
 	cmd := &cobra.Command{
@@ -171,8 +172,25 @@ func newCompFailListCmd(opts *CliOpts) *cobra.Command {
 				return fmt.Errorf("failed to list compensation failures - %w", err)
 			}
 
-			// Apply filters
-			filtered := filterCompensations(compensations, orchestrationFlag, serviceFlag, resolutionFlag)
+			// Get all compensations before filtering
+			totalCompensations := len(compensations)
+
+			// Filter by orchestration and service first
+			prefiltered := prefilterCompensations(compensations, orchestrationFlag, serviceFlag)
+
+			// Then handle resolution state filtering
+			var filtered []api.FailedCompensation
+
+			// Case 1: If --resolution flag is used, it takes precedence
+			if resolutionFlag != "" {
+				filtered = filterByResolution(prefiltered, resolutionFlag)
+			} else if showAllFlag {
+				// Case 2: If --all flag is used, show everything (after pre-filtering)
+				filtered = prefiltered
+			} else {
+				// Case 3: Default behavior - show only pending compensations
+				filtered = filterByResolution(prefiltered, "pending")
+			}
 
 			// Apply limit (if not zero)
 			if limitFlag > 0 && limitFlag < len(filtered) {
@@ -183,7 +201,7 @@ func newCompFailListCmd(opts *CliOpts) *cobra.Command {
 			fmt.Printf("Project: %s\nServer:  %s\n", projectName, proj.ServerAddr)
 
 			// Show filter information if any filters are applied
-			hasFilters := orchestrationFlag != "" || serviceFlag != "" || resolutionFlag != ""
+			hasFilters := orchestrationFlag != "" || serviceFlag != "" || resolutionFlag != "" || showAllFlag
 			if hasFilters {
 				fmt.Println("\nApplied filters:")
 				if orchestrationFlag != "" {
@@ -194,12 +212,38 @@ func newCompFailListCmd(opts *CliOpts) *cobra.Command {
 				}
 				if resolutionFlag != "" {
 					fmt.Printf("  Resolution: %s\n", resolutionFlag)
+				} else if showAllFlag {
+					fmt.Printf("  Resolution: all states\n")
+				} else {
+					fmt.Printf("  Resolution: pending only (default)\n")
+				}
+			}
+
+			// Count how many of each resolution state we have in the prefiltered results
+			hiddenResolved := 0
+			hiddenIgnored := 0
+
+			// Only count hidden items if we're not showing all and not explicitly filtering by resolution
+			if !showAllFlag && resolutionFlag == "" {
+				for _, comp := range prefiltered {
+					if strings.ToLower(comp.ResolutionState) == "resolved" {
+						hiddenResolved++
+					} else if strings.ToLower(comp.ResolutionState) == "ignored" {
+						hiddenIgnored++
+					}
 				}
 			}
 
 			if len(filtered) == 0 {
-				if len(compensations) > 0 && hasFilters {
-					fmt.Println("\nNo failed compensations match the applied filters")
+				if totalCompensations > 0 {
+					if len(prefiltered) > 0 && hiddenResolved+hiddenIgnored > 0 {
+						fmt.Println("\nNo pending compensations match the applied filters\n")
+						fmt.Printf("There are %d resolved and %d ignored compensations that match your other filters.\n",
+							hiddenResolved, hiddenIgnored)
+						fmt.Println("Use --all flag to include them, or --resolution=resolved/ignored to see specific states.")
+					} else {
+						fmt.Println("\nNo failed compensations match the applied filters")
+					}
 				} else {
 					fmt.Println("\nNo failed compensations found")
 				}
@@ -217,7 +261,11 @@ func newCompFailListCmd(opts *CliOpts) *cobra.Command {
 			}
 
 			// Print table with styling
-			fmt.Printf("\n┌─ Failed Compensations (%d)\n", len(filtered))
+			fmt.Printf("\n┌─ Failed Compensations (%d", len(filtered))
+			if hiddenResolved > 0 || hiddenIgnored > 0 {
+				fmt.Printf(" pending of %d total", hiddenResolved+hiddenIgnored+len(filtered))
+			}
+			fmt.Printf(")\n")
 
 			// Header
 			headerFmt := buildCompFailFormatString(columns)
@@ -234,9 +282,16 @@ func newCompFailListCmd(opts *CliOpts) *cobra.Command {
 			}
 			fmt.Printf("└─────\n")
 
+			// Show message about hidden items if applicable
+			if (hiddenResolved > 0 || hiddenIgnored > 0) && resolutionFlag == "" && !showAllFlag {
+				fmt.Printf("\nNote: %d resolved and %d ignored compensations are hidden.\n",
+					hiddenResolved, hiddenIgnored)
+				fmt.Println("Use --all to show all states, or --resolution=resolved/ignored for specific states.")
+			}
+
 			// Show message if results were limited
-			if limitFlag > 0 && len(compensations) > limitFlag {
-				fmt.Printf("Showing %d of %d results. Use --limit to see more.\n", limitFlag, len(compensations))
+			if limitFlag > 0 && len(filtered) == limitFlag && len(prefiltered) > limitFlag {
+				fmt.Printf("Results limited to %d items. Use --limit to see more.\n", limitFlag)
 			}
 
 			return nil
@@ -248,8 +303,55 @@ func newCompFailListCmd(opts *CliOpts) *cobra.Command {
 	cmd.Flags().StringVarP(&serviceFlag, "service", "s", "", "Filter by service name")
 	cmd.Flags().StringVarP(&resolutionFlag, "resolution", "r", "", "Filter by resolution state (pending, resolved, ignored)")
 	cmd.Flags().IntVarP(&limitFlag, "limit", "l", 20, "Limit the number of results (default shows last 20)")
+	cmd.Flags().BoolVar(&showAllFlag, "all", false, "Show all compensations, including resolved and ignored ones")
 
 	return cmd
+}
+
+// prefilterCompensations applies orchestration and service filters only
+func prefilterCompensations(compensations []api.FailedCompensation, orchestrationID, serviceName string) []api.FailedCompensation {
+	// If no filters applied, return all compensations
+	if orchestrationID == "" && serviceName == "" {
+		return compensations
+	}
+
+	var filtered []api.FailedCompensation
+	for _, comp := range compensations {
+		// Check orchestration ID filter
+		if orchestrationID != "" && !strings.Contains(comp.OrchestrationID, orchestrationID) {
+			continue
+		}
+
+		// Check service name filter
+		if serviceName != "" && !strings.Contains(strings.ToLower(comp.ServiceName), strings.ToLower(serviceName)) {
+			continue
+		}
+
+		// All filters passed, add to filtered list
+		filtered = append(filtered, comp)
+	}
+
+	return filtered
+}
+
+// filterByResolution applies only resolution state filtering
+func filterByResolution(compensations []api.FailedCompensation, resolutionState string) []api.FailedCompensation {
+	if resolutionState == "" {
+		return compensations
+	}
+
+	var filtered []api.FailedCompensation
+	for _, comp := range compensations {
+		// Check resolution state filter
+		if !strings.EqualFold(comp.ResolutionState, resolutionState) {
+			continue
+		}
+
+		// Filter passed, add to filtered list
+		filtered = append(filtered, comp)
+	}
+
+	return filtered
 }
 
 type compFailColumn struct {
@@ -312,37 +414,6 @@ func formatResolutionState(state string) string {
 	default:
 		return "  " + state // Double space to align with other symbols
 	}
-}
-
-// filterCompensations applies the specified filters to the list of compensations
-func filterCompensations(compensations []api.FailedCompensation, orchestrationID, serviceName, resolutionState string) []api.FailedCompensation {
-	// If no filters applied, return all compensations
-	if orchestrationID == "" && serviceName == "" && resolutionState == "" {
-		return compensations
-	}
-
-	var filtered []api.FailedCompensation
-	for _, comp := range compensations {
-		// Check orchestration ID filter
-		if orchestrationID != "" && !strings.Contains(comp.OrchestrationID, orchestrationID) {
-			continue
-		}
-
-		// Check service name filter
-		if serviceName != "" && !strings.Contains(strings.ToLower(comp.ServiceName), strings.ToLower(serviceName)) {
-			continue
-		}
-
-		// Check resolution state filter
-		if resolutionState != "" && !strings.EqualFold(comp.ResolutionState, resolutionState) {
-			continue
-		}
-
-		// All filters passed, add to filtered list
-		filtered = append(filtered, comp)
-	}
-
-	return filtered
 }
 
 // newCompFailInspectCmd returns a new inspect command for compensation failures
