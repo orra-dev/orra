@@ -171,10 +171,10 @@ func newCompFailListCmd(opts *CliOpts) *cobra.Command {
 
 			// Define columns for the table
 			columns := []compFailColumn{
-				{"ID", func(c api.FailedCompensation) string { return c.ID }, 20},
-				{"ORCHESTRATION", func(c api.FailedCompensation) string { return c.OrchestrationID }, 20},
-				{"SERVICE", func(c api.FailedCompensation) string { return c.ServiceName }, 20},
-				{"STATUS", func(c api.FailedCompensation) string { return formatCompensationStatus(c.Status) }, 20},
+				{"ID", func(c api.FailedCompensation) string { return c.ID }, 25},
+				{"ORCHESTRATION", func(c api.FailedCompensation) string { return c.OrchestrationID }, 25},
+				{"SERVICE", func(c api.FailedCompensation) string { return c.ServiceName }, 30},
+				{"STATUS", func(c api.FailedCompensation) string { return formatCompensationStatus(c.Status) }, 13},
 				{"RESOLUTION", func(c api.FailedCompensation) string { return formatResolutionState(c.ResolutionState) }, 20},
 				{"CREATED", func(c api.FailedCompensation) string { return getRelativeTime(c.Timestamp) }, 10},
 			}
