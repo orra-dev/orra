@@ -455,22 +455,23 @@ type CompensationContext struct {
 	Timestamp       time.Time       `json:"timestamp"`
 }
 
-// CompensationFailureWebhookPayload represents the data sent to compensation failure webhooks
-type CompensationFailureWebhookPayload struct {
-	ProjectID       string               `json:"projectId"`
-	OrchestrationID string               `json:"orchestrationId"`
-	TaskID          string               `json:"taskId"`
-	ServiceID       string               `json:"serviceId"`
-	ServiceName     string               `json:"serviceName"`
-	CompensationID  string               `json:"compensationId"` // Typically comp_fail_<taskId>
-	Status          CompensationStatus   `json:"status"`
-	Error           string               `json:"error,omitempty"`
-	Timestamp       time.Time            `json:"timestamp"`
-	Context         *CompensationContext `json:"context"`
-	AttemptsMade    int                  `json:"attemptsMade"`
-	MaxAttempts     int                  `json:"maxAttempts"`
-	Partial         *PartialCompensation `json:"partial,omitempty"`
-	ActionCommand   string               `json:"actionCommand,omitempty"`
+// FailedCompensation represents the data sent to compensation failure webhooks
+type FailedCompensation struct {
+	ID               string                      `json:"id"`
+	ProjectID        string                      `json:"projectId"`
+	OrchestrationID  string                      `json:"orchestrationId"`
+	TaskID           string                      `json:"taskId"`
+	ServiceID        string                      `json:"serviceId"`
+	ServiceName      string                      `json:"serviceName"`
+	CompensationData *CompensationData           `json:"compensationData"`
+	Status           CompensationStatus          `json:"status"`
+	ResolutionState  CompensationResolutionState `json:"resolutionState"`
+	Failure          string                      `json:"failure,omitempty"`
+	Resolution       string                      `json:"resolution,omitempty"`
+	AttemptsMade     int                         `json:"attemptsMade"`
+	MaxAttempts      int                         `json:"maxAttempts"`
+	Timestamp        time.Time                   `json:"timestamp"`
+	ResolvedAt       time.Time                   `json:"resolvedAt,omitempty"`
 }
 
 type CompensationCandidate struct {

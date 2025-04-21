@@ -85,19 +85,19 @@ func (w *CompensationWorker) Start(ctx context.Context, orchestrationID string) 
 			webhooks := w.getProjectCompensationFailureWebhooks(w.ProjectID)
 			if len(webhooks) > 0 {
 				// Create a simple webhook payload
-				payload := CompensationFailureWebhookPayload{
-					ProjectID:       w.ProjectID,
-					OrchestrationID: orchestrationID,
-					TaskID:          candidate.TaskID,
-					ServiceID:       candidate.Service.ID,
-					ServiceName:     candidate.Service.Name,
-					CompensationID:  failureID,
-					Status:          status,
-					Error:           err.Error(),
-					Timestamp:       time.Now().UTC(),
-					Context:         candidate.Compensation.Context,
-					AttemptsMade:    w.attemptCounts[candidate.TaskID],
-					MaxAttempts:     MaxCompensationAttempts,
+				payload := FailedCompensation{
+					ID:               failureID,
+					ProjectID:        w.ProjectID,
+					OrchestrationID:  orchestrationID,
+					TaskID:           candidate.TaskID,
+					ServiceID:        candidate.Service.ID,
+					ServiceName:      candidate.Service.Name,
+					Status:           status,
+					Failure:          err.Error(),
+					Timestamp:        time.Now().UTC(),
+					CompensationData: candidate.Compensation,
+					AttemptsMade:     w.attemptCounts[candidate.TaskID],
+					MaxAttempts:      MaxCompensationAttempts,
 				}
 
 				// Send to all webhooks asynchronously
@@ -242,6 +242,7 @@ func (w *CompensationWorker) tryExecuteCompensation(ctx context.Context, candida
 			logger.Trace().Str("State", "ExecutionInProgress").Msg("DO NOTHING")
 		case ExecutionPaused:
 			logger.Trace().Str("State", "ExecutionPaused").Msg("DO NOTHING")
+		default:
 		}
 
 	} else {
@@ -255,6 +256,7 @@ func (w *CompensationWorker) tryExecuteCompensation(ctx context.Context, candida
 			logger.Trace().Str("State", "ExecutionPaused").Msg("NEW EXECUTION")
 		case ExecutionInProgress:
 			logger.Trace().Str("State", "ExecutionInProgress").Msg("NEW EXECUTION")
+		default:
 		}
 	}
 
@@ -352,6 +354,7 @@ func (w *CompensationWorker) waitForCompensationResult(
 				logger.Trace().Str("State", "Compensation ExecutionFailed").Msg("Failed but no failure entry- DO NOTHING")
 			case ExecutionInProgress:
 			case ExecutionPaused:
+			default:
 			}
 		}
 	}
@@ -365,7 +368,7 @@ func (w *CompensationWorker) getProjectCompensationFailureWebhooks(projectID str
 }
 
 // sendWebhookNotification sends the webhook payload to a single webhook endpoint
-func (w *CompensationWorker) sendWebhookNotification(webhookURL string, payload CompensationFailureWebhookPayload) {
+func (w *CompensationWorker) sendWebhookNotification(webhookURL string, payload FailedCompensation) {
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
 		w.LogManager.Logger.Error().
