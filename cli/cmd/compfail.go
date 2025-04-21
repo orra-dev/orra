@@ -30,6 +30,7 @@ func newCompFailCmd(opts *CliOpts) *cobra.Command {
 	cmd.AddCommand(newCompFailListCmd(opts))
 	cmd.AddCommand(newCompFailInspectCmd(opts))
 	cmd.AddCommand(newCompFailResolveCmd(opts))
+	cmd.AddCommand(newCompFailIgnoreCmd(opts))
 
 	return cmd
 }
@@ -494,6 +495,62 @@ func newCompFailResolveCmd(opts *CliOpts) *cobra.Command {
 
 	// Add reason flag
 	cmd.Flags().StringVarP(&reasonFlag, "reason", "r", "", "Reason for resolving the compensation failure (required)")
+	_ = cmd.MarkFlagRequired("reason")
+
+	return cmd
+}
+
+// newCompFailIgnoreCmd returns a new command to ignore a failed compensation
+func newCompFailIgnoreCmd(opts *CliOpts) *cobra.Command {
+	var reasonFlag string
+
+	cmd := &cobra.Command{
+		Use:   "ignore [compensation-id]",
+		Short: "Mark a failed compensation as ignored",
+		Long:  "Mark a failed compensation as ignored so no further action is required",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			proj, projectName, err := config.GetProject(opts.Config, opts.ProjectID)
+			if err != nil {
+				return err
+			}
+
+			// Validate reason
+			if reasonFlag == "" {
+				return fmt.Errorf("reason is required, use --reason flag")
+			}
+
+			client := opts.ApiClient.
+				SetBaseUrl(proj.ServerAddr).
+				SetApiKey(proj.CliAuth)
+
+			ctx, cancel := context.WithTimeout(cmd.Context(), client.GetTimeout())
+			defer cancel()
+
+			compensationID := args[0]
+
+			// Ignore the compensation
+			updatedComp, err := client.IgnoreFailedCompensation(ctx, compensationID, reasonFlag)
+			if err != nil {
+				return fmt.Errorf("failed to ignore compensation failure - %w", err)
+			}
+
+			// Project Info Section
+			fmt.Printf("Project: %s\nServer:  %s\n", projectName, proj.ServerAddr)
+
+			// Show success message with details
+			fmt.Printf("✓ Successfully ignored compensation failure\n")
+			fmt.Printf("ID:             %s\n", updatedComp.ID)
+			fmt.Printf("Service:        %s\n", updatedComp.ServiceName)
+			fmt.Printf("Resolution:     %s\n", formatResolutionState(updatedComp.ResolutionState))
+			fmt.Printf("Reason:         %s\n", updatedComp.Resolution)
+
+			return nil
+		},
+	}
+
+	// Add reason flag
+	cmd.Flags().StringVarP(&reasonFlag, "reason", "r", "", "Reason for ignoring the compensation failure (required)")
 	_ = cmd.MarkFlagRequired("reason")
 
 	return cmd

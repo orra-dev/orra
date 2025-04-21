@@ -611,6 +611,29 @@ func (c *Client) ResolveFailedCompensation(ctx context.Context, id, reason strin
 	return &response, nil
 }
 
+// IgnoreFailedCompensation marks a failed compensation as ignored
+func (c *Client) IgnoreFailedCompensation(ctx context.Context, id, reason string) (*FailedCompensation, error) {
+	var response FailedCompensation
+	var apiErr ErrorResponse
+
+	err := requests.
+		URL(c.baseURL).
+		Pathf("/compensation-failures/%s/ignore", id).
+		Method(http.MethodPost).
+		Client(c.httpClient).
+		BodyJSON(map[string]string{"reason": reason}).
+		Header("Authorization", "Bearer "+c.apiKey).
+		ToJSON(&response).
+		ErrorJSON(&apiErr).
+		Fetch(ctx)
+
+	if err != nil {
+		return nil, FormatAPIError(apiErr, "failed compensation ignore")
+	}
+
+	return &response, nil
+}
+
 func (v OrchestrationListView) Empty() bool {
 	return len(v.Pending) == 0 &&
 		len(v.Processing) == 0 &&

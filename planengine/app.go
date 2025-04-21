@@ -57,6 +57,7 @@ func (app *App) configureRoutes() *App {
 	app.Router.HandleFunc("/compensation-failures", app.APIKeyMiddleware(app.ListCompensationFailuresHandler)).Methods(http.MethodGet)
 	app.Router.HandleFunc("/compensation-failures/{id}", app.APIKeyMiddleware(app.GetCompensationFailureHandler)).Methods(http.MethodGet)
 	app.Router.HandleFunc("/compensation-failures/{id}/resolve", app.APIKeyMiddleware(app.ResolveCompensationFailureHandler)).Methods(http.MethodPost)
+	app.Router.HandleFunc("/compensation-failures/{id}/ignore", app.APIKeyMiddleware(app.IgnoreCompensationFailureHandler)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/register/service", app.APIKeyMiddleware(app.RegisterService)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/orchestrations", app.APIKeyMiddleware(app.OrchestrationsHandler)).Methods(http.MethodPost)
 	app.Router.HandleFunc("/orchestrations", app.APIKeyMiddleware(app.ListOrchestrationsHandler)).Methods(http.MethodGet)
@@ -659,6 +660,68 @@ func (app *App) ResolveCompensationFailureHandler(w http.ResponseWriter, r *http
 	// Mark the compensation as resolved
 	if err := app.Engine.ResolveFailedCompensation(id, request.Reason); err != nil {
 		app.Logger.Error().Err(err).Str("id", id).Msg("Failed to resolve compensation failure")
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
+		return
+	}
+
+	// Return the updated compensation
+	updatedComp, err := app.Engine.GetFailedCompensation(id)
+	if err != nil {
+		app.Logger.Error().Err(err).Str("id", id).Msg("Failed to get updated compensation failure")
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(updatedComp); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Internal, err))
+		return
+	}
+}
+
+// IgnoreCompensationFailureHandler marks a failed compensation as ignored
+func (app *App) IgnoreCompensationFailureHandler(w http.ResponseWriter, r *http.Request) {
+	apiKey := r.Context().Value(apiKeyContextKey).(string)
+	project, err := app.Engine.GetProjectByApiKey(apiKey)
+	if err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, err))
+		return
+	}
+
+	vars := mux.Vars(r)
+	id := vars["id"]
+	if id == "" {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, "compensation failure ID is required"))
+		return
+	}
+
+	// Parse request body to get ignore reason
+	var request struct {
+		Reason string `json:"reason"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.InvalidRequest, "invalid request body"))
+		return
+	}
+
+	// Get the compensation failure
+	comp, err := app.Engine.GetFailedCompensation(id)
+	if err != nil {
+		app.Logger.Error().Err(err).Str("id", id).Msg("Failed to get compensation failure")
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.NotExist, err))
+		return
+	}
+
+	// Verify that the compensation belongs to the project
+	if comp.ProjectID != project.ID {
+		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unauthorized, "compensation failure does not belong to this project"))
+		return
+	}
+
+	// Mark the compensation as ignored
+	if err := app.Engine.IgnoreFailedCompensation(id, request.Reason); err != nil {
+		app.Logger.Error().Err(err).Str("id", id).Msg("Failed to ignore compensation failure")
 		errs.HTTPErrorResponse(w, app.Logger, errs.E(errs.Unanticipated, err))
 		return
 	}
