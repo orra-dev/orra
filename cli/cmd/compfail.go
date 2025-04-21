@@ -139,7 +139,14 @@ const (
 )
 
 func newCompFailListCmd(opts *CliOpts) *cobra.Command {
-	return &cobra.Command{
+	var (
+		orchestrationFlag string
+		serviceFlag       string
+		resolutionFlag    string
+		limitFlag         int
+	)
+
+	cmd := &cobra.Command{
 		Use:     "ls",
 		Aliases: []string{"list"},
 		Short:   "List failed compensations for a project",
@@ -161,11 +168,38 @@ func newCompFailListCmd(opts *CliOpts) *cobra.Command {
 				return fmt.Errorf("failed to list compensation failures - %w", err)
 			}
 
+			// Apply filters
+			filtered := filterCompensations(compensations, orchestrationFlag, serviceFlag, resolutionFlag)
+
+			// Apply limit (if not zero)
+			if limitFlag > 0 && limitFlag < len(filtered) {
+				filtered = filtered[:limitFlag]
+			}
+
 			// Project Info Section
 			fmt.Printf("Project: %s\nServer:  %s\n", projectName, proj.ServerAddr)
 
-			if len(compensations) == 0 {
-				fmt.Println("\nNo failed compensations found")
+			// Show filter information if any filters are applied
+			hasFilters := orchestrationFlag != "" || serviceFlag != "" || resolutionFlag != ""
+			if hasFilters {
+				fmt.Println("\nApplied filters:")
+				if orchestrationFlag != "" {
+					fmt.Printf("  Orchestration: %s\n", orchestrationFlag)
+				}
+				if serviceFlag != "" {
+					fmt.Printf("  Service: %s\n", serviceFlag)
+				}
+				if resolutionFlag != "" {
+					fmt.Printf("  Resolution: %s\n", resolutionFlag)
+				}
+			}
+
+			if len(filtered) == 0 {
+				if len(compensations) > 0 && hasFilters {
+					fmt.Println("\nNo failed compensations match the applied filters")
+				} else {
+					fmt.Println("\nNo failed compensations found")
+				}
 				return nil
 			}
 
@@ -180,7 +214,7 @@ func newCompFailListCmd(opts *CliOpts) *cobra.Command {
 			}
 
 			// Print table with styling
-			fmt.Printf("\n┌─ Failed Compensations\n")
+			fmt.Printf("\n┌─ Failed Compensations (%d)\n", len(filtered))
 
 			// Header
 			headerFmt := buildCompFailFormatString(columns)
@@ -188,7 +222,7 @@ func newCompFailListCmd(opts *CliOpts) *cobra.Command {
 			fmt.Printf("│ %s\n", strings.Repeat("─", calculateCompFailLineWidth(columns)))
 
 			// Rows
-			for _, comp := range compensations {
+			for _, comp := range filtered {
 				values := make([]interface{}, len(columns))
 				for i, col := range columns {
 					values[i] = col.value(comp)
@@ -197,9 +231,22 @@ func newCompFailListCmd(opts *CliOpts) *cobra.Command {
 			}
 			fmt.Printf("└─────\n")
 
+			// Show message if results were limited
+			if limitFlag > 0 && len(compensations) > limitFlag {
+				fmt.Printf("Showing %d of %d results. Use --limit to see more.\n", limitFlag, len(compensations))
+			}
+
 			return nil
 		},
 	}
+
+	// Add filter flags
+	cmd.Flags().StringVarP(&orchestrationFlag, "orchestration", "o", "", "Filter by orchestration ID")
+	cmd.Flags().StringVarP(&serviceFlag, "service", "s", "", "Filter by service name")
+	cmd.Flags().StringVarP(&resolutionFlag, "resolution", "r", "", "Filter by resolution state (pending, resolved, ignored)")
+	cmd.Flags().IntVarP(&limitFlag, "limit", "l", 20, "Limit the number of results (default shows last 20)")
+
+	return cmd
 }
 
 type compFailColumn struct {
@@ -262,4 +309,35 @@ func formatResolutionState(state string) string {
 	default:
 		return "  " + state // Double space to align with other symbols
 	}
+}
+
+// filterCompensations applies the specified filters to the list of compensations
+func filterCompensations(compensations []api.FailedCompensation, orchestrationID, serviceName, resolutionState string) []api.FailedCompensation {
+	// If no filters applied, return all compensations
+	if orchestrationID == "" && serviceName == "" && resolutionState == "" {
+		return compensations
+	}
+
+	var filtered []api.FailedCompensation
+	for _, comp := range compensations {
+		// Check orchestration ID filter
+		if orchestrationID != "" && !strings.Contains(comp.OrchestrationID, orchestrationID) {
+			continue
+		}
+
+		// Check service name filter
+		if serviceName != "" && !strings.Contains(strings.ToLower(comp.ServiceName), strings.ToLower(serviceName)) {
+			continue
+		}
+
+		// Check resolution state filter
+		if resolutionState != "" && !strings.EqualFold(comp.ResolutionState, resolutionState) {
+			continue
+		}
+
+		// All filters passed, add to filtered list
+		filtered = append(filtered, comp)
+	}
+
+	return filtered
 }
