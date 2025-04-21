@@ -359,7 +359,6 @@ func (lm *LogManager) AppendCompensationComplete(
 }
 
 func (lm *LogManager) AppendCompensationFailure(
-	id,
 	orchestrationID,
 	taskID string,
 	logType string,
@@ -374,10 +373,12 @@ func (lm *LogManager) AppendCompensationFailure(
 		return fmt.Errorf("failed to marshal compensation failure for log entry: %w", err)
 	}
 
+	failureID := fmt.Sprintf("comp_fail_%s", strings.ToLower(taskID))
+
 	lm.AppendToLog(
 		orchestrationID,
 		logType,
-		id,
+		failureID,
 		value,
 		taskID,
 		attemptNo,
@@ -472,6 +473,7 @@ func (lm *LogManager) prepareCompensationCandidates(orchestrationID string, comp
 		}
 		compensation.Context = compContext
 		candidates = append(candidates, CompensationCandidate{
+			ID:           lm.planEngine.GenerateCompensationKey(),
 			TaskID:       taskID,
 			Service:      svc,
 			Compensation: &compensation,

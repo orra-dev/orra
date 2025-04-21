@@ -475,6 +475,7 @@ type FailedCompensation struct {
 }
 
 type CompensationCandidate struct {
+	ID           string
 	TaskID       string
 	Service      *ServiceInfo
 	Compensation *CompensationData

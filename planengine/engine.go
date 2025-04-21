@@ -525,6 +525,10 @@ func (p *PlanEngine) GenerateOrchestrationKey() string {
 	return fmt.Sprintf("o_%s", short.New())
 }
 
+func (p *PlanEngine) GenerateCompensationKey() string {
+	return fmt.Sprintf("c_%s", short.New())
+}
+
 func (p *PlanEngine) GenerateAPIKey() string {
 	key := fmt.Sprintf("%s-%s", uuid.New(), uuid.New())
 	hexString := strings.ReplaceAll(key, "-", "")

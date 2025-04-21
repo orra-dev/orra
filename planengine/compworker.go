@@ -69,9 +69,7 @@ func (w *CompensationWorker) Start(ctx context.Context, orchestrationID string) 
 				Error:  err.Error(),
 			}
 
-			failureID := fmt.Sprintf("comp_fail_%s", strings.ToLower(candidate.TaskID))
 			if err := w.LogManager.AppendCompensationFailure(
-				failureID,
 				orchestrationID,
 				candidate.TaskID,
 				logType,
@@ -86,7 +84,7 @@ func (w *CompensationWorker) Start(ctx context.Context, orchestrationID string) 
 			if len(webhooks) > 0 {
 				// Create a simple webhook payload
 				payload := FailedCompensation{
-					ID:               failureID,
+					ID:               candidate.ID,
 					ProjectID:        w.ProjectID,
 					OrchestrationID:  orchestrationID,
 					TaskID:           candidate.TaskID,
