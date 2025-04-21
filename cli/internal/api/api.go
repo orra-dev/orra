@@ -588,6 +588,29 @@ func (c *Client) GetFailedCompensation(ctx context.Context, id string) (*FailedC
 	return &response, nil
 }
 
+// ResolveFailedCompensation marks a failed compensation as resolved
+func (c *Client) ResolveFailedCompensation(ctx context.Context, id, reason string) (*FailedCompensation, error) {
+	var response FailedCompensation
+	var apiErr ErrorResponse
+
+	err := requests.
+		URL(c.baseURL).
+		Pathf("/compensation-failures/%s/resolve", id).
+		Method(http.MethodPost).
+		Client(c.httpClient).
+		BodyJSON(map[string]string{"reason": reason}).
+		Header("Authorization", "Bearer "+c.apiKey).
+		ToJSON(&response).
+		ErrorJSON(&apiErr).
+		Fetch(ctx)
+
+	if err != nil {
+		return nil, FormatAPIError(apiErr, "failed compensation resolution")
+	}
+
+	return &response, nil
+}
+
 func (v OrchestrationListView) Empty() bool {
 	return len(v.Pending) == 0 &&
 		len(v.Processing) == 0 &&
