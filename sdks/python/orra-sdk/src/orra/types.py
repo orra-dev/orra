@@ -9,7 +9,7 @@ from typing import Optional, Protocol, Callable, Awaitable, TypeVar, Dict, Any, 
 from pydantic import BaseModel, Field
 
 from .constants import DEFAULT_SERVICE_KEY_PATH
-from .exceptions import OrraError
+from .exceptions import OrraError, TaskAbortedError
 
 T_Input = TypeVar('T_Input', bound=BaseModel)
 T_Output = TypeVar('T_Output', bound=BaseModel)
@@ -123,7 +123,6 @@ class Task(Generic[T_Input]):
 
     Attributes:
         input: The task input data
-        push_update: A method to send interim results back to the plan engine
     """
 
     def __init__(self, input: T_Input, _sdk=None, _task_id=None, _execution_id=None, _idempotency_key=None):
@@ -147,6 +146,25 @@ class Task(Generic[T_Input]):
             raise OrraError("Task not properly initialized for pushing updates")
 
         await self._sdk.push_update(self._task_id, self._execution_id, self._idempotency_key, update_data)
+        
+    async def abort(self, abort_payload: dict = None) -> None:
+        """
+        Abort the current task and stop further processing.
+        
+        Args:
+            abort_payload: Optional data to include with the abort message
+            
+        Raises:
+            OrraError: If the SDK is not properly initialized
+            TaskAbortedError: Always raised after sending the abort message to stop task execution
+        """
+        if not self._sdk or not self._task_id or not self._execution_id or not self._idempotency_key:
+            raise OrraError("Task not properly initialized for aborting")
+            
+        await self._sdk.abort(self._task_id, self._execution_id, self._idempotency_key, abort_payload)
+        
+        # Raise the exception to terminate handler execution similar to JS SDK
+        raise TaskAbortedError(abort_payload)
 
 
 @dataclass
