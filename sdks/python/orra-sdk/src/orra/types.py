@@ -2,6 +2,7 @@
 #   License, v. 2.0. If a copy of the MPL was not distributed with this
 #   file, You can obtain one at https://mozilla.org/MPL/2.0/.
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Optional, Protocol, Callable, Awaitable, TypeVar, Dict, Any, List, Generic
@@ -63,6 +64,28 @@ class CompensationStatus(str, Enum):
     EXPIRED = "expired"
 
 
+class CompensationContext(BaseModel):
+    """Context information for compensation operations."""
+    orchestration_id: str = Field(
+        description="ID of the orchestration related to this compensation",
+        alias="orchestrationId"
+    )
+    reason: str = Field(
+        description="Reason for compensation (e.g., 'ABORTED', 'FAILED')",
+        alias="reason"
+    )
+    payload: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Dynamic payload with additional compensation context",
+        alias="payload"
+    )
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="When the compensation was initiated",
+        alias="timestamp"
+    )
+    
+    
 class CompensationData(BaseModel):
     """Data required for compensation operations."""
     data: Dict[str, Any] = Field(
@@ -171,11 +194,18 @@ class Task(Generic[T_Input]):
 class RevertSource(Generic[T_Input, T_Output]):
     """
     Wrapper for revert handler inputs that provides access to both
-    the original task and its result.
+    the original task and its result, as well as compensation context.
 
     Type Parameters:
         T_Input: Type of the original task's input model
         T_Output: Type of the original task's output model
+        
+    Attributes:
+        input: The original task input
+        output: The original task output
+        context: Optional compensation context containing orchestration ID, reason, 
+                and any additional payload
     """
     input: T_Input
     output: T_Output
+    context: Optional[CompensationContext] = None

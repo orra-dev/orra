@@ -17,7 +17,7 @@ from .logger import OrraLogger
 from .persistence import PersistenceManager
 from .types import (
     PersistenceConfig, T_Input, T_Output, CompensationStatus,
-    CompensationResult
+    CompensationResult, CompensationContext, RevertSource
 )
 
 MAX_PROCESSED_TASKS_AGE = 24 * 60 * 60  # 24 hours in seconds
@@ -590,8 +590,34 @@ class OrraSDK:
             if "originalTask" not in comp_data or "taskResult" not in comp_data:
                 raise OrraError("Invalid compensation input format. Expected 'originalTask' and 'taskResult'")
 
-            # Execute revert handler
-            comp_result = await self._revert_handler(comp_data)
+            # Extract and parse compensation context if present
+            context = None
+            compensation_context = data.get("compensationContext")
+            if compensation_context:
+                try:
+                    context = CompensationContext.model_validate(compensation_context)
+                    self.logger.debug(
+                        "Compensation context received",
+                        orchestrationId=context.orchestration_id,
+                        reason=context.reason,
+                        taskId=task_id
+                    )
+                except Exception as e:
+                    self.logger.warn(
+                        "Failed to parse compensation context",
+                        error=str(e),
+                        taskId=task_id
+                    )
+            
+            # Create a RevertSource object with the input data and context
+            revert_source = RevertSource(
+                input=comp_data.get("originalTask"),
+                output=comp_data.get("taskResult"),
+                context=context
+            )
+            
+            # Execute revert handler with the RevertSource
+            comp_result = await self._revert_handler(revert_source)
 
             processing_time = time.time() - start_time
             self.logger.debug(
