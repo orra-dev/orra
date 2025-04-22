@@ -8,7 +8,7 @@ from pydantic import ValidationError, BaseModel
 from .client import OrraSDK
 from .constants import DEFAULT_SERVICE_KEY_DIR, DEFAULT_SERVICE_KEY_FILE
 from .exceptions import OrraError, MissingRevertHandlerError
-from .types import T_Input, T_Output, CompensationResult, CompensationData, RevertSource, Task
+from .types import T_Input, T_Output, CompensationResult, CompensationData, RevertSource, Task, CompensationContext
 
 
 class OrraBase:
@@ -97,7 +97,7 @@ class OrraBase:
             self._revert_handler = func
 
             # Create internal revert handler with validation
-            async def internal_revert_handler(raw_input: Dict[str, Any]) -> Dict[str, Any]:
+            async def internal_revert_handler(raw_input: Dict[str, Any], context: Optional[CompensationContext] = None) -> Dict[str, Any]:
                 try:
                     self._sdk.logger.debug("Validating revert input", service=self._name)
 
@@ -107,10 +107,11 @@ class OrraBase:
                     # Parse task comp_result
                     task_result = self._output_model.model_validate(raw_input["taskResult"])
 
-                    # Create RevertSource with validated data
+                    # Create RevertSource with validated data and context
                     revert_source = RevertSource(
                         input=original_task,
-                        output=task_result
+                        output=task_result,
+                        context=context
                     )
 
                     # Execute handler

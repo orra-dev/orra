@@ -71,7 +71,7 @@ class CompensationContext(BaseModel):
         alias="orchestrationId"
     )
     reason: str = Field(
-        description="Reason for compensation (e.g., 'ABORTED', 'FAILED')",
+        description="Reason for compensation (e.g., 'aborted', 'failed')",
         alias="reason"
     )
     payload: Optional[Dict[str, Any]] = Field(

@@ -17,7 +17,7 @@ from .logger import OrraLogger
 from .persistence import PersistenceManager
 from .types import (
     PersistenceConfig, T_Input, T_Output, CompensationStatus,
-    CompensationResult, CompensationContext, RevertSource
+    CompensationResult, CompensationContext
 )
 
 MAX_PROCESSED_TASKS_AGE = 24 * 60 * 60  # 24 hours in seconds
@@ -609,15 +609,8 @@ class OrraSDK:
                         taskId=task_id
                     )
             
-            # Create a RevertSource object with the input data and context
-            revert_source = RevertSource(
-                input=comp_data.get("originalTask"),
-                output=comp_data.get("taskResult"),
-                context=context
-            )
-            
-            # Execute revert handler with the RevertSource
-            comp_result = await self._revert_handler(revert_source)
+            # Execute revert handler with raw data and parsed context
+            comp_result = await self._revert_handler(comp_data, context)
 
             processing_time = time.time() - start_time
             self.logger.debug(
