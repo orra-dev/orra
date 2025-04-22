@@ -81,6 +81,16 @@ async def reserve_inventory(task: Task[Input]) -> Output:
 # Compensation handler for reverting
 @inventory_service.revert_handler()
 async def revert_reservation(source: RevertSource[Input, Output]) -> CompensationResult:
+    # Access the compensation context information
+    if source.context:
+        reason = source.context.reason  # Why compensation was triggered (ABORTED, FAILED, etc)
+        payload = source.context.payload  # Any additional data passed with compensation
+        orchestration_id = source.context.orchestration_id  # Parent orchestration ID
+
+        print(f"Compensation triggered for orchestration {orchestration_id} due to: {reason}")
+        if payload:
+            print(f"Additional context: {payload}")
+
     print(f"Reverting reservation {source.output.reservation_id} for order {source.input.order_id}")
     # Release the inventory
     return CompensationResult(status=CompensationStatus.COMPLETED)

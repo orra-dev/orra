@@ -69,13 +69,21 @@ class OrraBase:
     def revert_handler(self) -> Callable:
         """Register revert handler function for compensation operations.
 
-        The handler must accept a RevertSource[InputModel, OutputModel] and return a CompensationResult.
+        The handler must accept a RevertSource[InputModel, OutputModel] which includes:
+    - input: The original task input
+    - output: The task result
+    - context: Compensation context with orchestration_id, reason, payload, and timestamp
 
-        Example:
-            @service.revert_handler()
-            async def handle_revert(source: RevertSource[InputModel, OutputModel]) -> CompensationResult:
-                # Compensation logic here
-                return CompensationResult(status=CompensationStatus.COMPLETED)
+    Example:
+        @service.revert_handler()
+        async def handle_revert(source: RevertSource[InputModel, OutputModel]) -> CompensationResult:
+            # Access context via source.context
+            if source.context:
+                reason = source.context.reason  # Why compensation occurred
+                payload = source.context.payload  # Additional data
+
+            # Compensation logic here
+            return CompensationResult(status=CompensationStatus.COMPLETED)
         """
 
         def decorator(func: Callable[[RevertSource[T_Input, T_Output]], Awaitable[CompensationResult]]):
