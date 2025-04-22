@@ -96,6 +96,75 @@ async def revert_reservation(source: RevertSource[Input, Output]) -> Compensatio
     return CompensationResult(status=CompensationStatus.COMPLETED)
 ```
 
+### Aborting Tasks
+
+```python
+from orra import OrraService, Task
+from pydantic import BaseModel
+
+class Input(BaseModel):
+    order_id: str
+    product_id: str
+    quantity: int
+
+class Output(BaseModel):
+    success: bool
+    reservation_id: str
+
+inventory_service = OrraService(
+    name="inventory-service",
+    description="Handles product inventory reservations",
+    url="https://api.orra.dev",
+    api_key="your-api-key",
+    revertible=True  # Enable compensation for aborted tasks
+)
+
+@inventory_service.handler()
+async def reserve_inventory(task: Task[Input]) -> Output:
+    # Check inventory availability
+    inventory_count = await check_inventory(task.input.product_id)
+    
+    if inventory_count < task.input.quantity:
+        # If inventory is insufficient, abort the task
+        await task.abort({
+            "reason": "INSUFFICIENT_INVENTORY",
+            "available": inventory_count,
+            "requested": task.input.quantity
+        })
+        # Code below won't execute due to abort
+    
+    # Normal processing continues if not aborted
+    reservation_id = await create_reservation(
+        task.input.order_id,
+        task.input.product_id,
+        task.input.quantity
+    )
+    
+    return Output(success=True, reservation_id=reservation_id)
+```
+
+Aborting a task immediately stops execution and sends an abort signal to the orchestration engine. If the service is revertible, the abort information will be available in the compensation context:
+
+```python
+@inventory_service.revert_handler()
+async def revert_reservation(source: RevertSource[Input, Output]) -> CompensationResult:
+    if source.context and source.context.reason == "aborted":
+        # The abort payload is available in context.payload
+        abort_info = source.context.payload
+        print(f"Task was aborted due to: {abort_info.get('reason')}")
+        print(f"Available inventory: {abort_info.get('available')}")
+        print(f"Requested quantity: {abort_info.get('requested')}")
+    
+    # No actual reservation to revert in this case
+    return CompensationResult(status=CompensationStatus.COMPLETED)
+```
+
+You can view abort information using the CLI:
+```bash
+# View task details including abort reason
+orra inspect -d <orchestration-id> -t <task-id>
+```
+
 ### Progress Updates for Long-Running Tasks
 
 ```python
