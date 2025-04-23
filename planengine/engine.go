@@ -82,7 +82,6 @@ func (p *PlanEngine) Initialise(
 		for _, project := range projects {
 			p.projects[project.ID] = project
 			orchestrations, err := orchestrationStorage.ListProjectOrchestrations(project.ID)
-			p.Logger.Trace().Interface("Orchestrations", orchestrations).Msg("Loaded orchestrations from DB")
 			if err != nil {
 				p.Logger.Error().
 					Err(err).
@@ -90,7 +89,7 @@ func (p *PlanEngine) Initialise(
 					Msg("Failed to load orchestrations")
 				continue
 			}
-
+			p.Logger.Trace().Interface("Orchestrations", orchestrations).Msg("Loaded orchestrations from DB")
 			p.orchestrationStoreMu.Lock()
 			for _, orchestration := range orchestrations {
 				if orchestration.Status == Pending {
@@ -584,14 +583,14 @@ func (o *Orchestration) GetHealthCheckGracePeriod() time.Duration {
 	if o.HealthCheckGracePeriod == nil {
 		return HealthCheckGracePeriod
 	}
-	return o.HealthCheckGracePeriod.Duration
+	return time.Duration(*o.HealthCheckGracePeriod)
 }
 
 func (o *Orchestration) GetTimeout() time.Duration {
 	if o.Timeout == nil {
 		return TaskTimeout
 	}
-	return o.Timeout.Duration
+	return time.Duration(*o.Timeout)
 }
 
 func (o *Orchestration) FailedBeforeDecomposition() bool {

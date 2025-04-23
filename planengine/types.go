@@ -307,9 +307,7 @@ type Orchestration struct {
 	AbortPayload           json.RawMessage   `json:"abortReason,omitempty"`
 }
 
-type Duration struct {
-	time.Duration
-}
+type Duration time.Duration
 
 func (d *Duration) UnmarshalJSON(b []byte) error {
 	var v interface{}
@@ -320,17 +318,28 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 	switch value := v.(type) {
 	case string:
 		var err error
-		d.Duration, err = time.ParseDuration(value)
+		parsed, err := time.ParseDuration(value)
 		if err != nil {
 			return err
 		}
+		*d = Duration(parsed)
 	case float64:
-		d.Duration = time.Duration(value)
+		*d = Duration(value)
+	case map[string]interface{}: // Legacy struct format
+		if durVal, ok := value["Duration"].(float64); ok {
+			*d = Duration(durVal)
+			return nil
+		}
+		return fmt.Errorf("invalid duration object")
 	default:
 		return fmt.Errorf("invalid duration")
 	}
 
 	return nil
+}
+
+func (d Duration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(time.Duration(d).String())
 }
 
 type Action struct {

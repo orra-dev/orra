@@ -60,7 +60,15 @@ func (b *BadgerDB) LoadOrchestration(id string) (*Orchestration, error) {
 		}
 
 		return item.Value(func(val []byte) error {
-			return json.Unmarshal(val, &orchestration)
+			mErr := json.Unmarshal(val, &orchestration)
+			if mErr != nil {
+				b.logger.Error().
+					Err(mErr).
+					Str("RawOrchestration", string(val)).
+					Msgf("failed to load orchestration: %s", id)
+				return mErr
+			}
+			return nil
 		})
 	})
 
