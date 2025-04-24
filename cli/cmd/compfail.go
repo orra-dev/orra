@@ -422,18 +422,24 @@ func newCompFailInspectCmd(opts *CliOpts) *cobra.Command {
 			fmt.Printf("Project: %s\nServer:  %s\n", projectName, proj.ServerAddr)
 
 			// Compensation Overview
-			fmt.Printf("\n┌─ Compensation Failure\n")
+			fmt.Printf("\n┌─ Compensation Failure %s\n", getResolutionSuffix(comp.ResolutionState))
 			fmt.Printf("│ ID:             %s\n", comp.ID)
 			fmt.Printf("│ Orchestration:  %s\n", comp.OrchestrationID)
 			fmt.Printf("│ Service:        %s (%s)\n", comp.ServiceName, comp.ServiceID)
 			fmt.Printf("│ Task:           %s\n", comp.TaskID)
-			fmt.Printf("│ Status:         %s\n", formatCompensationStatus(comp.Status))
-			fmt.Printf("│ Resolution:     %s\n", formatResolutionState(comp.ResolutionState))
 			fmt.Printf("│ Failed:         %s ago (%s)\n",
 				getRelativeTime(comp.Timestamp),
 				comp.Timestamp.Format("2006-01-02 15:04:05"))
 			fmt.Printf("│ Attempts:       %d of %d\n", comp.AttemptsMade, comp.MaxAttempts)
 			fmt.Printf("└─────\n")
+
+			// Resolution Information
+			if comp.ResolutionState == "resolved" || comp.ResolutionState == "ignored" {
+				fmt.Printf("\n┌─ Resolution\n")
+				fmt.Printf("│ Details:    %s\n", comp.Resolution)
+				fmt.Printf("│ Actioned:   %s\n", comp.ResolvedAt.Format("2006-01-02 15:04:05"))
+				fmt.Printf("└─────\n")
+			}
 
 			// Failure Information
 			fmt.Printf("\n┌─ Failure Information\n")
@@ -477,14 +483,16 @@ func newCompFailInspectCmd(opts *CliOpts) *cobra.Command {
 			fmt.Printf("│   orra inspect -d %s\n", comp.OrchestrationID)
 			fmt.Printf("└─────\n")
 
-			// Resolution Management
-			fmt.Printf("\n┌─ Management Options\n")
-			fmt.Printf("│\n│ Commands:\n")
-			fmt.Printf("│   Mark as resolved:\n")
-			fmt.Printf("│     orra comp-fail resolve %s --reason \"Manually fixed\"\n", comp.ID)
-			fmt.Printf("│\n│   Ignore this failure:\n")
-			fmt.Printf("│     orra comp-fail ignore %s --reason \"Test transaction\"\n", comp.ID)
-			fmt.Printf("└─────\n")
+			if comp.ResolutionState == "pending" {
+				// Resolution Management
+				fmt.Printf("\n┌─ Management Options\n")
+				fmt.Printf("│\n│ Commands:\n")
+				fmt.Printf("│   Mark as resolved:\n")
+				fmt.Printf("│     orra comp-fail resolve %s --reason \"Manually fixed\"\n", comp.ID)
+				fmt.Printf("│\n│   Ignore this failure:\n")
+				fmt.Printf("│     orra comp-fail ignore %s --reason \"Test transaction\"\n", comp.ID)
+				fmt.Printf("└─────\n")
+			}
 
 			return nil
 		},
@@ -602,4 +610,17 @@ func newCompFailIgnoreCmd(opts *CliOpts) *cobra.Command {
 	_ = cmd.MarkFlagRequired("reason")
 
 	return cmd
+}
+
+func getResolutionSuffix(resolution string) string {
+	switch strings.ToLower(resolution) {
+	case "pending":
+		return "[PENDING]"
+	case "resolved":
+		return "[RESOLVED]"
+	case "ignored":
+		return "[IGNORED]"
+	default:
+		return ""
+	}
 }
