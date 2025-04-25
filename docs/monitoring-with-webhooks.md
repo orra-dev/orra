@@ -130,19 +130,32 @@ All webhook requests include the following HTTP headers:
 
 ## Managing Compensation Failures
 
-When receiving compensation failure webhooks, you can use the CLI to investigate and manage these incidents:
+### Human Intervention for Failed Compensations
+
+Compensation failures indicate potential data inconsistencies that often require human intervention. When a compensation failure webhook is received:
+
+1. **Investigate the failure** using the orra CLI to understand what went wrong
+2. **Take manual corrective action** if necessary (e.g., manually process a refund)
+3. **Record the resolution** using the CLI commands
+
+Each compensation failure will remain in a `pending` state until explicitly marked as `resolved` or `ignored` by an operator.
+
+### CLI Commands for Compensation Management
 
 ```bash
-# List failed compensations
+# List failed compensations (defaults to showing only pending items)
 orra comp-fail ls
 
-# Inspect a specific compensation failure
+# Show all compensations including resolved and ignored
+orra comp-fail ls --all
+
+# Inspect detailed information about a specific failure
 orra comp-fail inspect <compensation-id>
 
-# Mark a compensation as resolved after manual intervention
+# Mark as resolved after taking manual corrective action
 orra comp-fail resolve <compensation-id> --reason "Manually refunded customer"
 
-# Ignore a compensation failure that doesn't require action
+# Mark as ignored for cases that don't require action
 orra comp-fail ignore <compensation-id> --reason "Test transaction, no actual impact"
 ```
 
