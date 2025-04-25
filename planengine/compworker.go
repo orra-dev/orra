@@ -387,7 +387,7 @@ func (w *CompensationWorker) sendWebhookNotification(webhookURL string, compensa
 		Status           CompensationStatus `json:"status"`
 		Failure          string             `json:"failure"`
 		CompensationData *CompensationData  `json:"compensation_data"`
-		Timestamp        time.Time          `json:"timestamp"`
+		Timestamp        string             `json:"timestamp"`
 	}{
 		EventID:          eventId,
 		Type:             compType,
@@ -400,7 +400,7 @@ func (w *CompensationWorker) sendWebhookNotification(webhookURL string, compensa
 		Status:           compensation.Status,
 		Failure:          compensation.Failure,
 		CompensationData: compensation.CompensationData,
-		Timestamp:        compensation.Timestamp,
+		Timestamp:        compensation.Timestamp.Format("RFC3339"),
 	}
 
 	jsonPayload, err := json.Marshal(payload)

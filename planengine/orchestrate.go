@@ -908,7 +908,7 @@ func (p *PlanEngine) triggerWebhook(orchestration *Orchestration) error {
 		ProjectID       string            `json:"project_id"`
 		OrchestrationID string            `json:"orchestration_id"`
 		Status          Status            `json:"status"`
-		Timestamp       time.Time         `json:"timestamp"`
+		Timestamp       string            `json:"timestamp"`
 		Results         []json.RawMessage `json:"results,omitempty"`
 		Error           json.RawMessage   `json:"error,omitempty"`
 		AbortedPayload  json.RawMessage   `json:"abort_reason,omitempty"`
@@ -918,7 +918,7 @@ func (p *PlanEngine) triggerWebhook(orchestration *Orchestration) error {
 		ProjectID:       orchestration.ProjectID,
 		OrchestrationID: orchestration.ID,
 		Status:          orchestration.Status,
-		Timestamp:       orchestration.Timestamp,
+		Timestamp:       orchestration.Timestamp.Format("RFC3339"),
 		Results:         orchestration.Results,
 		Error:           orchestration.Error,
 		AbortedPayload:  orchestration.AbortPayload,
