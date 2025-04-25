@@ -900,16 +900,26 @@ func (p *PlanEngine) validateActionable(subTasks []*SubTask) error {
 }
 
 func (p *PlanEngine) triggerWebhook(orchestration *Orchestration) error {
+	eventId := fmt.Sprintf("%s-%s-%d", orchestration.ID, orchestration.Status, orchestration.Timestamp.Unix())
+	orchestrationType := fmt.Sprintf("orchestration.%s", orchestration.Status)
 	var payload = struct {
-		OrchestrationID string            `json:"orchestrationId"`
-		Results         []json.RawMessage `json:"results"`
+		EventID         string            `json:"event_id"`
+		Type            string            `json:"type"`
+		ProjectID       string            `json:"project_id"`
+		OrchestrationID string            `json:"orchestration_id"`
 		Status          Status            `json:"status"`
+		Timestamp       time.Time         `json:"timestamp"`
+		Results         []json.RawMessage `json:"results,omitempty"`
 		Error           json.RawMessage   `json:"error,omitempty"`
-		AbortedPayload  json.RawMessage   `json:"abortReason,omitempty"`
+		AbortedPayload  json.RawMessage   `json:"abort_reason,omitempty"`
 	}{
+		EventID:         eventId,
+		Type:            orchestrationType,
+		ProjectID:       orchestration.ProjectID,
 		OrchestrationID: orchestration.ID,
-		Results:         orchestration.Results,
 		Status:          orchestration.Status,
+		Timestamp:       orchestration.Timestamp,
+		Results:         orchestration.Results,
 		Error:           orchestration.Error,
 		AbortedPayload:  orchestration.AbortPayload,
 	}
@@ -935,6 +945,7 @@ func (p *PlanEngine) triggerWebhook(orchestration *Orchestration) error {
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "orra/1.0")
+	req.Header.Set("X-Orra-Event", orchestrationType)
 
 	// Create an HTTP client with a timeout
 	client := &http.Client{

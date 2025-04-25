@@ -372,7 +372,37 @@ func (w *CompensationWorker) getProjectCompensationFailureWebhooks(projectID str
 }
 
 // sendWebhookNotification sends the webhook payload to a single webhook endpoint
-func (w *CompensationWorker) sendWebhookNotification(webhookURL string, payload FailedCompensation) {
+func (w *CompensationWorker) sendWebhookNotification(webhookURL string, compensation FailedCompensation) {
+	eventId := fmt.Sprintf("%s-%s-%d", compensation.ID, compensation.Status, compensation.Timestamp.Unix())
+	compType := "compensation.failed"
+	var payload = struct {
+		EventID          string             `json:"event_id"`
+		Type             string             `json:"type"`
+		CompensationID   string             `json:"compensation_id"`
+		ProjectID        string             `json:"project_id"`
+		OrchestrationID  string             `json:"orchestration_id"`
+		TaskID           string             `json:"task_id"`
+		ServiceID        string             `json:"service_id"`
+		ServiceName      string             `json:"service_name"`
+		Status           CompensationStatus `json:"status"`
+		Failure          string             `json:"failure"`
+		CompensationData *CompensationData  `json:"compensation_data"`
+		Timestamp        time.Time          `json:"timestamp"`
+	}{
+		EventID:          eventId,
+		Type:             compType,
+		CompensationID:   compensation.ID,
+		ProjectID:        compensation.ProjectID,
+		OrchestrationID:  compensation.OrchestrationID,
+		TaskID:           compensation.TaskID,
+		ServiceID:        compensation.ServiceID,
+		ServiceName:      compensation.ServiceName,
+		Status:           compensation.Status,
+		Failure:          compensation.Failure,
+		CompensationData: compensation.CompensationData,
+		Timestamp:        compensation.Timestamp,
+	}
+
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
 		w.LogManager.Logger.Error().
@@ -401,7 +431,7 @@ func (w *CompensationWorker) sendWebhookNotification(webhookURL string, payload 
 		w.LogManager.Logger.Error().
 			Err(err).
 			Str("webhookURL", webhookURL).
-			Str("projectID", payload.ProjectID).
+			Str("projectID", compensation.ProjectID).
 			Msg("Failed to send compensation webhook")
 		return
 	}
@@ -413,9 +443,9 @@ func (w *CompensationWorker) sendWebhookNotification(webhookURL string, payload 
 		w.LogManager.Logger.Warn().
 			Int("statusCode", resp.StatusCode).
 			Str("webhookURL", webhookURL).
-			Str("projectID", payload.ProjectID).
-			Str("orchestrationID", payload.OrchestrationID).
-			Str("taskID", payload.TaskID).
+			Str("projectID", compensation.ProjectID).
+			Str("orchestrationID", compensation.OrchestrationID).
+			Str("taskID", compensation.TaskID).
 			Msg("Compensation webhook returned non-success status code")
 	}
 }
