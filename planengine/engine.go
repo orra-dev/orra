@@ -497,6 +497,14 @@ func (p *PlanEngine) AddProjectWebhook(projectID string, webhookUrl string) erro
 	return nil
 }
 
+func (p *PlanEngine) GetProjectWebhooks(projectID string) []string {
+	project, exists := p.projects[projectID]
+	if !exists {
+		return nil
+	}
+	return append([]string{}, project.Webhooks...)
+}
+
 func (p *PlanEngine) AddProjectCompensationFailureWebhook(projectID string, webhookUrl string) error {
 	if err := p.pStorage.AddProjectCompensationFailureWebhook(projectID, webhookUrl); err != nil {
 		return fmt.Errorf("failed to add compensation webhook: %w", err)
