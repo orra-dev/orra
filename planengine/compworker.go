@@ -432,7 +432,7 @@ func (w *CompensationWorker) sendWebhookNotification(webhookURL string, compensa
 			Err(err).
 			Str("webhookURL", webhookURL).
 			Str("projectID", compensation.ProjectID).
-			Msg("Failed to send compensation webhook")
+			Msg("Failed to notify compensation webhook")
 		return
 	}
 	defer func(Body io.ReadCloser) {
