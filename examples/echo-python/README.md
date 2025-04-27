@@ -97,8 +97,7 @@ curl -X POST http://localhost:8005/orchestrations \
         "field": "message",
         "value": "Hello from curl!"
       }
-    ],
-    "webhook": "http://host.docker.internal:8888/api/webhook"
+    ]
   }'
 ```
 

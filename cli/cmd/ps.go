@@ -25,6 +25,7 @@ const (
 	symbolFailed        = "✕ " // Cross for failed
 	symbolNotActionable = "⊘ " // Prohibited circle for not actionable
 	symbolPaused        = "⏸ " // Pause icon for paused
+	symbolAborted       = "⊟ " // Crossed box for aborted
 )
 
 func newPsCmd(opts *CliOpts) *cobra.Command {
@@ -76,10 +77,11 @@ func newPsCmd(opts *CliOpts) *cobra.Command {
 				})
 			}
 
-			// Prepare all orchestrations in order: Processing, Pending, Completed, Failed, NotActionable
+			// Prepare all orchestrations in order: Processing, Pending, Aborted, Completed, Failed, NotActionable
 			var allOrchestrations []api.OrchestrationView
 			allOrchestrations = append(allOrchestrations, orchestrations.Processing...)
 			allOrchestrations = append(allOrchestrations, orchestrations.Pending...)
+			allOrchestrations = append(allOrchestrations, orchestrations.Aborted...)
 			allOrchestrations = append(allOrchestrations, orchestrations.Completed...)
 			allOrchestrations = append(allOrchestrations, orchestrations.Failed...)
 			allOrchestrations = append(allOrchestrations, orchestrations.NotActionable...)
@@ -181,6 +183,8 @@ func formatStatus(status string) string {
 		return symbolFailed + status
 	case "not actionable":
 		return symbolNotActionable + status
+	case "aborted":
+		return symbolAborted + status
 	default:
 		return "  " + status // Double space to align with other symbols
 	}

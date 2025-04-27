@@ -24,3 +24,9 @@ class ServiceRegistrationError(OrraError):
 class MissingRevertHandlerError(OrraError):
     """Raised when revert handler has not been provided for a revertible service or agent"""
     pass
+
+class TaskAbortedError(OrraError):
+    """Raised when a task is aborted explicitly, includes abort payload"""
+    def __init__(self, abort_payload=None):
+        super().__init__("Task aborted")
+        self.abort_payload = abort_payload

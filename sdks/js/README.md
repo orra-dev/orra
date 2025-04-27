@@ -64,20 +64,70 @@ process.on('SIGINT', async () => {
 
 ```javascript
 // Register as revertible
-await echoToolSvc.register({
-  description: 'A service with compensation support',
-  revertible: true,
-  schema: {
-    // Schema definition
-  }
+await inventoryService.register({
+	description: 'An inventory service with compensation support',
+	revertible: true,
+	schema: {
+		// Schema definition
+	}
 });
 
-// Add compensation handler
-echoToolSvc.onRevert(async (originalTask, taskResult) => {
-  console.log(`Reverting task ${originalTask.id}`);
-  // Compensate the action
+// Compensation handler with context
+inventoryService.onRevert(async (originalTask, taskResult, context) => {
+	console.log(`Reverting task ${originalTask.id}`);
+	
+	// Access compensation context
+	if (context) {
+		console.log(`Compensation reason: ${context.reason}`);
+		console.log(`Orchestration ID: ${context.orchestrationId}`);
+		
+		// For aborted tasks, access the abort payload
+		if (context.reason === 'ABORTED' && context.payload) {
+			console.log(`Abort reason: ${context.payload.reason}`);
+		}
+	}
+	
+	// Perform compensation logic
+	await releaseReservation(taskResult.reservationId);
 });
 ```
+
+The compensation handler receives a third parameter context that provides information about why the compensation was triggered:
+- `reason`: Why compensation was triggered (e.g., 'aborted', 'failed')
+- `orchestrationId`: The ID of the parent orchestration
+- `payload`: Additional data related to the compensation (optional)
+- `timestamp`: When the compensation was initiated
+
+### Aborting Tasks
+
+The SDK allows you to abort task processing when needed, instead of completing the task normally:
+
+```javascript
+// Handler with abort capability
+service.start(async (task) => {
+	try {
+		// Check condition that might require abort
+		const inventory = await checkInventory(task.input.productId);
+		
+		if (inventory.available < task.input.quantity) {
+			// Abort with detailed payload - will stop execution
+			return task.abort({
+				reason: "INSUFFICIENT_INVENTORY",
+				available: inventory.available,
+				requested: task.input.quantity
+			});
+		}
+		
+		// Normal processing continues if not aborted
+		const reservationId = await createReservation(task.input);
+		return { success: true, reservationId };
+	} catch (error) {
+		throw error;
+	}
+});
+```
+
+When a task is aborted, the orchestration will receive an abort message with your payload, and task processing will stop immediately. In revertible services, the abort information will be available during compensation.
 
 ### Progress Updates for Long-Running Tasks
 

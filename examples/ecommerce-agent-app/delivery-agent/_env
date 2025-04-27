@@ -3,3 +3,4 @@ ORRA_API_KEY=xxx
 MISTRAL_API_KEY=xxx
 NODE_ENV=development
 DEMO_FAIL=false
+DEMO_ABORT=false

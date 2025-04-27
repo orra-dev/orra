@@ -42,7 +42,6 @@ func newVerifyCmd(opts *CliOpts) *cobra.Command {
 func newVerifyRunCmd(opts *CliOpts) *cobra.Command {
 	var (
 		data                   []string
-		webhookUrl             string
 		timeout                string
 		healthCheckGracePeriod string
 		quiet                  bool
@@ -62,14 +61,6 @@ execute the required project services`,
 				return err
 			}
 
-			if len(webhookUrl) == 0 {
-				webhookUrl = proj.Webhooks[0]
-			}
-
-			if !contains(proj.Webhooks, webhookUrl) {
-				return fmt.Errorf("unknown webhook for project %s", projectName)
-			}
-
 			actionParams, err := parseActionParamsJSON(data)
 			if err != nil {
 				return err
@@ -87,7 +78,6 @@ execute the required project services`,
 					Content: action,
 				},
 				Data:                   actionParams,
-				Webhook:                webhookUrl,
 				Timeout:                timeout,
 				HealthCheckGracePeriod: healthCheckGracePeriod,
 			})
@@ -122,8 +112,6 @@ execute the required project services`,
 
 	//cmd.Flags().StringSliceVarP(&data, "data", "d", []string{}, "Data to supplement action in format param:value")
 	cmd.Flags().StringArrayVarP(&data, "data", "d", []string{}, "Data to supplement action in format param:value or param:json")
-	cmd.Flags().StringVarP(&webhookUrl, "webhook", "w", "", `Webhook url to accept results 
-(defaults to first configured webhook)`)
 	cmd.Flags().StringVarP(&timeout, "timeout", "t", "", `Set execution timeout duration per service/agent
 (defaults to 30s)`)
 	cmd.Flags().StringVarP(&healthCheckGracePeriod, "health-check-grace-period", "g", "", `Set grace period for an unhealthy service or agent before terminating an orchestration

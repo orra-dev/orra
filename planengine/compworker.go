@@ -7,10 +7,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -24,7 +27,7 @@ const (
 	CompensationBackoffMax  = 1 * time.Minute
 )
 
-func NewCompensationWorker(orchestrationID string, logManager *LogManager, candidates []CompensationCandidate, cancel context.CancelFunc) LogWorker {
+func NewCompensationWorker(projectID, orchestrationID string, logManager *LogManager, candidates []CompensationCandidate, cancel context.CancelFunc) LogWorker {
 	expBackoff := back.NewExponentialBackOff()
 	expBackoff.InitialInterval = 2 * time.Second
 	expBackoff.MaxInterval = CompensationBackoffMax
@@ -33,6 +36,7 @@ func NewCompensationWorker(orchestrationID string, logManager *LogManager, candi
 	expBackoff.MaxElapsedTime = 0        // No max elapsed time - we'll control via attempts
 
 	return &CompensationWorker{
+		ProjectID:       projectID,
 		OrchestrationID: orchestrationID,
 		LogManager:      logManager,
 		Candidates:      candidates,
@@ -64,6 +68,7 @@ func (w *CompensationWorker) Start(ctx context.Context, orchestrationID string) 
 				Status: status,
 				Error:  err.Error(),
 			}
+
 			if err := w.LogManager.AppendCompensationFailure(
 				orchestrationID,
 				candidate.TaskID,
@@ -74,6 +79,35 @@ func (w *CompensationWorker) Start(ctx context.Context, orchestrationID string) 
 				w.LogManager.Logger.Error().
 					Err(err).
 					Msg("Failed to log compensation failure")
+			}
+
+			payload := FailedCompensation{
+				ID:               candidate.ID,
+				ProjectID:        w.ProjectID,
+				OrchestrationID:  orchestrationID,
+				TaskID:           candidate.TaskID,
+				ServiceID:        candidate.Service.ID,
+				ServiceName:      candidate.Service.Name,
+				Status:           status,
+				Failure:          err.Error(),
+				Timestamp:        time.Now().UTC(),
+				CompensationData: candidate.Compensation,
+				AttemptsMade:     w.attemptCounts[candidate.TaskID],
+				MaxAttempts:      MaxCompensationAttempts,
+				ResolutionState:  ResolutionPending,
+			}
+
+			// Store the failed compensation
+			if err := w.LogManager.planEngine.StoreFailedCompensation(&payload); err != nil {
+				w.LogManager.Logger.Error().Err(err).Msg("Failed to store failed compensation")
+			}
+
+			webhooks := w.getProjectCompensationFailureWebhooks(w.ProjectID)
+			if len(webhooks) > 0 {
+				// Send to all webhooks asynchronously
+				for _, webhook := range webhooks {
+					go w.sendWebhookNotification(webhook, payload)
+				}
 			}
 		}
 	}
@@ -212,6 +246,7 @@ func (w *CompensationWorker) tryExecuteCompensation(ctx context.Context, candida
 			logger.Trace().Str("State", "ExecutionInProgress").Msg("DO NOTHING")
 		case ExecutionPaused:
 			logger.Trace().Str("State", "ExecutionPaused").Msg("DO NOTHING")
+		default:
 		}
 
 	} else {
@@ -225,19 +260,21 @@ func (w *CompensationWorker) tryExecuteCompensation(ctx context.Context, candida
 			logger.Trace().Str("State", "ExecutionPaused").Msg("NEW EXECUTION")
 		case ExecutionInProgress:
 			logger.Trace().Str("State", "ExecutionInProgress").Msg("NEW EXECUTION")
+		default:
 		}
 	}
 
 	task := &Task{
-		Type:            "compensation_request",
-		ID:              taskID,
-		ExecutionID:     executionID,
-		IdempotencyKey:  idempotencyKey,
-		ServiceID:       service.ID,
-		Input:           compData.Input,
-		OrchestrationID: w.OrchestrationID,
-		ProjectID:       service.ProjectID,
-		Status:          Processing,
+		Type:                "compensation_request",
+		ID:                  taskID,
+		ExecutionID:         executionID,
+		IdempotencyKey:      idempotencyKey,
+		ServiceID:           service.ID,
+		Input:               compData.Input,
+		CompensationContext: compData.Context,
+		OrchestrationID:     w.OrchestrationID,
+		ProjectID:           service.ProjectID,
+		Status:              Processing,
 	}
 
 	if err := w.LogManager.AppendCompensationAttempted(
@@ -321,7 +358,94 @@ func (w *CompensationWorker) waitForCompensationResult(
 				logger.Trace().Str("State", "Compensation ExecutionFailed").Msg("Failed but no failure entry- DO NOTHING")
 			case ExecutionInProgress:
 			case ExecutionPaused:
+			default:
 			}
 		}
+	}
+}
+
+func (w *CompensationWorker) getProjectCompensationFailureWebhooks(projectID string) []string {
+	if project, exists := w.LogManager.planEngine.projects[projectID]; exists {
+		return project.CompensationFailureWebhooks
+	}
+	return nil
+}
+
+// sendWebhookNotification sends the webhook payload to a single webhook endpoint
+func (w *CompensationWorker) sendWebhookNotification(webhookURL string, compensation FailedCompensation) {
+	eventId := fmt.Sprintf("%s-%s-%d", compensation.ID, compensation.Status, compensation.Timestamp.Unix())
+	compType := "compensation.failed"
+	var payload = struct {
+		EventID          string             `json:"event_id"`
+		Type             string             `json:"type"`
+		CompensationID   string             `json:"compensation_id"`
+		ProjectID        string             `json:"project_id"`
+		OrchestrationID  string             `json:"orchestration_id"`
+		TaskID           string             `json:"task_id"`
+		ServiceID        string             `json:"service_id"`
+		ServiceName      string             `json:"service_name"`
+		Status           CompensationStatus `json:"status"`
+		Failure          string             `json:"failure"`
+		CompensationData *CompensationData  `json:"compensation_data"`
+		Timestamp        string             `json:"timestamp"`
+	}{
+		EventID:          eventId,
+		Type:             compType,
+		CompensationID:   compensation.ID,
+		ProjectID:        compensation.ProjectID,
+		OrchestrationID:  compensation.OrchestrationID,
+		TaskID:           compensation.TaskID,
+		ServiceID:        compensation.ServiceID,
+		ServiceName:      compensation.ServiceName,
+		Status:           compensation.Status,
+		Failure:          compensation.Failure,
+		CompensationData: compensation.CompensationData,
+		Timestamp:        compensation.Timestamp.Format("RFC3339"),
+	}
+
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		w.LogManager.Logger.Error().
+			Err(err).
+			Str("webhookURL", webhookURL).
+			Msg("Failed to marshal compensation webhook payload")
+		return
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequest("POST", webhookURL, bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		w.LogManager.Logger.Error().
+			Err(err).
+			Str("webhookURL", webhookURL).
+			Msg("Failed to create compensation webhook request")
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "orra/1.0")
+	req.Header.Set("X-Orra-Event", "compensation.failed")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		w.LogManager.Logger.Error().
+			Err(err).
+			Str("webhookURL", webhookURL).
+			Str("projectID", compensation.ProjectID).
+			Msg("Failed to notify compensation webhook")
+		return
+	}
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		w.LogManager.Logger.Warn().
+			Int("statusCode", resp.StatusCode).
+			Str("webhookURL", webhookURL).
+			Str("projectID", compensation.ProjectID).
+			Str("orchestrationID", compensation.OrchestrationID).
+			Str("taskID", compensation.TaskID).
+			Msg("Compensation webhook returned non-success status code")
 	}
 }

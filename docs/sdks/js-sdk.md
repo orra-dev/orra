@@ -1,10 +1,10 @@
 # Orra JS SDK Documentation
 
-The JS SDK for Orra lets you transform your AI agents, tools as services and services into reliable, production-ready Node.js components.
+The JS SDK for orra lets you transform your AI agents, tools as services and services into reliable, production-ready Node.js components.
 
 ## Installation
 
-First, [install the Orra CLI](../cli.md) .
+First, [install the orra CLI](../cli.md) .
 
 Then, install the latest version of the SDK.
 ```bash
@@ -14,13 +14,13 @@ npm install -S @orra.dev/sdk
 
 ## Quick Integration Example
 
-The Orra SDK is designed to wrap your existing logic with minimal changes. Here's a simple example showing how to integrate an existing customer chat service:
+The orra SDK is designed to wrap your existing logic with minimal changes. Here's a simple example showing how to integrate an existing customer chat service:
 
 ```javascript
 import { initService } from '@orra.dev/sdk';
 import { myService } from './existing-service';  // Your existing logic
 
-// Initialize the Orra client
+// Initialize the orra client
 const customerChatSvc = initService({
 	name: 'customer-chat-service',
 	orraUrl: process.env.ORRA_URL,
@@ -55,13 +55,13 @@ customerChatSvc.start(async (task) => {
 		
 		// Use your existing service function
 		// Your function handles its own retries and error recovery
-		// and Orra reacts accordingly.
+		// and orra reacts accordingly.
 		const response = await myService(customerId, message);
 		
 		return { response };
 	} catch (error) {
 		// Once you determine the task should fail, throw the error.
-		// Orra will handle failure propagation to the Plan Engine.
+		// orra will handle failure propagation to the Plan Engine.
 		throw error;
 	}
 });
@@ -69,9 +69,9 @@ customerChatSvc.start(async (task) => {
 
 ## Understanding the SDK
 
-The Orra SDK follows patterns similar to serverless functions or job processors, making it familiar for AI Engineers. Your services become event-driven handlers that:
+The orra SDK follows patterns similar to serverless functions or job processors, making it familiar for AI Engineers. Your services become event-driven handlers that:
 
-1. Register capabilities with Orra's Plan Engine (what they can do)
+1. Register capabilities with orra's Plan Engine (what they can do)
 2. Process tasks when called (actual execution)
 3. Return results for orchestration
 
@@ -149,21 +149,55 @@ service.start(async (task) => {
     // 1. Access task information
     const { input, executionId } = task;
     
-    // 2. Your existing business logic, may include its own retry/recovery if available (otherwise Orra deals with this) 
+    // 2. Your existing business logic, may include its own retry/recovery if available (otherwise orra deals with this) 
     const result = await yourExistingFunction(input);
     
     // 3. Return results
     return result;
   } catch (error) {
-    // After your error handling is complete, let Orra know about permanent failures
+    // After your error handling is complete, let orra know about permanent failures
     throw error;
   }
 });
 ```
 
-### 3. Reverts powered by compensations
+### 3. Aborting Tasks
 
-Marking a service or agent as **revertible** enables the previous task result to be compensated by that component in case of upstream failures.
+You can abort a task's execution when you need to stop processing but don't want to trigger a normal failure. This is useful for business logic conditions where it makes sense to halt the orchestration with a specific message:
+
+```javascript
+service.start(async (task) => {
+  try {
+    // Check inventory availability
+    const inventory = await checkInventory(task.input.productId);
+    
+    if (inventory.available < task.input.quantity) {
+      // Abort with detailed payload - will stop execution
+      return task.abort({
+        reason: "INSUFFICIENT_INVENTORY",
+        available: inventory.available,
+        requested: task.input.quantity
+      });
+    }
+    
+    // Normal processing continues if not aborted
+    const reservationId = await createReservation(task.input);
+    return { success: true, reservationId };
+  } catch (error) {
+    throw error;
+  }
+});
+```
+
+When a task is aborted:
+- The orchestration stops execution
+- The abort payload is preserved
+- If any previously executed services are revertible, their compensation will be triggered
+- The abort information is available in the compensation context
+
+### 4. Reverts powered by compensations
+
+Marking a service or agent as **revertible** enables the previous task result to be compensated by that component in case of upstream failures or aborts.
 
 A revert may succeed **completely**, **partially** or simply **fail**. They are run after an action's failure.
 
@@ -177,13 +211,61 @@ await client.register({
    revertible: true
 });
 
-// 2. Add the revert handler, which accepts the original task the actual task result for an orchestration
-service.onRevert(async (task, result) => {
+// 2. Add the revert handler, which accepts the original task, the actual task result, and the compensation context
+service.onRevert(async (task, result, context) => {
   console.log('Reverting for task:', task.id);
   console.log('Reverting inventory product hold from:', result?.hold, 'to:', false);
-  // If this errors, Orra will try to re-compensate upto 10 times.
-})
+  
+  // Access compensation context information
+  if (context) {
+    // Why the compensation was triggered during an orchestration: "failed", "aborted", etc.
+    console.log('Compensation reason:', context.reason);
+    
+    // ID of the parent orchestration
+    console.log('Orchestration ID:', context.orchestrationId);
+    
+    // When the compensation was initiated
+    console.log('Timestamp:', context.timestamp);
+    
+    // Access abort payload if task was aborted
+    if (context.reason === 'aborted' && context.payload) {
+      console.log('Abort reason:', context.payload.reason);
+      console.log('Available inventory:', context.payload.available);
+      console.log('Requested quantity:', context.payload.requested);
+    }
+  }
+  
+  // Perform compensation logic
+  await releaseInventoryHold(result.reservationId);
+  
+  // Return compensation result
+  return {
+    status: 'completed'
+  };
+  
+  // For partial compensation:
+  // return {
+  //   status: 'partial',
+  //   partial: {
+  //     completed: ['inventory_hold'],
+  //     remaining: ['notification']
+  //   }
+  // };
+});
 ```
+
+#### Compensation Context
+
+The compensation context provides critical information about why a compensation was triggered:
+
+| Property | Description                                                                                            |
+|----------|--------------------------------------------------------------------------------------------------------|
+| `reason` | Why the compensation was triggered during an orchestration (e.g., `"failed"`, `"aborted"`)             |
+| `orchestrationId` | The ID of the parent orchestration                                                                     |
+| `timestamp` | When the compensation was initiated                                                                    |
+| `payload` | **Optional**: additional data related to the compensation (may contain aborted or failed payload) |
+
+This context helps you implement more intelligent compensation logic based on the specific reason for the rollback.
 
 ## Advanced Features
 
@@ -237,7 +319,7 @@ service.start(async (task) => {
 
 #### Viewing Progress Updates
 
-Use the Orra CLI to view progress updates:
+Use the orra CLI to view progress updates:
 
 ```bash
 # View summarized progress updates
@@ -256,7 +338,7 @@ orra inspect -d <orchestration-id> --long-updates
 
 ### Persistence Configuration
 
-Orra's Plan Engine maintains service/agent identity across restarts using persistence. This is crucial for:
+orra's Plan Engine maintains service/agent identity across restarts using persistence. This is crucial for:
 - Maintaining service/agent history
 - Ensuring consistent service/agent identification
 - Supporting service/agent upgrades
@@ -288,6 +370,7 @@ const service = initService({
 1. **Error Handling**
     - Implement comprehensive error handling in your business logic
     - Use retries for transient failures
+    - Use `task.abort()` for business-logic conditions that should stop execution
 
 2. **Schema Design**
     - Be specific about input/output types
@@ -299,9 +382,14 @@ const service = initService({
     - Design for idempotency
     - Include proper logging for debugging
 
+4. **Compensation Design**
+    - Make compensation logic robust with its own error handling
+    - Use the compensation context to implement context-aware reverts
+    - Test compensation scenarios thoroughly
+
 ## Example: Converting Existing Code
 
-Here's how to convert an existing AI service to use Orra:
+Here's how to convert an existing AI service to use orra:
 
 ### Before (Traditional Express API)
 ```javascript
@@ -323,7 +411,7 @@ app.post('/analyze', async (req, res) => {
 app.listen(3000);
 ```
 
-### After (Orra Integration)
+### After (orra Integration)
 ```javascript
 import { initAgent } from '@orra.dev/sdk';
 import { analyzeImage } from './ai-agent';  // Reuse existing logic
@@ -362,10 +450,20 @@ await imageAgent.register({
 imageAgent.start(async (task) => {
   try {
     const { imageUrl } = task.input;
+    
+    // Check if the image is accessible
+    const isAccessible = await checkImageAccess(imageUrl);
+    if (!isAccessible) {
+      return task.abort({
+        reason: "IMAGE_NOT_ACCESSIBLE",
+        url: imageUrl
+      });
+    }
+    
     // Your function handles its own retries
     return await analyzeImage(imageUrl);
   } catch (error) {
-    // After your error handling is complete, let Orra know about the failure
+    // After your error handling is complete, let orra know about the failure
     throw error;
   }
 });
@@ -378,10 +476,150 @@ process.on('SIGTERM', async () => {
 });
 ```
 
+## Complete Example: Revertible Service with Abort and Context
+
+Here's a complete example of an inventory service that demonstrates abort functionality and context-aware compensation:
+
+```javascript
+import { initService } from '@orra.dev/sdk';
+import { inventoryDb } from './inventory-db';
+
+const inventoryService = initService({
+  name: 'inventory-service',
+  orraUrl: process.env.ORRA_URL,
+  orraKey: process.env.ORRA_API_KEY
+});
+
+await inventoryService.register({
+  description: 'Handles product inventory reservations',
+  revertible: true,  // Enable compensations
+  schema: {
+    input: {
+      type: 'object',
+      properties: {
+        orderId: { type: 'string' },
+        productId: { type: 'string' },
+        quantity: { type: 'number' }
+      },
+      required: ['orderId', 'productId', 'quantity']
+    },
+    output: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        reservationId: { type: 'string' }
+      }
+    }
+  }
+});
+
+// Main task handler
+inventoryService.start(async (task) => {
+  try {
+    const { orderId, productId, quantity } = task.input;
+    
+    // Send progress update
+    await task.pushUpdate({
+      progress: 25,
+      status: "checking_inventory",
+      message: "Checking product availability"
+    });
+    
+    // Check inventory
+    const available = await inventoryDb.checkAvailability(productId);
+    
+    if (available < quantity) {
+      // Abort the task with detailed information
+      return task.abort({
+        reason: "INSUFFICIENT_INVENTORY",
+        available: available,
+        requested: quantity,
+        productId: productId
+      });
+    }
+    
+    // Update progress
+    await task.pushUpdate({
+      progress: 75,
+      status: "reserving",
+      message: "Reserving inventory"
+    });
+    
+    // Reserve inventory
+    const reservationId = await inventoryDb.createReservation(orderId, productId, quantity);
+    
+    // Final progress update
+    await task.pushUpdate({
+      progress: 100,
+      status: "completed",
+      message: "Inventory reserved successfully"
+    });
+    
+    return {
+      success: true,
+      reservationId: reservationId
+    };
+  } catch (error) {
+    throw error;
+  }
+});
+
+// Compensation handler with context awareness
+inventoryService.onRevert(async (task, result, context) => {
+  console.log(`Reverting reservation for order ${task.input.orderId}`);
+  
+  // Use context to determine compensation behavior
+  if (context) {
+    console.log(`Compensation triggered by: ${context.reason}`);
+    console.log(`Orchestration ID: ${context.orchestrationId}`);
+    
+    // Log additional information for aborted tasks
+    if (context.reason === 'aborted' && context.payload) {
+      console.log(`Abort reason: ${context.payload.reason}`);
+      
+      // For inventory-specific aborts, we might not need to do anything
+      if (
+        context.payload.reason === 'INSUFFICIENT_INVENTORY' && 
+        context.payload.productId === task.input.productId
+      ) {
+        console.log('No actual reservation was made due to insufficient inventory');
+        return { status: 'completed' };
+      }
+    }
+  }
+  
+  // For other cases where a reservation was made, release it
+  if (result && result.reservationId) {
+    try {
+      await inventoryDb.releaseReservation(result.reservationId);
+      console.log(`Released reservation ${result.reservationId}`);
+      return { status: 'completed' };
+    } catch (error) {
+      console.error(`Failed to release reservation: ${error.message}`);
+      return { 
+        status: 'failed',
+        error: error.message 
+      };
+    }
+  } else {
+    // No reservation ID found
+    console.log('No reservation to revert');
+    return { status: 'completed' };
+  }
+});
+
+// Handle graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('Shutting down inventory service...');
+  inventoryService.shutdown();
+  process.exit(0);
+});
+```
+
 ## Next Steps
 
 1. Review the example projects for more integration patterns
 2. Join our community for support and updates
 3. Check out the action orchestration guide to start using your services
 
-Need help? Contact the Orra team or open an issue on GitHub.
+Need help? Contact the orra team or open an issue on GitHub.

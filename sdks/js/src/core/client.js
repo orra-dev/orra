@@ -6,6 +6,7 @@
 
 import DefaultWebSocket from 'ws';
 import { OrraLogger } from './logger.js';
+import { TaskAbortedError } from './errors.js'
 
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -151,6 +152,55 @@ class OrraSDK {
 				resolve();
 			} catch (error) {
 				this.logger.error('Failed to push update', {
+					taskId,
+					executionId,
+					idempotencyKey,
+					error: error.message
+				});
+				reject(error);
+			}
+		});
+	}
+	
+	abort(taskId, executionId, idempotencyKey, abortPayload) {
+		if (!taskId || !executionId || !idempotencyKey) {
+			this.logger.error('Cannot abort: taskId, executionId and idempotencyKey are all required', {
+				taskId,
+				executionId,
+				idempotencyKey
+			});
+			return Promise.reject(new Error('Both taskId, executionId and idempotencyKey are required for aborting tasks'));
+		}
+		
+		if (!this.serviceId) {
+			this.logger.error('Cannot abort: service not registered', {
+				taskId,
+				executionId,
+				idempotencyKey
+			});
+			return Promise.reject(new Error('Service must be registered for tasks to be aborted'));
+		}
+		
+		if (this.#userInitiatedClose) {
+			this.logger.error('Cannot abort: SDK is shutting down', {
+				taskId,
+				executionId,
+				idempotencyKey
+			});
+			return Promise.reject(new Error('SDK is shutting down'));
+		}
+		
+		return new Promise((resolve, reject) => {
+			try {
+				// Wrap the update data in the expected format
+				const payload = {
+					task: abortPayload
+				};
+				
+				this.#sendAbortTaskResult(taskId, executionId, this.serviceId, idempotencyKey, payload);
+				resolve(abortPayload);
+			} catch (error) {
+				this.logger.error('Failed to abort', {
 					taskId,
 					executionId,
 					idempotencyKey,
@@ -370,6 +420,13 @@ class OrraSDK {
 			return this.pushUpdate(taskId, executionId, idempotencyKey, updateData);
 		};
 		
+		task.abort = (abortPayload) => {
+			return this.abort(taskId, executionId, idempotencyKey, abortPayload).then(abortPayload => {
+				// Throw the error here to terminate the handler
+				throw new TaskAbortedError(abortPayload);
+			});
+		}
+		
 		this.logger.trace('Task handling initiated', {
 			taskId,
 			executionId,
@@ -394,6 +451,10 @@ class OrraSDK {
 		});
 		
 		const processedResult = this.#processedTasksCache.get(idempotencyKey);
+		if (processedResult && processedResult?.status === 'aborted') {
+			return;
+		}
+		
 		if (processedResult) {
 			this.logger.debug('Cache hit found', {
 				taskId,
@@ -475,23 +536,39 @@ class OrraSDK {
 				this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, result);
 			})
 			.catch((error) => {
-				const processingTime = Date.now() - startTime;
-				this.logger.trace('Task processing failed', {
-					taskId,
-					executionId,
-					idempotencyKey,
-					processingTimeMs: processingTime,
-					errorType: error.constructor.name,
-					errorMessage: error.message,
-					stackTrace: error.stack
-				});
-				this.#inProgressTasks.delete(idempotencyKey);
-				this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, null, error.message);
+				if (error instanceof TaskAbortedError) {
+					// Handle task abortion - this is the single place where it's handled
+					this.logger.debug('Task execution aborted', {
+						taskId, executionId, idempotencyKey
+					});
+					
+					// Clean up in-progress task
+					this.#inProgressTasks.delete(idempotencyKey);
+					
+					// Add to processed tasks cache with abort status
+					this.#processedTasksCache.set(idempotencyKey, {
+						result: { task: error.abortPayload, status: 'aborted' },
+						timestamp: Date.now()
+					});
+				} else {
+					const processingTime = Date.now() - startTime;
+					this.logger.trace('Task processing failed', {
+						taskId,
+						executionId,
+						idempotencyKey,
+						processingTimeMs: processingTime,
+						errorType: error.constructor.name,
+						errorMessage: error.message,
+						stackTrace: error.stack
+					});
+					this.#inProgressTasks.delete(idempotencyKey);
+					this.#sendTaskResult(taskId, executionId, this.serviceId, idempotencyKey, null, error.message);
+				}
 			});
 	}
 	
 	#handleRevert(task) {
-		const { id: taskId, executionId, idempotencyKey, input } = task;
+		const { id: taskId, executionId, idempotencyKey, input, compensationContext = null } = task;
 		
 		this.logger.trace('Revert task handling initiated', {
 			taskId,
@@ -568,7 +645,7 @@ class OrraSDK {
 		this.#inProgressTasks.set(idempotencyKey, { startTime });
 		
 		Promise.resolve()
-			.then(() => this.#revertHandler(input.originalTask, input.taskResult))
+			.then(() => this.#revertHandler(input.originalTask, input.taskResult, compensationContext))
 			.then((rawResult) => {
 				const result = processRevertResult(rawResult, this.logger, taskId, executionId);
 				
@@ -645,6 +722,18 @@ class OrraSDK {
 	#sendInterimTaskResult(taskId, executionId, serviceId, idempotencyKey, result) {
 		const message = {
 			type: 'task_interim_result',
+			taskId,
+			executionId,
+			serviceId,
+			idempotencyKey,
+			result
+		};
+		this.#sendMessage(message);
+	}
+	
+	#sendAbortTaskResult(taskId, executionId, serviceId, idempotencyKey, result) {
+		const message = {
+			type: 'task_abort_result',
 			taskId,
 			executionId,
 			serviceId,

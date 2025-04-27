@@ -11,7 +11,7 @@ package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.11"
-orra-sdk = "^0.2.2"
+orra-sdk = "^0.2.4"
 python-dotenv = "^1.0.0"
 uvicorn = "^0.27.0"
 fastapi = "^0.109.0"

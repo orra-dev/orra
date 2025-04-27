@@ -41,11 +41,12 @@ func (e SpecVersionError) Error() string {
 
 func NewPlanEngine() *PlanEngine {
 	plane := &PlanEngine{
-		projects:           make(map[string]*Project),
-		services:           make(map[string]map[string]*ServiceInfo),
-		orchestrationStore: make(map[string]*Orchestration),
-		logWorkers:         make(map[string]map[string]context.CancelFunc),
-		groundings:         make(map[string]map[string]*GroundingSpec),
+		projects:            make(map[string]*Project),
+		services:            make(map[string]map[string]*ServiceInfo),
+		orchestrationStore:  make(map[string]*Orchestration),
+		logWorkers:          make(map[string]map[string]context.CancelFunc),
+		groundings:          make(map[string]map[string]*GroundingSpec),
+		failedCompensations: make(map[string]map[string]*FailedCompensation),
 	}
 	return plane
 }
@@ -56,6 +57,7 @@ func (p *PlanEngine) Initialise(
 	svcStorage ServiceStorage,
 	orchestrationStorage OrchestrationStorage,
 	groundingStorage GroundingStorage,
+	failedCompStorage FailedCompensationStorage,
 	logMgr *LogManager,
 	wsManager *WebSocketManager,
 	vCache *VectorCache,
@@ -67,6 +69,7 @@ func (p *PlanEngine) Initialise(
 	p.svcStorage = svcStorage
 	p.orchestrationStorage = orchestrationStorage
 	p.groundingStorage = groundingStorage
+	p.failedCompStorage = failedCompStorage
 	p.LogManager = logMgr
 	p.Logger = Logger
 	p.WebSocketManager = wsManager
@@ -79,7 +82,6 @@ func (p *PlanEngine) Initialise(
 		for _, project := range projects {
 			p.projects[project.ID] = project
 			orchestrations, err := orchestrationStorage.ListProjectOrchestrations(project.ID)
-			p.Logger.Trace().Interface("Orchestrations", orchestrations).Msg("Loaded orchestrations from DB")
 			if err != nil {
 				p.Logger.Error().
 					Err(err).
@@ -87,7 +89,7 @@ func (p *PlanEngine) Initialise(
 					Msg("Failed to load orchestrations")
 				continue
 			}
-
+			p.Logger.Trace().Interface("Orchestrations", orchestrations).Msg("Loaded orchestrations from DB")
 			p.orchestrationStoreMu.Lock()
 			for _, orchestration := range orchestrations {
 				if orchestration.Status == Pending {
@@ -127,6 +129,30 @@ func (p *PlanEngine) Initialise(
 				p.groundings[grounding.ProjectID] = projectGroundings
 			}
 			projectGroundings[grounding.Name] = grounding
+		}
+	}
+
+	// Load existing failed compensations
+	if failedCompStorage != nil {
+		if failedComps, err := failedCompStorage.ListFailedCompensations(); err == nil {
+			p.failedCompsMu.Lock()
+			defer p.failedCompsMu.Unlock()
+
+			p.Logger.Debug().Msgf("Loading %d failed compensations", len(failedComps))
+
+			for _, comp := range failedComps {
+				// Organize by project ID
+				projectComps, exists := p.failedCompensations[comp.ProjectID]
+				if !exists {
+					projectComps = make(map[string]*FailedCompensation)
+					p.failedCompensations[comp.ProjectID] = projectComps
+				}
+				projectComps[comp.ID] = comp
+
+				p.Logger.Trace().Str("CompID", comp.ID).Str("ProjectID", comp.ProjectID).Str("OrchestrationID", comp.OrchestrationID).Msg("Loaded failed compensation")
+			}
+		} else {
+			p.Logger.Warn().Err(err).Msg("Failed to load failed compensations")
 		}
 	}
 
@@ -458,14 +484,35 @@ func (p *PlanEngine) AddProjectAPIKey(projectID string, apiKey string) error {
 	return nil
 }
 
-func (p *PlanEngine) AddProjectWebhook(projectID string, webhook string) error {
-	if err := p.pStorage.AddProjectWebhook(projectID, webhook); err != nil {
+func (p *PlanEngine) AddProjectWebhook(projectID string, webhookUrl string) error {
+	if err := p.pStorage.AddProjectWebhook(projectID, webhookUrl); err != nil {
 		return fmt.Errorf("failed to add webhook: %w", err)
 	}
 
 	// Update in-memory state
 	if project, exists := p.projects[projectID]; exists {
-		project.Webhooks = append(project.Webhooks, webhook)
+		project.Webhooks = append(project.Webhooks, webhookUrl)
+	}
+
+	return nil
+}
+
+func (p *PlanEngine) GetProjectWebhooks(projectID string) []string {
+	project, exists := p.projects[projectID]
+	if !exists {
+		return nil
+	}
+	return append([]string{}, project.Webhooks...)
+}
+
+func (p *PlanEngine) AddProjectCompensationFailureWebhook(projectID string, webhookUrl string) error {
+	if err := p.pStorage.AddProjectCompensationFailureWebhook(projectID, webhookUrl); err != nil {
+		return fmt.Errorf("failed to add compensation webhook: %w", err)
+	}
+
+	// Update in-memory state
+	if project, exists := p.projects[projectID]; exists {
+		project.CompensationFailureWebhooks = append(project.CompensationFailureWebhooks, webhookUrl)
 	}
 
 	return nil
@@ -512,6 +559,10 @@ func (p *PlanEngine) GenerateOrchestrationKey() string {
 	return fmt.Sprintf("o_%s", short.New())
 }
 
+func (p *PlanEngine) GenerateCompensationKey() string {
+	return fmt.Sprintf("c_%s", short.New())
+}
+
 func (p *PlanEngine) GenerateAPIKey() string {
 	key := fmt.Sprintf("%s-%s", uuid.New(), uuid.New())
 	hexString := strings.ReplaceAll(key, "-", "")
@@ -540,14 +591,14 @@ func (o *Orchestration) GetHealthCheckGracePeriod() time.Duration {
 	if o.HealthCheckGracePeriod == nil {
 		return HealthCheckGracePeriod
 	}
-	return o.HealthCheckGracePeriod.Duration
+	return time.Duration(*o.HealthCheckGracePeriod)
 }
 
 func (o *Orchestration) GetTimeout() time.Duration {
 	if o.Timeout == nil {
 		return TaskTimeout
 	}
-	return o.Timeout.Duration
+	return time.Duration(*o.Timeout)
 }
 
 func (o *Orchestration) FailedBeforeDecomposition() bool {

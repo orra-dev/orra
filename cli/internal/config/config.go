@@ -14,11 +14,12 @@ import (
 )
 
 type ProjectConfig struct {
-	ID         string            `json:"id"`
-	CliAuth    string            `json:"cli_auth"`
-	APIKeys    map[string]string `json:"api_key,omitempty"`
-	ServerAddr string            `json:"server_addr"`
-	Webhooks   []string          `json:"webhooks,omitempty"`
+	ID                          string            `json:"id"`
+	CliAuth                     string            `json:"cli_auth"`
+	APIKeys                     map[string]string `json:"api_key,omitempty"`
+	ServerAddr                  string            `json:"server_addr"`
+	Webhooks                    []string          `json:"webhooks,omitempty"`
+	CompensationFailureWebhooks []string          `json:"compensation_failure_webhooks,omitempty"`
 }
 
 type Config struct {

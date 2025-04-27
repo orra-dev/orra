@@ -64,8 +64,7 @@ poetry run python src/main.py
 orra verify run 'Draft a blog post' \
 --data topics_file_path:'/path/to/crewai-ghostwriters/writer-topic/fisherman-story.txt' \
 --data output_path:'/path/to/crewai-ghostwriters/drafts/draft.txt' \
--t '5m' \
--w http://host.docker.internal:8888/webhook
+-t '5m'
 ```
 
 4. Check the result:

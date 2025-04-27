@@ -12,12 +12,12 @@ from typing import Optional, Dict, Any, Callable, Awaitable
 import httpx
 import websockets
 
-from .exceptions import OrraError, ServiceRegistrationError, ConnectionError
+from .exceptions import OrraError, ServiceRegistrationError, ConnectionError, TaskAbortedError
 from .logger import OrraLogger
 from .persistence import PersistenceManager
 from .types import (
     PersistenceConfig, T_Input, T_Output, CompensationStatus,
-    CompensationResult
+    CompensationResult, CompensationContext
 )
 
 MAX_PROCESSED_TASKS_AGE = 24 * 60 * 60  # 24 hours in seconds
@@ -223,6 +223,79 @@ class OrraSDK:
             )
             raise
 
+    async def abort(
+            self,
+            task_id: str,
+            execution_id: str,
+            idempotency_key: str,
+            abort_payload: dict = None
+    ) -> dict:
+        """
+        Abort a task that's currently in progress. This sends an abort message to the control plane
+        and includes an optional payload.
+
+        Args:
+            task_id: The ID of the task
+            execution_id: The execution ID of the task
+            idempotency_key: The idempotency Key of the task
+            abort_payload: Optional data to include with the abort message
+
+        Returns:
+            The abort payload that was sent
+
+        Raises:
+            OrraError: If the service is not registered or required parameters are missing
+        """
+        if not task_id or not execution_id or not idempotency_key:
+            self.logger.error(
+                "Cannot abort: taskId, executionId and idempotency_key are required",
+                taskId=task_id,
+                executionId=execution_id,
+                idempotency_key=idempotency_key
+            )
+            raise OrraError("Both taskId, executionId and idempotency_key are required for aborting tasks")
+
+        if not self.service_id:
+            self.logger.error(
+                "Cannot abort: service not registered",
+                taskId=task_id,
+                executionId=execution_id,
+                idempotency_key=idempotency_key
+            )
+            raise OrraError("Service must be registered for tasks to be aborted")
+
+        if self._user_initiated_close:
+            self.logger.error(
+                "Cannot abort: SDK is shutting down",
+                taskId=task_id,
+                executionId=execution_id,
+                idempotency_key=idempotency_key
+            )
+            raise OrraError("SDK is shutting down")
+
+        try:
+            # Wrap the abort data in the expected format
+            payload = {
+                "task": abort_payload
+            }
+
+            await self._send_abort_task_result(
+                task_id=task_id,
+                idempotency_key=idempotency_key,
+                execution_id=execution_id,
+                result=payload
+            )
+            return abort_payload
+        except Exception as e:
+            self.logger.error(
+                "Failed to abort",
+                taskId=task_id,
+                executionId=execution_id,
+                idempotency_key=idempotency_key,
+                error=str(e)
+            )
+            raise
+
     async def _connect_websocket(self) -> None:
         """Establish WebSocket connection"""
         if self._user_initiated_close:
@@ -327,6 +400,10 @@ class OrraSDK:
 
         # Check cache first
         if cached_result := self._processed_tasks_cache.get(idempotency_key):
+            # Check if task was aborted (short-circuit if it was)
+            if cached_result.get("result", {}).get("status") == "aborted":
+                return
+
             self.logger.debug(
                 "Cache hit found",
                 taskId=task_id,
@@ -403,6 +480,21 @@ class OrraSDK:
                 execution_id=execution_id,
                 result=result
             )
+
+        except TaskAbortedError as e:
+            # Handle task abortion - this is the single place where it's handled
+            self.logger.debug(
+                "Task execution aborted",
+                taskId=task_id,
+                executionId=execution_id,
+                idempotency_key=idempotency_key
+            )
+
+            # Cache aborted task with abort status
+            self._processed_tasks_cache[idempotency_key] = {
+                "result": {"task": e.abort_payload, "status": "aborted"},
+                "timestamp": time.time()
+            }
 
         except Exception as e:
             processing_time = time.time() - start_time
@@ -498,8 +590,27 @@ class OrraSDK:
             if "originalTask" not in comp_data or "taskResult" not in comp_data:
                 raise OrraError("Invalid compensation input format. Expected 'originalTask' and 'taskResult'")
 
-            # Execute revert handler
-            comp_result = await self._revert_handler(comp_data)
+            # Extract and parse compensation context if present
+            context = None
+            compensation_context = data.get("compensationContext")
+            if compensation_context:
+                try:
+                    context = CompensationContext.model_validate(compensation_context)
+                    self.logger.debug(
+                        "Compensation context received",
+                        orchestrationId=context.orchestration_id,
+                        reason=context.reason,
+                        taskId=task_id
+                    )
+                except Exception as e:
+                    self.logger.warn(
+                        "Failed to parse compensation context",
+                        error=str(e),
+                        taskId=task_id
+                    )
+            
+            # Execute revert handler with raw data and parsed context
+            comp_result = await self._revert_handler(comp_data, context)
 
             processing_time = time.time() - start_time
             self.logger.debug(
@@ -620,6 +731,24 @@ class OrraSDK:
         """Send task interim result"""
         message = {
             "type": "task_interim_result",
+            "taskId": task_id,
+            "idempotencyKey": idempotency_key,
+            "executionId": execution_id,
+            "serviceId": self.service_id,
+            "result": result
+        }
+        await self._send_message(message)
+
+    async def _send_abort_task_result(
+            self,
+            task_id: str,
+            idempotency_key: str,
+            execution_id: str,
+            result: Optional[Any] = None
+    ) -> None:
+        """Send task abort result"""
+        message = {
+            "type": "task_abort_result",
             "taskId": task_id,
             "idempotencyKey": idempotency_key,
             "executionId": execution_id,

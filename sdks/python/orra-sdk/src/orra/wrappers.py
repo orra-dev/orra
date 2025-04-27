@@ -8,7 +8,7 @@ from pydantic import ValidationError, BaseModel
 from .client import OrraSDK
 from .constants import DEFAULT_SERVICE_KEY_DIR, DEFAULT_SERVICE_KEY_FILE
 from .exceptions import OrraError, MissingRevertHandlerError
-from .types import T_Input, T_Output, CompensationResult, CompensationData, RevertSource, Task
+from .types import T_Input, T_Output, CompensationResult, CompensationData, RevertSource, Task, CompensationContext
 
 
 class OrraBase:
@@ -69,13 +69,21 @@ class OrraBase:
     def revert_handler(self) -> Callable:
         """Register revert handler function for compensation operations.
 
-        The handler must accept a RevertSource[InputModel, OutputModel] and return a CompensationResult.
+        The handler must accept a RevertSource[InputModel, OutputModel] which includes:
+    - input: The original task input
+    - output: The task result
+    - context: Compensation context with orchestration_id, reason, payload, and timestamp
 
-        Example:
-            @service.revert_handler()
-            async def handle_revert(source: RevertSource[InputModel, OutputModel]) -> CompensationResult:
-                # Compensation logic here
-                return CompensationResult(status=CompensationStatus.COMPLETED)
+    Example:
+        @service.revert_handler()
+        async def handle_revert(source: RevertSource[InputModel, OutputModel]) -> CompensationResult:
+            # Access context via source.context
+            if source.context:
+                reason = source.context.reason  # Why compensation occurred
+                payload = source.context.payload  # Additional data
+
+            # Compensation logic here
+            return CompensationResult(status=CompensationStatus.COMPLETED)
         """
 
         def decorator(func: Callable[[RevertSource[T_Input, T_Output]], Awaitable[CompensationResult]]):
@@ -97,7 +105,7 @@ class OrraBase:
             self._revert_handler = func
 
             # Create internal revert handler with validation
-            async def internal_revert_handler(raw_input: Dict[str, Any]) -> Dict[str, Any]:
+            async def internal_revert_handler(raw_input: Dict[str, Any], context: Optional[CompensationContext] = None) -> Dict[str, Any]:
                 try:
                     self._sdk.logger.debug("Validating revert input", service=self._name)
 
@@ -107,10 +115,11 @@ class OrraBase:
                     # Parse task comp_result
                     task_result = self._output_model.model_validate(raw_input["taskResult"])
 
-                    # Create RevertSource with validated data
+                    # Create RevertSource with validated data and context
                     revert_source = RevertSource(
                         input=original_task,
-                        output=task_result
+                        output=task_result,
+                        context=context
                     )
 
                     # Execute handler

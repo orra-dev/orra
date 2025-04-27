@@ -2,7 +2,9 @@
 
 ## Understanding Actions
 
-Actions are high-level instructions that Orra's Plan Engine decomposes into tasks that execute against selected services, tools as services and agents to complete a job. Think of actions as user/machine jobs that need to be fulfilled by your system.
+Actions are high-level instructions that Orra's Plan Engine decomposes into tasks that execute against selected
+services, tools as services and agents to complete a job. Think of actions as user/machine jobs that need to be
+fulfilled by your system.
 
 ## Submitting Actions
 
@@ -41,25 +43,26 @@ curl -X POST http://localhost:8005/orchestrations \
       {"field": "orderId", "value": "ORD123"},
       {"field": "amount", "value": "299.99"},
       {"field": "productId", "value": "PROD456"}
-    ],
-    "webhook": "https://your-app.com/webhooks/orra"
+    ]
   }'
 ```
 
 # Working with Orra Actions
 
-As an AI Engineer, you know the challenges of building reliable multi-agent systems - agents failing silently, lost messages, and no visibility into what's happening. Actions are how Orra solves these problems.
+As an AI Engineer, you know the challenges of building reliable multi-agent systems - agents failing silently, lost
+messages, and no visibility into what's happening. Actions are how Orra solves these problems.
 
 ## How Actions Work
 
-An action is your high-level intent (e.g., "Help customer ABC123 with their order"). Orra handles the complexity of reliable execution:
+An action is your high-level intent (e.g., "Help customer ABC123 with their order"). Orra handles the complexity of
+reliable execution:
 
 ```mermaid
 sequenceDiagram
     participant You
     participant Orra
     participant Agents
-    participant Webhook
+    participant Webhooks
 
     You->>Orra: Submit Action
     Note over Orra: AI Planning & Parallel Execution
@@ -71,7 +74,7 @@ sequenceDiagram
         Note over Agents: Exactly-once Execution
     end
     
-    Orra->>Webhook: Final Results
+    Orra->>Webhooks: Completion or Failure event
     Note over You: Monitor Progress
 ```
 
@@ -99,16 +102,18 @@ orra inspect ORD456
 ### 3. Get Results
 
 ```javascript
-// Your webhook receives definitive results
+// Your webhook receives orchestration completion event including result or a failure event 
 app.post('/webhooks/orra', (req, res) => {
-  const { orchestrationId, status, results } = req.body;
+  const { event_id, type, orchestration_id, status, results } = req.body;
   // Handle results confidently
   res.sendStatus(200);
 });
 ```
 
 Want more details?
-- [Core Topics & Internals →](../docs/core)
+
+- [Core Topics & Internals →](../docs/core.md)
+- [Monitoring with Webhooks →](../docs/monitoring-with-webhooks.md)
 
 ## Monitoring Actions
 
@@ -127,22 +132,24 @@ orra inspect -d <action-id>
 
 ## Handling Results
 
-Configure a webhook endpoint to receive action results:
+Configure a webhook endpoint to receive action results via orchestration completion event:
 
 ```javascript
 // Example Express webhook handler
 app.post('/webhooks/orra', (req, res) => {
   const {
-    orchestrationId,
+    event_id,
+    type,
+    orchestration_id,
     status,
     results,
     error
   } = req.body;
 
-  if (status === 'completed') {
+  if (type === 'orchestration.completed') {
     // Handle successful completion
     processResults(results);
-  } else if (status === 'failed') {
+  } else if (type === 'orchestration.failed') {
     // Handle failure
     handleError(error);
   }
@@ -180,26 +187,31 @@ app.post('/webhooks/orra', (req, res) => {
 orra verify run "Process new order and arrange optimal delivery" \
   -d orderId:ORD123 \
   -d customerId:CUST456 \
-  -d items:[{"id":"PROD789","quantity":2}] \
-  -w http://host.docker.internal:3000/webhooks/order-processing
+  -d items:[{"id":"PROD789","quantity":2}]
 
 # Monitor progress
 orra inspect o_fdhdhjhashah
 
-# Webhook receives final result
+# Webhook receives completion event with result
 {
-  "orchestrationId": "o_fdhdhjhashah",
+  "event_id": "o_fdhdhjhashah-completed-233233434",
+  "type": "orchestration.completed",
+  "orchestration_id": "o_fdhdhjhashah",
   "status": "completed",
-  "results": {
+  "timestamp": "2023-10-27T15:30:45Z",
+  "results": [
+    {
     "orderStatus": "processed",
     "paymentStatus": "confirmed",
     "deliveryTracking": "DLV987",
     "estimatedDelivery": "2024-11-10"
-  }
+    }
+  ]
 }
 ```
 
 This orchestration might involve multiple services, tools as services and agents:
+
 - Payment processing service
 - Inventory management tool as a service
 - Delivery scheduling agent

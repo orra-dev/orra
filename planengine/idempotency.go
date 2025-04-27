@@ -21,6 +21,7 @@ const (
 	ExecutionPaused
 	ExecutionCompleted
 	ExecutionFailed
+	ExecutionAborted
 )
 
 const (
@@ -44,6 +45,7 @@ type Execution struct {
 	Result         json.RawMessage   `json:"result,omitempty"`
 	Failures       []error           `json:"error,omitempty"`
 	InterimResults []json.RawMessage `json:"interimResults,omitempty"`
+	AbortResult    json.RawMessage   `json:"abortResult,omitempty"`
 	State          ExecutionState    `json:"state"`
 	Timestamp      time.Time         `json:"timestamp"`
 	StartedAt      time.Time         `json:"startedAt"`
@@ -84,7 +86,7 @@ func (s *IdempotencyStore) InitializeOrGetExecution(key IdempotencyKey, executio
 
 	if execution, exists := s.executions[key]; exists {
 		switch execution.State {
-		case ExecutionCompleted, ExecutionFailed:
+		case ExecutionCompleted, ExecutionFailed, ExecutionAborted:
 			return execution, false, nil
 
 		case ExecutionPaused:
@@ -196,6 +198,20 @@ func (s *IdempotencyStore) TrackInterimResult(key IdempotencyKey, interimResult 
 	}
 }
 
+func (s *IdempotencyStore) TrackAbortResult(key IdempotencyKey, abortResult json.RawMessage) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if execution, exists := s.executions[key]; exists &&
+		execution.State == ExecutionInProgress {
+		execution.State = ExecutionAborted
+		if abortResult != nil {
+			execution.AbortResult = abortResult
+		}
+		execution.Timestamp = time.Now().UTC()
+	}
+}
+
 func (s *IdempotencyStore) UpdateExecutionResult(key IdempotencyKey, result json.RawMessage, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -220,6 +236,7 @@ func (s *IdempotencyStore) GetExecutionWithResult(key IdempotencyKey) (*Executio
 			ExecutionID: result.ExecutionID,
 			Result:      result.Result,
 			Failures:    result.Failures,
+			AbortResult: result.AbortResult,
 			State:       result.State,
 			Timestamp:   result.Timestamp,
 			StartedAt:   result.StartedAt,

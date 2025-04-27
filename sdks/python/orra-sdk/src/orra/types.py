@@ -2,6 +2,7 @@
 #   License, v. 2.0. If a copy of the MPL was not distributed with this
 #   file, You can obtain one at https://mozilla.org/MPL/2.0/.
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Optional, Protocol, Callable, Awaitable, TypeVar, Dict, Any, List, Generic
@@ -9,7 +10,7 @@ from typing import Optional, Protocol, Callable, Awaitable, TypeVar, Dict, Any, 
 from pydantic import BaseModel, Field
 
 from .constants import DEFAULT_SERVICE_KEY_PATH
-from .exceptions import OrraError
+from .exceptions import OrraError, TaskAbortedError
 
 T_Input = TypeVar('T_Input', bound=BaseModel)
 T_Output = TypeVar('T_Output', bound=BaseModel)
@@ -63,6 +64,28 @@ class CompensationStatus(str, Enum):
     EXPIRED = "expired"
 
 
+class CompensationContext(BaseModel):
+    """Context information for compensation operations."""
+    orchestration_id: str = Field(
+        description="ID of the orchestration related to this compensation",
+        alias="orchestrationId"
+    )
+    reason: str = Field(
+        description="Reason for compensation (e.g., 'aborted', 'failed')",
+        alias="reason"
+    )
+    payload: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Dynamic payload with additional compensation context",
+        alias="payload"
+    )
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="When the compensation was initiated",
+        alias="timestamp"
+    )
+    
+    
 class CompensationData(BaseModel):
     """Data required for compensation operations."""
     data: Dict[str, Any] = Field(
@@ -123,7 +146,6 @@ class Task(Generic[T_Input]):
 
     Attributes:
         input: The task input data
-        push_update: A method to send interim results back to the plan engine
     """
 
     def __init__(self, input: T_Input, _sdk=None, _task_id=None, _execution_id=None, _idempotency_key=None):
@@ -147,17 +169,43 @@ class Task(Generic[T_Input]):
             raise OrraError("Task not properly initialized for pushing updates")
 
         await self._sdk.push_update(self._task_id, self._execution_id, self._idempotency_key, update_data)
+        
+    async def abort(self, abort_payload: dict = None) -> None:
+        """
+        Abort the current task and stop further processing.
+        
+        Args:
+            abort_payload: Optional data to include with the abort message
+            
+        Raises:
+            OrraError: If the SDK is not properly initialized
+            TaskAbortedError: Always raised after sending the abort message to stop task execution
+        """
+        if not self._sdk or not self._task_id or not self._execution_id or not self._idempotency_key:
+            raise OrraError("Task not properly initialized for aborting")
+            
+        await self._sdk.abort(self._task_id, self._execution_id, self._idempotency_key, abort_payload)
+        
+        # Raise the exception to terminate handler execution similar to JS SDK
+        raise TaskAbortedError(abort_payload)
 
 
 @dataclass
 class RevertSource(Generic[T_Input, T_Output]):
     """
     Wrapper for revert handler inputs that provides access to both
-    the original task and its result.
+    the original task and its result, as well as compensation context.
 
     Type Parameters:
         T_Input: Type of the original task's input model
         T_Output: Type of the original task's output model
+        
+    Attributes:
+        input: The original task input
+        output: The original task output
+        context: Optional compensation context containing orchestration ID, reason, 
+                and any additional payload
     """
     input: T_Input
     output: T_Output
+    context: Optional[CompensationContext] = None

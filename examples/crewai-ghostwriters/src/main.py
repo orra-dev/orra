@@ -5,18 +5,20 @@
 """
 
 import asyncio
-from orra import OrraAgent, Task, RevertSource, CompensationResult, CompensationStatus
+import os
+
+from dotenv import load_dotenv
 from pydantic import BaseModel
 
 from editor import kickoff_editing_crew
+from orra import OrraAgent, Task, RevertSource, CompensationResult, CompensationStatus
 from writer_crew import kickoff_content_crew
 
-import os
-from dotenv import load_dotenv
 load_dotenv()
 
 ORRA_APIKEY = os.getenv("ORRA_API_KEY")
 DEMO_REVERT_FAIL = os.getenv("DEMO_REVERT_FAIL")
+DEMO_ABORT = os.getenv("DEMO_ABORT")
 
 
 # Define your models
@@ -53,6 +55,12 @@ async def main():
         print(f"Reverting draft original_task.input: {source.input.topics_file_path}")
         print(f"Reverting draft generated draft: {source.output.draft}")
 
+        if source.context and source.context.reason == "aborted":
+            # The abort payload is available in context.payload
+            abort_info = source.context.payload
+            print(f"Task was aborted for op: {abort_info.get('operation')}")
+            print(f"Abort reason: {abort_info.get('reason')}")
+
         if DEMO_REVERT_FAIL == "true":
             raise RuntimeError('Demo: failed to revert draft.')
 
@@ -74,6 +82,11 @@ async def main():
     @editor.handler()
     async def edit_draft(request: Task[EditorInput]) -> EditorOutput:
         draft_file_path = kickoff_editing_crew(draft=request.input.draft, output_file_path=request.input.output_path)
+        if DEMO_ABORT == "true":
+            await request.abort({
+                "operation": "edit-draft",
+                "reason": "hated the drafted story"
+            })
         return EditorOutput(final_output_path=draft_file_path)
 
     await asyncio.gather(writer.start(), editor.start())

@@ -44,6 +44,9 @@ type PlanEngine struct {
 	svcStorage           ServiceStorage
 	orchestrationStorage OrchestrationStorage
 	groundingStorage     GroundingStorage
+	failedCompStorage    FailedCompensationStorage
+	failedCompensations  map[string]map[string]*FailedCompensation // projectID -> compID -> FailedCompensation
+	failedCompsMu        sync.RWMutex
 	Logger               zerolog.Logger
 }
 
@@ -80,16 +83,20 @@ type ProjectStorage interface {
 
 	// AddProjectWebhook adds a new webhook URL to a project
 	AddProjectWebhook(projectID string, webhook string) error
+
+	// AddProjectCompensationFailureWebhook adds a new compensation webhook URL to a project
+	AddProjectCompensationFailureWebhook(projectID string, webhook string) error
 }
 
 type Project struct {
-	ID                string    `json:"id"`
-	Name              string    `json:"name"`
-	APIKey            string    `json:"apiKey"`
-	AdditionalAPIKeys []string  `json:"additionalAPIKeys"`
-	Webhooks          []string  `json:"webhooks"`
-	CreatedAt         time.Time `json:"createdAt"`
-	UpdatedAt         time.Time `json:"updatedAt"`
+	ID                          string    `json:"id"`
+	Name                        string    `json:"name"`
+	APIKey                      string    `json:"apiKey"`
+	AdditionalAPIKeys           []string  `json:"additionalAPIKeys"`
+	Webhooks                    []string  `json:"webhooks"`
+	CompensationFailureWebhooks []string  `json:"compensationFailureWebhooks"`
+	CreatedAt                   time.Time `json:"createdAt"`
+	UpdatedAt                   time.Time `json:"updatedAt"`
 }
 
 type OrchestrationState struct {
@@ -157,19 +164,20 @@ type LogWorker interface {
 }
 
 type ResultAggregator struct {
+	ProjectID    string
 	Dependencies DependencyKeySet
 	LogManager   *LogManager
 	logState     *LogState
 }
 
-type FailureTracker struct {
+type IncidentTracker struct {
+	ProjectID  string
 	LogManager *LogManager
 	logState   *LogState
 }
 
 type LoggedFailure struct {
-	Failure     string `json:"failure"`
-	SkipWebhook bool   `json:"skipWebhook"`
+	Failure string `json:"failure"`
 }
 
 type TaskWorker struct {
@@ -196,15 +204,16 @@ type TaskStatusEvent struct {
 }
 
 type Task struct {
-	Type            string          `json:"type"`
-	ID              string          `json:"id"`
-	Input           json.RawMessage `json:"input"`
-	ExecutionID     string          `json:"executionId"`
-	IdempotencyKey  IdempotencyKey  `json:"idempotencyKey"`
-	ServiceID       string          `json:"serviceId"`
-	OrchestrationID string          `json:"-"`
-	ProjectID       string          `json:"-"`
-	Status          Status          `json:"-"`
+	Type                string               `json:"type"`
+	ID                  string               `json:"id"`
+	Input               json.RawMessage      `json:"input"`
+	CompensationContext *CompensationContext `json:"compensationContext,omitempty"`
+	ExecutionID         string               `json:"executionId"`
+	IdempotencyKey      IdempotencyKey       `json:"idempotencyKey"`
+	ServiceID           string               `json:"serviceId"`
+	OrchestrationID     string               `json:"-"`
+	ProjectID           string               `json:"-"`
+	Status              Status               `json:"-"`
 }
 
 type TaskResult struct {
@@ -291,14 +300,12 @@ type Orchestration struct {
 	Timestamp              time.Time         `json:"timestamp"`
 	Timeout                *Duration         `json:"timeout,omitempty"`
 	HealthCheckGracePeriod *Duration         `json:"healthCheckGracePeriod,omitempty"`
-	Webhook                string            `json:"webhook"`
 	TaskZero               json.RawMessage   `json:"taskZero"`
 	GroundingHit           *GroundingHit     `json:"groundingHit,omitempty"`
+	AbortPayload           json.RawMessage   `json:"abortReason,omitempty"`
 }
 
-type Duration struct {
-	time.Duration
-}
+type Duration time.Duration
 
 func (d *Duration) UnmarshalJSON(b []byte) error {
 	var v interface{}
@@ -309,17 +316,28 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 	switch value := v.(type) {
 	case string:
 		var err error
-		d.Duration, err = time.ParseDuration(value)
+		parsed, err := time.ParseDuration(value)
 		if err != nil {
 			return err
 		}
+		*d = Duration(parsed)
 	case float64:
-		d.Duration = time.Duration(value)
+		*d = Duration(value)
+	case map[string]interface{}: // Legacy struct format
+		if durVal, ok := value["Duration"].(float64); ok {
+			*d = Duration(durVal)
+			return nil
+		}
+		return fmt.Errorf("invalid duration object")
 	default:
 		return fmt.Errorf("invalid duration")
 	}
 
 	return nil
+}
+
+func (d Duration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(time.Duration(d).String())
 }
 
 type Action struct {
@@ -435,17 +453,46 @@ type PartialCompensation struct {
 
 // CompensationData wraps the data needed for compensation with metadata
 type CompensationData struct {
-	Input json.RawMessage `json:"data"`
-	TTLMs int64           `json:"ttl"`
+	Input   json.RawMessage      `json:"data"`
+	Context *CompensationContext `json:"context"`
+	TTLMs   int64                `json:"ttl"`
+}
+
+type CompensationContext struct {
+	OrchestrationID string          `json:"orchestrationId"`
+	Reason          Status          `json:"reason"`
+	Payload         json.RawMessage `json:"payload,omitempty"`
+	Timestamp       time.Time       `json:"timestamp"`
+}
+
+// FailedCompensation represents the data sent to compensation failure webhooks
+type FailedCompensation struct {
+	ID               string                      `json:"id"`
+	ProjectID        string                      `json:"projectId"`
+	OrchestrationID  string                      `json:"orchestrationId"`
+	TaskID           string                      `json:"taskId"`
+	ServiceID        string                      `json:"serviceId"`
+	ServiceName      string                      `json:"serviceName"`
+	CompensationData *CompensationData           `json:"compensationData"`
+	Status           CompensationStatus          `json:"status"`
+	ResolutionState  CompensationResolutionState `json:"resolutionState"`
+	Failure          string                      `json:"failure,omitempty"`
+	Resolution       string                      `json:"resolution,omitempty"`
+	AttemptsMade     int                         `json:"attemptsMade"`
+	MaxAttempts      int                         `json:"maxAttempts"`
+	Timestamp        time.Time                   `json:"timestamp"`
+	ResolvedAt       time.Time                   `json:"resolvedAt,omitempty"`
 }
 
 type CompensationCandidate struct {
+	ID           string
 	TaskID       string
 	Service      *ServiceInfo
 	Compensation *CompensationData
 }
 
 type CompensationWorker struct {
+	ProjectID       string
 	OrchestrationID string
 	LogManager      *LogManager
 	Candidates      []CompensationCandidate
@@ -462,6 +509,16 @@ type GroundingStorage interface {
 	ListGroundings() ([]*GroundingSpec, error)
 	RemoveGrounding(projectID, name string) error
 	RemoveProjectGroundings(projectID string) error
+}
+
+// FailedCompensationStorage defines the interface for persisting failed compensations
+type FailedCompensationStorage interface {
+	StoreFailedCompensation(comp *FailedCompensation) error
+	UpdateFailedCompensation(comp *FailedCompensation) error
+	LoadFailedCompensation(id string) (*FailedCompensation, error)
+	ListProjectFailedCompensations(projectID string) ([]*FailedCompensation, error)
+	ListOrchestrationFailedCompensations(orchestrationID string) ([]*FailedCompensation, error)
+	ListFailedCompensations() ([]*FailedCompensation, error)
 }
 
 // GroundingUseCase represents grounding of how an action should be handled

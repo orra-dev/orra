@@ -52,7 +52,6 @@ type OrchestrationRequest struct {
 		Content string
 	} `json:"action"`
 	Data                   []map[string]interface{} `json:"data"`
-	Webhook                string                   `json:"webhook"`
 	Timeout                string                   `json:"timeout,omitempty"`
 	HealthCheckGracePeriod string                   `json:"healthCheckGracePeriod,omitempty"`
 }
@@ -112,6 +111,15 @@ type OrchestrationListView struct {
 	Completed     []OrchestrationView `json:"completed,omitempty"`
 	Failed        []OrchestrationView `json:"failed,omitempty"`
 	NotActionable []OrchestrationView `json:"notActionable,omitempty"`
+	Aborted       []OrchestrationView `json:"aborted,omitempty"`
+}
+
+// AbortInfo contains information about an aborted orchestration
+type AbortInfo struct {
+	TaskID      string          `json:"taskId"`
+	ServiceID   string          `json:"serviceId"`
+	ServiceName string          `json:"serviceName"`
+	Payload     json.RawMessage `json:"payload,omitempty"`
 }
 
 // OrchestrationInspectResponse represents the detailed inspection view of an orchestration
@@ -121,6 +129,7 @@ type OrchestrationInspectResponse struct {
 	Action    string                `json:"action"`
 	Timestamp time.Time             `json:"timestamp"`
 	Error     json.RawMessage       `json:"error,omitempty"`
+	AbortInfo *AbortInfo            `json:"abortInfo,omitempty"`
 	Tasks     []TaskInspectResponse `json:"tasks,omitempty"`
 	Results   []json.RawMessage     `json:"results,omitempty"`
 	Duration  time.Duration         `json:"duration"`
@@ -135,6 +144,7 @@ type TaskInspectResponse struct {
 	StatusHistory       []TaskStatusEvent         `json:"statusHistory"`
 	Input               json.RawMessage           `json:"input,omitempty"`
 	Output              json.RawMessage           `json:"output,omitempty"`
+	AbortPayload        json.RawMessage           `json:"abortPayload,omitempty"`
 	Error               string                    `json:"error,omitempty"`
 	Duration            time.Duration             `json:"duration"`
 	InterimResults      []InterimTaskResult       `json:"interimResults,omitempty"`
@@ -234,6 +244,37 @@ type GroundingSpec struct {
 	Constraints []string           `json:"constraints" yaml:"constraints"`
 }
 
+type CompensationData struct {
+	Input   json.RawMessage      `json:"data"`
+	Context *CompensationContext `json:"context"`
+	TTLMs   int64                `json:"ttl"`
+}
+
+type CompensationContext struct {
+	OrchestrationID string          `json:"orchestrationId"`
+	Reason          Status          `json:"reason"`
+	Payload         json.RawMessage `json:"payload,omitempty"`
+	Timestamp       time.Time       `json:"timestamp"`
+}
+
+type FailedCompensation struct {
+	ID               string           `json:"id"`
+	ProjectID        string           `json:"projectId"`
+	OrchestrationID  string           `json:"orchestrationId"`
+	TaskID           string           `json:"taskId"`
+	ServiceID        string           `json:"serviceId"`
+	ServiceName      string           `json:"serviceName"`
+	CompensationData CompensationData `json:"compensationData"`
+	Status           string           `json:"status"`
+	ResolutionState  string           `json:"resolutionState"`
+	Failure          string           `json:"failure,omitempty"`
+	Resolution       string           `json:"resolution,omitempty"`
+	AttemptsMade     int              `json:"attemptsMade"`
+	MaxAttempts      int              `json:"maxAttempts"`
+	Timestamp        time.Time        `json:"timestamp"`
+	ResolvedAt       time.Time        `json:"resolvedAt,omitempty"`
+}
+
 type NotFoundError struct {
 	Err error
 }
@@ -329,6 +370,28 @@ func (c *Client) AddWebhook(ctx context.Context, webhookUrl string) (*Webhook, e
 
 	if err != nil {
 		return nil, FormatAPIError(apiErr, "webhook")
+	}
+
+	return &response, nil
+}
+
+func (c *Client) AddCompensationFailureWebhook(ctx context.Context, webhookUrl string) (*Webhook, error) {
+	var response Webhook
+	var apiErr ErrorResponse
+
+	err := requests.
+		URL(c.baseURL).
+		Path("/compensation-failure-webhooks").
+		Method(http.MethodPost).
+		Client(c.httpClient).
+		BodyJSON(Webhook{Url: webhookUrl}).
+		Header("Authorization", "Bearer "+c.apiKey).
+		ToJSON(&response).
+		ErrorJSON(&apiErr).
+		Fetch(ctx)
+
+	if err != nil {
+		return nil, FormatAPIError(apiErr, "compensation failure webhook")
 	}
 
 	return &response, nil
@@ -480,10 +543,101 @@ func (c *Client) RemoveGroundingSpec(ctx context.Context, specName string) error
 	return err
 }
 
+// ListFailedCompensations retrieves all failed compensations for a project
+func (c *Client) ListFailedCompensations(ctx context.Context) ([]FailedCompensation, error) {
+	var response []FailedCompensation
+	var apiErr ErrorResponse
+
+	err := requests.
+		URL(c.baseURL).
+		Path("/compensation-failures").
+		Method(http.MethodGet).
+		Client(c.httpClient).
+		Header("Authorization", "Bearer "+c.apiKey).
+		ToJSON(&response).
+		ErrorJSON(&apiErr).
+		Fetch(ctx)
+
+	if err != nil {
+		return nil, FormatAPIError(apiErr, "failed compensations")
+	}
+
+	return response, nil
+}
+
+// GetFailedCompensation retrieves a specific failed compensation by ID
+func (c *Client) GetFailedCompensation(ctx context.Context, id string) (*FailedCompensation, error) {
+	var response FailedCompensation
+	var apiErr ErrorResponse
+
+	err := requests.
+		URL(c.baseURL).
+		Pathf("/compensation-failures/%s", id).
+		Method(http.MethodGet).
+		Client(c.httpClient).
+		Header("Authorization", "Bearer "+c.apiKey).
+		ToJSON(&response).
+		ErrorJSON(&apiErr).
+		Fetch(ctx)
+
+	if err != nil {
+		return nil, FormatAPIError(apiErr, "failed compensation")
+	}
+
+	return &response, nil
+}
+
+// ResolveFailedCompensation marks a failed compensation as resolved
+func (c *Client) ResolveFailedCompensation(ctx context.Context, id, reason string) (*FailedCompensation, error) {
+	var response FailedCompensation
+	var apiErr ErrorResponse
+
+	err := requests.
+		URL(c.baseURL).
+		Pathf("/compensation-failures/%s/resolve", id).
+		Method(http.MethodPost).
+		Client(c.httpClient).
+		BodyJSON(map[string]string{"reason": reason}).
+		Header("Authorization", "Bearer "+c.apiKey).
+		ToJSON(&response).
+		ErrorJSON(&apiErr).
+		Fetch(ctx)
+
+	if err != nil {
+		return nil, FormatAPIError(apiErr, "failed compensation resolution")
+	}
+
+	return &response, nil
+}
+
+// IgnoreFailedCompensation marks a failed compensation as ignored
+func (c *Client) IgnoreFailedCompensation(ctx context.Context, id, reason string) (*FailedCompensation, error) {
+	var response FailedCompensation
+	var apiErr ErrorResponse
+
+	err := requests.
+		URL(c.baseURL).
+		Pathf("/compensation-failures/%s/ignore", id).
+		Method(http.MethodPost).
+		Client(c.httpClient).
+		BodyJSON(map[string]string{"reason": reason}).
+		Header("Authorization", "Bearer "+c.apiKey).
+		ToJSON(&response).
+		ErrorJSON(&apiErr).
+		Fetch(ctx)
+
+	if err != nil {
+		return nil, FormatAPIError(apiErr, "failed compensation ignore")
+	}
+
+	return &response, nil
+}
+
 func (v OrchestrationListView) Empty() bool {
 	return len(v.Pending) == 0 &&
 		len(v.Processing) == 0 &&
 		len(v.Completed) == 0 &&
 		len(v.Failed) == 0 &&
-		len(v.NotActionable) == 0
+		len(v.NotActionable) == 0 &&
+		len(v.Aborted) == 0
 }

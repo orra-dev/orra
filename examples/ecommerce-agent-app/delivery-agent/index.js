@@ -15,6 +15,7 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 3100;
 const shouldDemoFail = process?.env?.DEMO_FAIL
+const shouldDemoAbort = process?.env?.DEMO_ABORT
 
 // Initialize the Orra client with environment-aware persistence
 const deliveryAgent = initAgent({
@@ -43,6 +44,14 @@ async function startService() {
 			if(shouldDemoFail === 'true'){
 				console.log('Configured to demonstrate failure.');
 				throw Error('Delivery Agent down!');
+			}
+			
+			if(shouldDemoAbort === 'true'){
+				console.log('Configured to demonstrate abort.');
+				await task.abort({
+					operation: "delivery-estimation",
+					reason: "delivery too late"
+				});
 			}
 			return { response: await estimateDelivery(task.input) };
 		});
