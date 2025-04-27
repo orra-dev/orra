@@ -112,8 +112,8 @@ app.post('/webhooks/orra', (req, res) => {
 
 Want more details?
 
-- [Core Topics & Internals →](../docs/core)
-- [Monitoring with Webhooks →](../docs/monitoring-with-webhooks)
+- [Core Topics & Internals →](../docs/core.md)
+- [Monitoring with Webhooks →](../docs/monitoring-with-webhooks.md)
 
 ## Monitoring Actions
 
