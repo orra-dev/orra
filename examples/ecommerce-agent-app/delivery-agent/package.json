@@ -14,7 +14,7 @@
   "license": "MPL2.0",
   "dependencies": {
     "@mistralai/mistralai": "^1.3.5",
-    "@orra.dev/sdk": "0.2.2",
+    "@orra.dev/sdk": "0.2.4",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
     "timers": "^0.1.1"

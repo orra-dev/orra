@@ -12,7 +12,7 @@ license = "MPL-2.0"
 
 [tool.poetry.dependencies]
 python = ">=3.11,<=3.13"
-orra-sdk = "^0.2.2"
+orra-sdk = "^0.2.4"
 pydantic = "^2.0"
 python-dotenv = "^1.0.0"
 crewai = "^0.80.0"
