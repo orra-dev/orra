@@ -16,7 +16,7 @@ export async function POST(req) {
 	// Access the global io instance
 	if (global.io) {
 		global.io.emit('webhook_data', {
-			orchestrationId: data.orchestrationId,
+			orchestrationId: data?.orchestration_id,
 			status: data.status,
 			results: data.results,
 			error: data.error
