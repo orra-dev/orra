@@ -1,10 +1,10 @@
 # Orra Python SDK Documentation
 
-The Python SDK for Orra lets you transform your AI agents, tools as services and services into reliable, production-ready components.
+The Python SDK for orra lets you transform your AI agents, tools as services and services into reliable, production-ready components.
 
 ## Installation
 
-First, [install the Orra CLI](../cli.md).
+First, [install the orra CLI](../cli.md).
 
 Then, install the latest version of the SDK:
 ```bash
@@ -13,7 +13,7 @@ pip install orra-sdk
 
 ## Quick Integration Example
 
-The Orra SDK is designed to wrap your existing service logic with minimal changes. Here's a simple example showing how to integrate an existing chat service:
+The orra SDK is designed to wrap your existing service logic with minimal changes. Here's a simple example showing how to integrate an existing chat service:
 
 ```python
 import asyncio
@@ -30,7 +30,7 @@ class ChatOutput(BaseModel):
     response: str
 
 async def main():
-    # Initialize the Orra service
+    # Initialize the orra service
     cust_chat_svc = OrraService(
         name="customer-chat-service",
         description="Handles customer chat interactions",
@@ -50,7 +50,7 @@ async def main():
             
             # Use your existing service function
             # Your function handles its own retries and error recovery
-            # and Orra reacts accordingly.
+            # and orra reacts accordingly.
             response = await my_service(task.input.customer_id, task.input.message)
             
             # Send final progress update
@@ -78,9 +78,9 @@ if __name__ == "__main__":
 
 ## Understanding the SDK
 
-The Orra SDK follows patterns similar to serverless functions or job processors, making it familiar for AI Engineers. Your services become event-driven handlers that:
+The orra SDK follows patterns similar to serverless functions or job processors, making it familiar for AI Engineers. Your services become event-driven handlers that:
 
-1. Register capabilities with Orra's Plan Engine (what they can do)
+1. Register capabilities with orra's Plan Engine (what they can do)
 2. Process tasks when called (actual execution)
 3. Return results for orchestration
 
@@ -164,39 +164,147 @@ async def handle_request(task: Task[InputModel]) -> OutputModel:
         # 1. Access task information
         input_data = task.input
         
-        # 2. Your existing business logic, may include its own retry/recovery if available (otherwise Orra deals with this)
+        # 2. Your existing business logic, may include its own retry/recovery if available (otherwise orra deals with this)
         result = await your_existing_function(input_data)
         
         # 3. Return results
         return OutputModel(**result)
     except Exception as e:
-        # After your error handling is complete, let Orra know about permanent failures
+        # After your error handling is complete, let orra know about permanent failures
         raise
 ```
 
-### 3. Reverts powered by compensations
+### 3. Aborting Tasks
 
-Marking a service or agent as **revertible** enables the previous task result to be compensated by that component in case of upstream failures.
+You can abort a task's execution when you need to stop processing but don't want to trigger a normal failure. This is useful for business logic conditions where it makes sense to halt the orchestration with a specific message:
+
+```python
+from orra import OrraService, Task
+from pydantic import BaseModel
+
+class InventoryInput(BaseModel):
+    product_id: str
+    quantity: int
+
+class InventoryOutput(BaseModel):
+    success: bool
+    reservation_id: str
+
+@service.handler()
+async def reserve_inventory(task: Task[InventoryInput]) -> InventoryOutput:
+    # Check inventory availability
+    inventory_count = await check_inventory(task.input.product_id)
+    
+    # If inventory is insufficient, abort the task
+    if inventory_count < task.input.quantity:
+        await task.abort({
+            "reason": "INSUFFICIENT_INVENTORY",
+            "available": inventory_count,
+            "requested": task.input.quantity,
+            "product_id": task.input.product_id
+        })
+        # Code below won't execute due to abort
+    
+    # Normal processing continues if not aborted
+    reservation_id = await create_reservation(task.input.product_id, task.input.quantity)
+    
+    return InventoryOutput(success=True, reservation_id=reservation_id)
+```
+
+When a task is aborted:
+- The orchestration stops execution
+- The abort payload is preserved
+- If any previously executed services are revertible, their compensation will be triggered
+- The abort information is available in the compensation context
+
+### 4. Reverts powered by compensations
+
+Marking a service or agent as **revertible** enables the previous task result to be compensated by that component in case of upstream failures or aborts.
 
 A revert may succeed **completely**, **partially** or simply **fail**. They are run after an action's failure.
 
 Checkout the [Compensations](../compensations.md) doc for full explanation.
 
 ```python
+from orra import OrraService, Task, CompensationResult, CompensationStatus, RevertSource
+from pydantic import BaseModel
+from typing import Optional, Dict, Any
+
+class InventoryInput(BaseModel):
+    product_id: str
+    quantity: int
+
+class InventoryOutput(BaseModel):
+    success: bool
+    reservation_id: str
+
 service = OrraService(
-   name="service-name",
-   description="What this service does",
+   name="inventory-service",
+   description="Manages product inventory",
    url="https://api.orra.dev",
    api_key="sk-orra-...",
    revertible=True,
 )
 
 @service.revert_handler()
-async def revert_stuff(source: RevertSource[InputModel, OutputModel]) -> CompensationResult:
-   print(f"Reverting for customer: {source.input.customer_id}")
-   print(f"Reverting response: {source.output.response}")
-   return CompensationResult(status=CompensationStatus.COMPLETED)
+async def revert_reservation(source: RevertSource[InventoryInput, InventoryOutput]) -> CompensationResult:
+    # Access the original task input and result
+    print(f"Reverting for product: {source.input.product_id}")
+    print(f"Reservation ID to release: {source.output.reservation_id}")
+    
+    # Access compensation context information
+    if source.context:
+        # Why the compensation was triggered: "orchestration_failed", "aborted", etc.
+        print(f"Compensation reason: {source.context.reason}")
+        
+        # ID of the parent orchestration
+        print(f"Orchestration ID: {source.context.orchestration_id}")
+        
+        # When the compensation was initiated
+        print(f"Timestamp: {source.context.timestamp}")
+        
+        # Access abort payload if task was aborted
+        if source.context.reason == "aborted" and source.context.payload:
+            print(f"Abort reason: {source.context.payload.get('reason')}")
+            print(f"Available inventory: {source.context.payload.get('available')}")
+            print(f"Requested quantity: {source.context.payload.get('requested')}")
+            
+            # For inventory-specific aborts, we might not need to do anything
+            if (source.context.payload.get('reason') == "INSUFFICIENT_INVENTORY" and 
+                source.context.payload.get('product_id') == source.input.product_id):
+                print('No actual reservation was made due to insufficient inventory')
+                return CompensationResult(status=CompensationStatus.COMPLETED)
+    
+    # For other cases where a reservation was made, release it
+    if source.output and source.output.reservation_id:
+        try:
+            await release_reservation(source.output.reservation_id)
+            print(f"Released reservation {source.output.reservation_id}")
+            return CompensationResult(status=CompensationStatus.COMPLETED)
+        except Exception as e:
+            print(f"Failed to release reservation: {str(e)}")
+            return CompensationResult(
+                status=CompensationStatus.FAILED,
+                error=str(e)
+            )
+    else:
+        # No reservation ID found
+        print('No reservation to revert')
+        return CompensationResult(status=CompensationStatus.COMPLETED)
 ```
+
+#### Compensation Context
+
+The compensation context provides critical information about why a compensation was triggered:
+
+| Property | Description                                                                                            |
+|----------|--------------------------------------------------------------------------------------------------------|
+| `reason` | Why the compensation was triggered during an orchestration (e.g., `"failed"`, `"aborted"`)             |
+| `orchestrationId` | The ID of the parent orchestration                                                                     |
+| `timestamp` | When the compensation was initiated                                                                    |
+| `payload` | **Optional**: additional data related to the compensation (may contain aborted or failed payload) |
+
+This context helps you implement more intelligent compensation logic based on the specific reason for the rollback.
 
 ## Advanced Features
 
@@ -249,7 +357,7 @@ async def handle_request(task: Task[InputModel]) -> OutputModel:
 
 #### Viewing Progress Updates
 
-Use the Orra CLI to view progress updates:
+Use the orra CLI to view progress updates:
 
 ```bash
 # View summarized progress updates
@@ -268,7 +376,7 @@ orra inspect -d <orchestration-id> --long-updates
 
 ### Persistence Configuration
 
-Orra's Plan Engine maintains service/agent identity across restarts using persistence. This is crucial for:
+orra's Plan Engine maintains service/agent identity across restarts using persistence. This is crucial for:
 - Maintaining service/agent history
 - Ensuring consistent service/agent identification
 - Supporting service/agent upgrades
@@ -305,6 +413,7 @@ service = OrraService(
 1. **Error Handling**
     - Implement comprehensive error handling in your business logic
     - Use retries for transient failures
+    - Use `task.abort()` for business-logic conditions that should stop execution
 
 2. **Schema Design**
     - Use Pydantic models for type safety
@@ -316,9 +425,14 @@ service = OrraService(
     - Design for idempotency
     - Include proper logging for debugging
 
+4. **Compensation Design**
+    - Make compensation logic robust with its own error handling
+    - Use the compensation context to implement context-aware reverts
+    - Test compensation scenarios thoroughly
+
 ## Example: Converting Existing Code
 
-Here's how to convert an existing AI service to use Orra:
+Here's how to convert an existing AI service to use orra:
 
 ### Before (FastAPI Service)
 ```python
@@ -336,7 +450,7 @@ async def analyze(image_url: str):
         raise HTTPException(status_code=500, detail=str(e))
 ```
 
-### After (Orra Integration)
+### After (orra Integration)
 ```python
 from orra import OrraAgent, Task
 from pydantic import BaseModel
@@ -357,16 +471,156 @@ agent = OrraAgent(
     api_key="sk-orra-..."
 )
 
+@agent.handler()
+async def handle_analysis(task: Task[ImageInput]) -> ImageOutput:
+    try:
+        # Check if the image is accessible
+        is_accessible = await check_image_access(task.input.image_url)
+        if not is_accessible:
+            await task.abort({
+                "reason": "IMAGE_NOT_ACCESSIBLE",
+                "url": task.input.image_url
+            })
+            # Code below won't execute due to abort
+        
+        # Your function handles its own retries
+        result = await analyze_image(task.input.image_url)
+        return ImageOutput(**result)
+    except Exception as e:
+        # After your error handling is complete, let orra know about the failure
+        raise
+```
+
+## Complete Example: Revertible Service with Abort and Context
+
+Here's a complete example of an inventory service that demonstrates abort functionality and context-aware compensation:
+
+```python
+import asyncio
+from orra import OrraService, Task, CompensationResult, CompensationStatus, RevertSource
+from pydantic import BaseModel
+from inventory_db import check_availability, create_reservation, release_reservation
+
+class InventoryInput(BaseModel):
+    order_id: str
+    product_id: str
+    quantity: int
+
+class InventoryOutput(BaseModel):
+    success: bool
+    reservation_id: str
+
 async def main():
-    @agent.handler()
-    async def handle_analysis(task: Task[ImageInput]) -> ImageOutput:
+    # Initialize service
+    inventory_service = OrraService(
+        name="inventory-service",
+        description="Handles product inventory reservations",
+        url="https://api.orra.dev",
+        api_key="sk-orra-...",
+        revertible=True  # Enable compensations
+    )
+
+    # Main task handler
+    @inventory_service.handler()
+    async def reserve_inventory(task: Task[InventoryInput]) -> InventoryOutput:
         try:
-            # Your function handles its own retries
-            result = await analyze_image(task.input.image_url)
-            return ImageOutput(**result)
+            # Send progress update
+            await task.push_update({
+                "progress": 25,
+                "status": "checking_inventory",
+                "message": "Checking product availability"
+            })
+            
+            # Check inventory
+            available = await check_availability(task.input.product_id)
+            
+            if available < task.input.quantity:
+                # Abort the task with detailed information
+                await task.abort({
+                    "reason": "INSUFFICIENT_INVENTORY",
+                    "available": available,
+                    "requested": task.input.quantity,
+                    "product_id": task.input.product_id
+                })
+                # Code below won't execute due to abort
+            
+            # Update progress
+            await task.push_update({
+                "progress": 75,
+                "status": "reserving",
+                "message": "Reserving inventory"
+            })
+            
+            # Reserve inventory
+            reservation_id = await create_reservation(
+                task.input.order_id,
+                task.input.product_id,
+                task.input.quantity
+            )
+            
+            # Final progress update
+            await task.push_update({
+                "progress": 100,
+                "status": "completed",
+                "message": "Inventory reserved successfully"
+            })
+            
+            return InventoryOutput(
+                success=True,
+                reservation_id=reservation_id
+            )
         except Exception as e:
-            # After your error handling is complete, let Orra know about the failure
+            # Handle errors
             raise
+
+    # Compensation handler with context awareness
+    @inventory_service.revert_handler()
+    async def revert_reservation(source: RevertSource[InventoryInput, InventoryOutput]) -> CompensationResult:
+        print(f"Reverting reservation for order {source.input.order_id}")
+        
+        # Use context to determine compensation behavior
+        if source.context:
+            print(f"Compensation triggered by: {source.context.reason}")
+            print(f"Orchestration ID: {source.context.orchestration_id}")
+            
+            # Log additional information for aborted tasks
+            if source.context.reason == "aborted" and source.context.payload:
+                print(f"Abort reason: {source.context.payload.get('reason')}")
+                
+                # For inventory-specific aborts, we might not need to do anything
+                if (source.context.payload.get('reason') == "INSUFFICIENT_INVENTORY" and 
+                    source.context.payload.get('product_id') == source.input.product_id):
+                    print('No actual reservation was made due to insufficient inventory')
+                    return CompensationResult(status=CompensationStatus.COMPLETED)
+        
+        # For other cases where a reservation was made, release it
+        if source.output and source.output.reservation_id:
+            try:
+                await release_reservation(source.output.reservation_id)
+                print(f"Released reservation {source.output.reservation_id}")
+                return CompensationResult(status=CompensationStatus.COMPLETED)
+            except Exception as e:
+                print(f"Failed to release reservation: {str(e)}")
+                return CompensationResult(
+                    status=CompensationStatus.FAILED,
+                    error=str(e)
+                )
+        else:
+            # No reservation ID found
+            print('No reservation to revert')
+            return CompensationResult(status=CompensationStatus.COMPLETED)
+
+    # Start the service
+    await inventory_service.start()
+
+    try:
+        # Keep the service running
+        await asyncio.get_running_loop().create_future()
+    except KeyboardInterrupt:
+        await inventory_service.shutdown()
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
 ## Next Steps
@@ -375,4 +629,4 @@ async def main():
 2. Join our community for support and updates
 3. Check out the action orchestration guide to start using your services
 
-Need help? Contact the Orra team or open an issue on GitHub.
+Need help? Contact the orra team or open an issue on GitHub.
