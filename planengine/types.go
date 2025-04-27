@@ -177,8 +177,7 @@ type IncidentTracker struct {
 }
 
 type LoggedFailure struct {
-	Failure     string `json:"failure"`
-	SkipWebhook bool   `json:"skipWebhook"`
+	Failure string `json:"failure"`
 }
 
 type TaskWorker struct {
@@ -301,7 +300,6 @@ type Orchestration struct {
 	Timestamp              time.Time         `json:"timestamp"`
 	Timeout                *Duration         `json:"timeout,omitempty"`
 	HealthCheckGracePeriod *Duration         `json:"healthCheckGracePeriod,omitempty"`
-	Webhook                string            `json:"webhook"`
 	TaskZero               json.RawMessage   `json:"taskZero"`
 	GroundingHit           *GroundingHit     `json:"groundingHit,omitempty"`
 	AbortPayload           json.RawMessage   `json:"abortReason,omitempty"`

@@ -10,7 +10,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 )
 
@@ -97,16 +96,8 @@ func (t *IncidentTracker) processEntry(entry LogEntry, orchestrationID string) e
 	switch entry.GetEntryType() {
 	case "task_aborted_output":
 		aborted := t.LogManager.MarkOrchestrationAborted(orchestrationID)
-		if err := t.LogManager.FinalizeOrchestration(t.ProjectID, orchestrationID, aborted, nil, nil, entry.GetValue(), entry.GetTimestamp(), false); err != nil {
-			isWebHookErr := strings.Contains(err.Error(), "failed to trigger webhook")
-			return t.LogManager.AppendTaskFailureToLog(
-				orchestrationID,
-				IncidentTrackerID,
-				IncidentTrackerID,
-				err.Error(),
-				0,
-				isWebHookErr,
-			)
+		if err := t.LogManager.FinalizeOrchestration(t.ProjectID, orchestrationID, aborted, nil, nil, entry.GetValue(), entry.GetTimestamp()); err != nil {
+			return t.LogManager.AppendTaskFailureToLog(orchestrationID, IncidentTrackerID, IncidentTrackerID, err.Error(), 0)
 		}
 
 	default:
@@ -131,17 +122,8 @@ func (t *IncidentTracker) processEntry(entry LogEntry, orchestrationID string) e
 		}
 
 		failed := t.LogManager.MarkOrchestrationFailed(orchestrationID, failure.Failure)
-
-		if err := t.LogManager.FinalizeOrchestration(t.ProjectID, orchestrationID, failed, reason, nil, nil, entry.GetTimestamp(), failure.SkipWebhook); err != nil {
-			isWebHookErr := strings.Contains(err.Error(), "failed to trigger webhook")
-			return t.LogManager.AppendTaskFailureToLog(
-				orchestrationID,
-				IncidentTrackerID,
-				IncidentTrackerID,
-				fmt.Errorf("%s:%w", failure.Failure, err).Error(),
-				0,
-				isWebHookErr,
-			)
+		if err := t.LogManager.FinalizeOrchestration(t.ProjectID, orchestrationID, failed, reason, nil, nil, entry.GetTimestamp()); err != nil {
+			return t.LogManager.AppendTaskFailureToLog(orchestrationID, IncidentTrackerID, IncidentTrackerID, fmt.Errorf("%s:%w", failure.Failure, err).Error(), 0)
 		}
 	}
 

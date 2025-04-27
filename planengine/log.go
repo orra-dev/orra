@@ -202,13 +202,12 @@ func (lm *LogManager) AppendToLog(orchestrationID, entryType, id string, value j
 	log.Append(orchestrationID, newEntry, true)
 }
 
-func (lm *LogManager) AppendTaskFailureToLog(orchestrationID, id, producerID, failure string, attemptNo int, skipWebhook bool) error {
+func (lm *LogManager) AppendTaskFailureToLog(orchestrationID, id, producerID, failure string, attemptNo int) error {
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 
 	var f = LoggedFailure{
-		Failure:     failure,
-		SkipWebhook: skipWebhook,
+		Failure: failure,
 	}
 
 	value, err := json.Marshal(f)
@@ -386,15 +385,8 @@ func (lm *LogManager) AppendCompensationFailure(
 	return nil
 }
 
-func (lm *LogManager) FinalizeOrchestration(projectID, orchestrationID string, status Status, reason, result, abortPayload json.RawMessage, ts time.Time, skipWebhook bool) error {
-	if err := lm.planEngine.FinalizeOrchestration(
-		orchestrationID,
-		status,
-		reason,
-		[]json.RawMessage{result},
-		abortPayload,
-		skipWebhook,
-	); err != nil {
+func (lm *LogManager) FinalizeOrchestration(projectID, orchestrationID string, status Status, reason, result, abortPayload json.RawMessage, ts time.Time) error {
+	if err := lm.planEngine.FinalizeOrchestration(orchestrationID, status, reason, []json.RawMessage{result}, abortPayload); err != nil {
 		return fmt.Errorf("failed to finalize orchestration: %w", err)
 	}
 

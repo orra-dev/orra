@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"reflect"
 	"regexp"
 	"slices"
@@ -105,7 +104,7 @@ func (p *PlanEngine) PrepareOrchestration(ctx context.Context, projectID string,
 		return err
 	}
 
-	if err := p.validateWebhook(orchestration.ProjectID, orchestration.Webhook); err != nil {
+	if err := p.validateProjectHasWebhooks(orchestration.ProjectID); err != nil {
 		err = fmt.Errorf("invalid orchestration: %w", err)
 		p.prepForError(orchestration, err, Failed)
 		return err
@@ -352,14 +351,7 @@ func (p *PlanEngine) ExecuteOrchestration(ctx context.Context, orchestration *Or
 		Msg("Appended initial entry to Log")
 }
 
-func (p *PlanEngine) FinalizeOrchestration(
-	orchestrationID string,
-	status Status,
-	reason json.RawMessage,
-	results []json.RawMessage,
-	abortPayload json.RawMessage,
-	skipWebhook bool,
-) error {
+func (p *PlanEngine) FinalizeOrchestration(orchestrationID string, status Status, reason json.RawMessage, results []json.RawMessage, abortPayload json.RawMessage) error {
 	p.orchestrationStoreMu.Lock()
 	defer p.orchestrationStoreMu.Unlock()
 
@@ -387,9 +379,11 @@ func (p *PlanEngine) FinalizeOrchestration(
 		Str("OrchestrationID", orchestration.ID).
 		Msgf("About to FinalizeOrchestration with status: %s", orchestration.Status.String())
 
-	if !skipWebhook {
-		if err := p.triggerWebhook(orchestration); err != nil {
-			return fmt.Errorf("failed to trigger webhook for orchestration %s: %w", orchestration.ID, err)
+	webhooks := p.GetProjectWebhooks(orchestration.ProjectID)
+	if len(webhooks) > 0 {
+		// Notify to all webhooks asynchronously
+		for _, webhook := range webhooks {
+			go p.triggerWebhook(webhook, orchestration)
 		}
 	}
 
@@ -546,20 +540,10 @@ func (p *PlanEngine) validateActionParams(params ActionParams) error {
 	return nil
 }
 
-func (p *PlanEngine) validateWebhook(projectID string, webhookUrl string) error {
-	if len(strings.TrimSpace(webhookUrl)) == 0 {
-		return fmt.Errorf("a webhook url is required to return orchestration results")
+func (p *PlanEngine) validateProjectHasWebhooks(projectID string) error {
+	if webhooks := p.GetProjectWebhooks(projectID); len(webhooks) == 0 {
+		return fmt.Errorf("at least one webhook url is required for this project to return orchestration results")
 	}
-
-	if _, err := url.ParseRequestURI(webhookUrl); err != nil {
-		return fmt.Errorf("webhook url %s is not valid: %w", webhookUrl, err)
-	}
-
-	project := p.projects[projectID]
-	if !contains(project.Webhooks, webhookUrl) {
-		return fmt.Errorf("webhook url %s not found in project %s", webhookUrl, projectID)
-	}
-
 	return nil
 }
 
@@ -899,7 +883,7 @@ func (p *PlanEngine) validateActionable(subTasks []*SubTask) error {
 	return nil
 }
 
-func (p *PlanEngine) triggerWebhook(orchestration *Orchestration) error {
+func (p *PlanEngine) triggerWebhook(webhookURL string, orchestration *Orchestration) {
 	eventId := fmt.Sprintf("%s-%s-%d", orchestration.ID, orchestration.Status, orchestration.Timestamp.Unix())
 	orchestrationType := fmt.Sprintf("orchestration.%s", orchestration.Status)
 	var payload = struct {
@@ -926,20 +910,23 @@ func (p *PlanEngine) triggerWebhook(orchestration *Orchestration) error {
 
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("failed to trigger webhook failed to marshal payload: %w", err)
+		p.LogManager.Logger.Error().
+			Err(err).
+			Str("webhookURL", webhookURL).
+			Msg("Failed to marshal compensation webhook payload")
+		return
 	}
 
 	p.Logger.Trace().
 		Str("ProjectID", orchestration.ProjectID).
 		Str("OrchestrationID", orchestration.ID).
-		Str("Webhook", orchestration.Webhook).
 		RawJSON("Payload", jsonPayload).
 		Msg("Triggering webhook")
 
 	// Create a new request
-	req, err := http.NewRequest("POST", orchestration.Webhook, bytes.NewBuffer(jsonPayload))
+	req, err := http.NewRequest("POST", webhookURL, bytes.NewBuffer(jsonPayload))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return
 	}
 
 	// Set headers
@@ -955,7 +942,12 @@ func (p *PlanEngine) triggerWebhook(orchestration *Orchestration) error {
 	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
+		p.LogManager.Logger.Error().
+			Err(err).
+			Str("webhookURL", webhookURL).
+			Str("projectID", orchestration.ProjectID).
+			Msg("Failed to notify orchestration webhook")
+		return
 	}
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
@@ -966,12 +958,14 @@ func (p *PlanEngine) triggerWebhook(orchestration *Orchestration) error {
 		}
 	}(resp.Body)
 
-	// Check the response status
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		p.LogManager.Logger.Warn().
+			Int("statusCode", resp.StatusCode).
+			Str("webhookURL", webhookURL).
+			Str("projectID", orchestration.ProjectID).
+			Str("orchestrationID", orchestration.ID).
+			Msg("Orchestration webhook returned non-success status code")
 	}
-
-	return nil
 }
 
 func (o *Orchestration) MatchingGroundingAgainstAction(ctx context.Context, matcher SimilarityMatcher, specs []GroundingSpec) (*GroundingHit, float64, error) {

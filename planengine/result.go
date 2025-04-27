@@ -9,7 +9,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"time"
 )
 
@@ -111,29 +110,14 @@ func (r *ResultAggregator) processEntry(entry LogEntry, orchestrationID string) 
 		Msgf("All result aggregator dependencies have been processed for orchestration: %s", orchestrationID)
 
 	if err := r.LogManager.MarkTaskCompleted(orchestrationID, entry.GetID(), time.Now().UTC()); err != nil {
-		return r.LogManager.AppendTaskFailureToLog(
-			orchestrationID,
-			ResultAggregatorID,
-			ResultAggregatorID,
-			err.Error(),
-			0,
-			false,
-		)
+		return r.LogManager.AppendTaskFailureToLog(orchestrationID, ResultAggregatorID, ResultAggregatorID, err.Error(), 0)
 	}
 
 	completed := r.LogManager.MarkOrchestrationCompleted(orchestrationID)
 	results := r.logState.DependencyState.SortedValues()
 
-	if err := r.LogManager.FinalizeOrchestration(r.ProjectID, orchestrationID, completed, nil, results[len(results)-1], nil, entry.GetTimestamp(), false); err != nil {
-		skipWebhook := strings.Contains(err.Error(), "failed to trigger webhook")
-		return r.LogManager.AppendTaskFailureToLog(
-			orchestrationID,
-			ResultAggregatorID,
-			ResultAggregatorID,
-			err.Error(),
-			0,
-			skipWebhook,
-		)
+	if err := r.LogManager.FinalizeOrchestration(r.ProjectID, orchestrationID, completed, nil, results[len(results)-1], nil, entry.GetTimestamp()); err != nil {
+		return r.LogManager.AppendTaskFailureToLog(orchestrationID, ResultAggregatorID, ResultAggregatorID, err.Error(), 0)
 	}
 
 	return nil

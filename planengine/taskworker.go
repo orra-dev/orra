@@ -160,21 +160,14 @@ func (w *TaskWorker) processEntry(ctx context.Context, entry LogEntry, orchestra
 		if err := w.LogManager.MarkTask(orchestrationID, w.TaskID, finalStatus, failedTs); err != nil {
 			return err
 		}
-		return w.LogManager.AppendTaskFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error(), w.consecutiveErrs, false)
+		return w.LogManager.AppendTaskFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error(), w.consecutiveErrs)
 	}
 
 	switch finalStatus {
 	case Aborted:
 		if err := w.processAbortedTaskResult(orchestrationID, taskOutput); err != nil {
 			w.LogManager.Logger.Error().Err(err).Msgf("Cannot process aborted task %s result for orchestration %s", w.TaskID, orchestrationID)
-			return w.LogManager.AppendTaskFailureToLog(
-				orchestrationID,
-				w.TaskID,
-				w.Service.ID,
-				err.Error(),
-				w.consecutiveErrs,
-				false,
-			)
+			return w.LogManager.AppendTaskFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error(), w.consecutiveErrs)
 		}
 
 		abortedTs := time.Now().UTC()
@@ -184,21 +177,14 @@ func (w *TaskWorker) processEntry(ctx context.Context, entry LogEntry, orchestra
 
 		if err := w.LogManager.MarkTaskAborted(orchestrationID, w.TaskID, abortedTs); err != nil {
 			w.LogManager.Logger.Error().Err(err).Msgf("Cannot mark task %s aborted for orchestration %s", w.TaskID, orchestrationID)
-			return w.LogManager.AppendTaskFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error(), w.consecutiveErrs, false)
+			return w.LogManager.AppendTaskFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error(), w.consecutiveErrs)
 		}
 
 	default:
 
 		if err := w.processTaskResult(orchestrationID, taskOutput); err != nil {
 			w.LogManager.Logger.Error().Err(err).Msgf("Cannot process task %s result for orchestration %s", w.TaskID, orchestrationID)
-			return w.LogManager.AppendTaskFailureToLog(
-				orchestrationID,
-				w.TaskID,
-				w.Service.ID,
-				err.Error(),
-				w.consecutiveErrs,
-				false,
-			)
+			return w.LogManager.AppendTaskFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error(), w.consecutiveErrs)
 		}
 
 		// Mark this entry as processed
@@ -211,7 +197,7 @@ func (w *TaskWorker) processEntry(ctx context.Context, entry LogEntry, orchestra
 
 		if err := w.LogManager.MarkTaskCompleted(orchestrationID, entry.GetID(), completedTs); err != nil {
 			w.LogManager.Logger.Error().Err(err).Msgf("Cannot mark task %s completed for orchestration %s", w.TaskID, orchestrationID)
-			return w.LogManager.AppendTaskFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error(), w.consecutiveErrs, false)
+			return w.LogManager.AppendTaskFailureToLog(orchestrationID, w.TaskID, w.Service.ID, err.Error(), w.consecutiveErrs)
 		}
 	}
 
