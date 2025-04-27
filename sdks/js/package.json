@@ -1,8 +1,8 @@
 {
   "name": "@orra.dev/sdk",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "type": "module",
-  "description": "JS SDK for Orra - Build reliable multi-agent applications that handle complex real-world interactions.",
+  "description": "JS SDK for orra - Production-grade planning and orchestration for complex multi-agent workflows.",
   "main": "./dist/index.js",
   "publishConfig": {
     "access": "public"
@@ -27,7 +27,7 @@
     "agents",
     "multi-agent"
   ],
-  "author": "Orra",
+  "author": "orra.dev",
   "license": "MPL-2.0",
   "dependencies": {
     "pino": "^8.0.0",
