@@ -13,7 +13,7 @@ orra coordinates tasks across your existing stack, agents and any tools run as s
 * ↩️ Revert state to handle failures
 * ⛑️ Automatic service health monitoring
 * 🔮 Real-time status tracking
-* 🪝 Webhook result delivery
+* 🪝 Webhooks for completion and failure notifications
 
 [Learn why we built orra →](https://tinyurl.com/orra-launch-blog-post)
 
@@ -232,7 +232,7 @@ The Plan Engine ensures:
 * Stateful execution tracking
 * Built-in retries and recovery
 * Real-time status updates
-* Webhook result delivery
+* Webhook events for result delivery and monitoring
 
 ## Guides
 
@@ -251,6 +251,7 @@ The Plan Engine ensures:
 - [Rapid Multi-Agent App Development with orra](docs/rapid-agent-app-devlopment.md)
 - [What is an Agent in orra?](docs/what-is-agent.md)
 - [Orchestrating Actions with orra](docs/actions.md)
+- [Monitoring with Webhooks](docs/monitoring-with-webhooks.md)
 - [Domain Grounding Execution](docs/grounding.md)
 - [Execution Plan Caching](docs/plan-caching.md)
 - [Core Topics & Internals](docs/core.md)
