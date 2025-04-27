@@ -27,6 +27,8 @@ Standard webhooks receive notifications for orchestration completions and failur
 orra webhooks add https://your-webhook-endpoint.com/orra-notifications
 ```
 
+Add as many webhooks as you like for your project.
+
 ### Configuring Compensation Failure Webhooks
 
 Compensation failure webhooks are managed separately to allow for dedicated handling of these critical events:
@@ -76,13 +78,17 @@ When an orchestration fails, your webhook endpoint will receive a POST request w
 
 ```json
 {
-  "event_id": "orch-123456-failed-1696415762",
+  "event_id": "o_123456-failed-1696415762",
   "type": "orchestration.failed",
   "project_id": "your-project-id",
-  "orchestration_id": "orch-123456",
+  "orchestration_id": "o_123456",
   "status": "failed",
   "timestamp": "2023-10-27T15:45:12Z",
-  "error": "Task execution failed: service-name failed to process request"
+  "error": {
+    "id": "<id>",
+    "producer": "task1",
+	"error": "Task execution failed: service-name failed to process request"
+  }
 }
 ```
 
@@ -92,13 +98,13 @@ When a compensation operation fails, your webhook endpoint will receive a POST r
 
 ```json
 {
-  "event_id": "comp-fail-123456-failed-1696415762",
+  "event_id": "c_123456-failed-1696415762",
   "type": "compensation.failed",
-  "compensation_id": "comp-fail-123456",
+  "compensation_id": "c_123456",
   "project_id": "your-project-id",
-  "orchestration_id": "orch-123456",
+  "orchestration_id": "o_123456",
   "task_id": "task1",
-  "service_id": "service-xyz",
+  "service_id": "s_123234",
   "service_name": "Payment Service",
   "status": "failed",
   "failure": "Service unavailable: failed to process refund request",
@@ -315,4 +321,4 @@ app.get('/metrics', async (req, res) => {
 
 Webhooks provide a powerful mechanism for monitoring your orra orchestrations in real-time. By implementing proper webhook handling and integrating with your monitoring systems, you can ensure your agent applications are reliable, maintainable, and that any issues are promptly addressed.
 
-Remember that compensation failures represent potential data inconsistencies in your system and should be prioritized appropriately in your monitoring and response workflows.
+**Remember that compensation failures represent potential data inconsistencies in your system and should be prioritized appropriately in your monitoring and response workflows.**
