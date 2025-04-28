@@ -24,11 +24,6 @@ func main() {
 		_ = postHogClient.Close()
 	}(postHogClient)
 
-	_ = postHogClient.Enqueue(posthog.Capture{
-		DistinctId: "test-user",
-		Event:      "test-snippet",
-	})
-
 	cfg, err := Load()
 	if err != nil {
 		log.Fatalf("could not load plan engine config: %s", err.Error())
