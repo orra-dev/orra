@@ -51,20 +51,7 @@ func NewPlanEngine() *PlanEngine {
 	return plane
 }
 
-func (p *PlanEngine) Initialise(
-	ctx context.Context,
-	pStorage ProjectStorage,
-	svcStorage ServiceStorage,
-	orchestrationStorage OrchestrationStorage,
-	groundingStorage GroundingStorage,
-	failedCompStorage FailedCompensationStorage,
-	logMgr *LogManager,
-	wsManager *WebSocketManager,
-	vCache *VectorCache,
-	pddlValid PddlValidator,
-	matcher SimilarityMatcher,
-	Logger zerolog.Logger,
-) {
+func (p *PlanEngine) Initialise(ctx context.Context, pStorage ProjectStorage, svcStorage ServiceStorage, orchestrationStorage OrchestrationStorage, groundingStorage GroundingStorage, failedCompStorage FailedCompensationStorage, logMgr *LogManager, wsManager *WebSocketManager, vCache *VectorCache, pddlValid PddlValidator, matcher SimilarityMatcher, Logger zerolog.Logger, telemetry *TelemetryService) {
 	p.pStorage = pStorage
 	p.svcStorage = svcStorage
 	p.orchestrationStorage = orchestrationStorage
@@ -76,6 +63,7 @@ func (p *PlanEngine) Initialise(
 	p.VectorCache = vCache
 	p.PddlValidator = pddlValid
 	p.SimilarityMatcher = matcher
+	p.TelemetrySvc = telemetry
 
 	if projects, err := pStorage.ListProjects(); err == nil {
 		p.Logger.Trace().Interface("Projects", projects).Msg("Loaded projects from DB")

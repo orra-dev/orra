@@ -51,6 +51,7 @@ func main() {
 	}
 
 	engine := NewPlanEngine()
+	telemetrySvc := NewTelemetryService(postHogClient, cfg.AnonymizedTelemetry, app.Logger)
 	wsManager := NewWebSocketManager(app.Logger)
 	matcher := NewMatcher(llmClient, app.Logger)
 	vCache := NewVectorCache(llmClient, matcher, 1000, 24*time.Hour, app.Logger)
@@ -60,11 +61,12 @@ func main() {
 	}
 	pddlValidSvc := NewPddlValidationService(cfg.PddlValidatorPath, cfg.PddlValidationTimeout, app.Logger)
 	logManager.Logger = app.Logger
-	engine.Initialise(rootCtx, db, db, db, db, db, logManager, wsManager, vCache, pddlValidSvc, matcher, app.Logger)
+	engine.Initialise(rootCtx, db, db, db, db, db, logManager, wsManager, vCache, pddlValidSvc, matcher, app.Logger, telemetrySvc)
 
 	app.Engine = engine
 	app.Router = mux.NewRouter()
 	app.Db = db
+	app.TelemetrySvc = telemetrySvc
 	app.RootCtx = rootCtx
 	app.RootCancel = rootCancel
 	app.configureRoutes()
