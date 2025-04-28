@@ -13,11 +13,22 @@ import (
 	"time"
 
 	_ "github.com/joho/godotenv/autoload"
+	"github.com/posthog/posthog-go"
 
 	"github.com/gorilla/mux"
 )
 
 func main() {
+	postHogClient, _ := posthog.NewWithConfig("phc_oNzcBG9BiDfVaTE3gJTlCHTIwjBS68HLn4ZdKnkawoC", posthog.Config{Endpoint: "https://eu.i.posthog.com"})
+	defer func(postHogClient posthog.Client) {
+		_ = postHogClient.Close()
+	}(postHogClient)
+
+	_ = postHogClient.Enqueue(posthog.Capture{
+		DistinctId: "test-user",
+		Event:      "test-snippet",
+	})
+
 	cfg, err := Load()
 	if err != nil {
 		log.Fatalf("could not load plan engine config: %s", err.Error())
