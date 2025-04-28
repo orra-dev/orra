@@ -1,3 +1,18 @@
+## CLI v0.2.5
+
+### Features
+- Added new `comp-fail` command to manage and monitor compensation failures
+  - `comp-fail ls` - List failed compensations with filtering options
+  - `comp-fail inspect` - Show detailed information about a compensation failure
+  - `comp-fail resolve` - Mark a compensation failure as resolved
+  - `comp-fail ignore` - Mark a compensation failure as ignored
+  - `comp-fail webhooks` - Manage compensation failure notification webhooks
+
+### Improvements
+- Enhanced task monitoring with abort feature
+- Added compensation context support for better failure tracking
+- Improved orchestration and compensation failures monitoring
+
 ## CLI v0.2.4
 
 ### Features

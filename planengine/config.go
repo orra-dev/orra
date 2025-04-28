@@ -65,7 +65,7 @@ const (
 )
 
 var (
-	Version                        = "0.2.4"
+	Version                        = "0.2.5"
 	LogsRetentionPeriod            = 7 * 24 * time.Hour
 	DependencyPattern              = regexp.MustCompile(`^\$([^.]+)\.`)
 	WSWriteTimeOut                 = time.Second * 120
