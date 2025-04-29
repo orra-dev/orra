@@ -1,6 +1,6 @@
 # 🪡 orra
 
-Move beyond simple Crews and Agents. Use orra to build production-ready multi-agent applications that handle complex real-world interactions.
+Move beyond simple Crews and Agents. Use orra's production-grade planning to reliably run multi-agent workflows that require complex real-world interactions.
 
 ![](images/orra-diagram.png)
 
@@ -9,11 +9,11 @@ orra coordinates tasks across your existing stack, agents and any tools run as s
 * 🧠 Smart pre-evaluated execution plans
 * 🎯 Domain grounded
 * 🗿 Durable execution
-* 🚀 Go fast with tools as services
+* 🚀 Go fast and save cost with tools as services
 * ↩️ Revert state to handle failures
 * ⛑️ Automatic service health monitoring
 * 🔮 Real-time status tracking
-* 🪝 Webhooks for completion and failure notifications
+* 🪝 Webhooks for completion and failure monitoring
 
 [Learn why we built orra →](https://tinyurl.com/orra-launch-blog-post)
 
