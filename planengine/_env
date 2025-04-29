@@ -30,8 +30,18 @@ EMBEDDINGS_API_BASE_URL=https://api.openai.com/v1  # Default for OpenAI, change 
 # Server port (default: 8005)
 # PORT=8005
 
+#========================================
+# PDDL CONFIGURATION
+#========================================
+
 # PDDL validator path (default: /usr/local/bin/Validate)
 # PDDL_VALIDATOR_PATH=/usr/local/bin/Validate
 
 # PDDL validation timeout (default: 30s)
 # PDDL_VALIDATION_TIMEOUT=30s
+
+#========================================
+# Telemetry CONFIGURATION
+#========================================
+
+ANONYMIZED_TELEMETRY=true

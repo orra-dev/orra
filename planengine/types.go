@@ -45,6 +45,7 @@ type PlanEngine struct {
 	orchestrationStorage OrchestrationStorage
 	groundingStorage     GroundingStorage
 	failedCompStorage    FailedCompensationStorage
+	TelemetrySvc         *TelemetryService
 	failedCompensations  map[string]map[string]*FailedCompensation // projectID -> compID -> FailedCompensation
 	failedCompsMu        sync.RWMutex
 	Logger               zerolog.Logger

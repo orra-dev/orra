@@ -25,13 +25,14 @@ import (
 )
 
 type App struct {
-	Engine     *PlanEngine
-	Router     *mux.Router
-	Db         *BadgerDB
-	Cfg        Config
-	RootCtx    context.Context
-	RootCancel context.CancelFunc
-	Logger     zerolog.Logger
+	Engine       *PlanEngine
+	Router       *mux.Router
+	Db           *BadgerDB
+	Cfg          Config
+	TelemetrySvc *TelemetryService
+	RootCtx      context.Context
+	RootCancel   context.CancelFunc
+	Logger       zerolog.Logger
 }
 
 func NewApp(cfg Config, args []string) (*App, error) {
@@ -125,6 +126,10 @@ func (app *App) Run() {
 		if err := srv.ListenAndServe(); err != nil {
 			app.Logger.Info().Msg(err.Error())
 		}
+
+		app.TelemetrySvc.TrackEvent(EventServerStart, map[string]any{
+			"version": Version,
+		})
 	}()
 
 	c := make(chan os.Signal, 1)
@@ -162,6 +167,10 @@ func (app *App) gracefulShutdown(srv *http.Server, ctx context.Context) {
 		app.Logger.Error().Err(err).Msg("Error shutting down plan engine server")
 	}
 	app.Logger.Debug().Msg("http: All connections drained")
+
+	app.TelemetrySvc.TrackEvent(EventServerStop, map[string]any{
+		"version": Version,
+	})
 }
 
 func (app *App) RegisterProject(w http.ResponseWriter, r *http.Request) {

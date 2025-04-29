@@ -13,11 +13,17 @@ import (
 	"time"
 
 	_ "github.com/joho/godotenv/autoload"
+	"github.com/posthog/posthog-go"
 
 	"github.com/gorilla/mux"
 )
 
 func main() {
+	postHogClient, _ := posthog.NewWithConfig("phc_oNzcBG9BiDfVaTE3gJTlCHTIwjBS68HLn4ZdKnkawoC", posthog.Config{Endpoint: "https://eu.i.posthog.com"})
+	defer func(postHogClient posthog.Client) {
+		_ = postHogClient.Close()
+	}(postHogClient)
+
 	cfg, err := Load()
 	if err != nil {
 		log.Fatalf("could not load plan engine config: %s", err.Error())
@@ -45,6 +51,7 @@ func main() {
 	}
 
 	engine := NewPlanEngine()
+	telemetrySvc := NewTelemetryService(postHogClient, cfg.AnonymizedTelemetry, app.Logger)
 	wsManager := NewWebSocketManager(app.Logger)
 	matcher := NewMatcher(llmClient, app.Logger)
 	vCache := NewVectorCache(llmClient, matcher, 1000, 24*time.Hour, app.Logger)
@@ -54,11 +61,12 @@ func main() {
 	}
 	pddlValidSvc := NewPddlValidationService(cfg.PddlValidatorPath, cfg.PddlValidationTimeout, app.Logger)
 	logManager.Logger = app.Logger
-	engine.Initialise(rootCtx, db, db, db, db, db, logManager, wsManager, vCache, pddlValidSvc, matcher, app.Logger)
+	engine.Initialise(rootCtx, db, db, db, db, db, logManager, wsManager, vCache, pddlValidSvc, matcher, app.Logger, telemetrySvc)
 
 	app.Engine = engine
 	app.Router = mux.NewRouter()
 	app.Db = db
+	app.TelemetrySvc = telemetrySvc
 	app.RootCtx = rootCtx
 	app.RootCancel = rootCancel
 	app.configureRoutes()

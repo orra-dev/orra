@@ -1,3 +1,7 @@
+## CLI v0.2.6
+
+N/A
+
 ## CLI v0.2.5
 
 ### Features

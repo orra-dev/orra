@@ -1,6 +1,6 @@
 # 🪡 orra
 
-Move beyond simple Crews and Agents. Use orra to build production-ready multi-agent applications that handle complex real-world interactions.
+Move beyond simple Crews and Agents. Use orra's production-grade planning to reliably run multi-agent workflows that require complex real-world interactions.
 
 ![](images/orra-diagram.png)
 
@@ -9,11 +9,11 @@ orra coordinates tasks across your existing stack, agents and any tools run as s
 * 🧠 Smart pre-evaluated execution plans
 * 🎯 Domain grounded
 * 🗿 Durable execution
-* 🚀 Go fast with tools as services
+* 🚀 Go fast and save cost with tools as services
 * ↩️ Revert state to handle failures
 * ⛑️ Automatic service health monitoring
 * 🔮 Real-time status tracking
-* 🪝 Webhooks for completion and failure notifications
+* 🪝 Webhooks for completion and failure monitoring
 
 [Learn why we built orra →](https://tinyurl.com/orra-launch-blog-post)
 
@@ -33,6 +33,7 @@ orra coordinates tasks across your existing stack, agents and any tools run as s
 - [Docs](#docs)
 - [Self Hosting & On-premises Deployment](#self-hosting--on-premises-deployment)
 - [Support](#support)
+- [Telemetry](#telemetry)
 - [License](#license)
 
 ## Installation
@@ -96,11 +97,11 @@ Download the latest CLI binary for your platform from our [releases page](https:
 
 ```shell
 # macOS
-curl -L https://github.com/orra-dev/orra/releases/download/v0.2.5/orra-darwin-arm64 -o /usr/local/bin/orra
+curl -L https://github.com/orra-dev/orra/releases/download/v0.2.6/orra-darwin-arm64 -o /usr/local/bin/orra
 chmod +x /usr/local/bin/orra
 
 # Linux
-curl -L https://github.com/ezodude/orra/releases/download/v0.2.5/orra-linux-amd64 -o /usr/local/bin/orra
+curl -L https://github.com/ezodude/orra/releases/download/v0.2.6/orra-linux-amd64 -o /usr/local/bin/orra
 chmod +x /usr/local/bin/orra
 
 # Verify installation
@@ -290,6 +291,10 @@ Need help? We're here to support you:
 
 - Report a bug or request a feature by creating an [issue](https://github.com/orra-dev/orra/issues/new?template=bug-report-feature-request.yml)
 - Start a [discussion](https://github.com/orra-dev/orra/discussions) about your ideas or questions
+
+## Telemetry
+
+See [telemetry.md](./docs/telemetry.md) for details on what is collected and how to opt out.
 
 ## License
 

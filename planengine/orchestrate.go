@@ -170,10 +170,18 @@ func (p *PlanEngine) PrepareOrchestration(ctx context.Context, projectID string,
 			switch prepErr.Status {
 			case NotActionable:
 				// NotActionable errors are permanent
+				p.TelemetrySvc.TrackEvent(EventExecutionPlanNotActionable, map[string]any{
+					"version":           Version,
+					"execution_plan_id": HashUUID(orchestration.ID),
+				})
 				return back.Permanent(prepErr)
 
 			case FailedNotRetryable:
 				// FailedNotRetryable errors are permanent
+				p.TelemetrySvc.TrackEvent(EventExecutionPlanFailedCreation, map[string]any{
+					"version":           Version,
+					"execution_plan_id": HashUUID(orchestration.ID),
+				})
 				return back.Permanent(prepErr)
 
 			case Failed:
@@ -203,6 +211,11 @@ func (p *PlanEngine) PrepareOrchestration(ctx context.Context, projectID string,
 					Err(err).
 					Str("OrchestrationID", orchestration.ID).
 					Msg("Failed to persist orchestration")
+
+				p.TelemetrySvc.TrackEvent(EventExecutionPlanFailedValidation, map[string]any{
+					"version":           Version,
+					"execution_plan_id": HashUUID(orchestration.ID),
+				})
 				return back.Permanent(fmt.Errorf("exceeded maximum retries (%d): %w", maxPreparationRetries, prepErr.Err))
 
 			default:
@@ -325,6 +338,11 @@ func (p *PlanEngine) ExecuteOrchestration(ctx context.Context, orchestration *Or
 	orchestration.Status = Processing
 	orchestration.Timestamp = time.Now().UTC()
 
+	p.TelemetrySvc.TrackEvent(EventExecutionPlanAttempted, map[string]any{
+		"version":           Version,
+		"execution_plan_id": HashUUID(orchestration.ID),
+	})
+
 	if err := p.orchestrationStorage.StoreOrchestration(orchestration); err != nil {
 		p.Logger.Error().
 			Err(err).
@@ -388,8 +406,25 @@ func (p *PlanEngine) FinalizeOrchestration(orchestrationID string, status Status
 	}
 
 	p.cleanupLogWorkers(orchestration.ID)
-
+	p.trackOrchestrationTelemetry(orchestration.ID, status)
 	return nil
+}
+
+func (p *PlanEngine) trackOrchestrationTelemetry(orchestrationID string, status Status) {
+	var event string
+	switch status {
+	case Failed:
+		event = EventExecutionPlanFailed
+	case Aborted:
+		event = EventExecutionPlanAborted
+	default:
+		event = EventExecutionPlanCompleted
+	}
+
+	p.TelemetrySvc.TrackEvent(event, map[string]any{
+		"version":           Version,
+		"execution_plan_id": HashUUID(orchestrationID),
+	})
 }
 
 func (p *PlanEngine) CancelOrchestration(orchestrationID string, reason json.RawMessage) error {
