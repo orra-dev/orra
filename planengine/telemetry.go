@@ -7,6 +7,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 
@@ -82,4 +84,9 @@ func getOrCreateAnonymousID() string {
 	id := uuid.New().String()
 	_ = os.WriteFile(uuidFile, []byte(id), 0600)
 	return id
+}
+
+func HashUUID(uuidStr string) string {
+	hash := sha256.Sum256([]byte(uuidStr))
+	return hex.EncodeToString(hash[:])
 }

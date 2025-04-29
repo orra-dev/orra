@@ -47,13 +47,20 @@ func setupTestApp(t *testing.T) (*App, *Project, func()) {
 		assert.NoError(t, err)
 	}
 
+	telemetrySvc := &TelemetryService{
+		client:  nil,
+		enabled: false,
+		logger:  logger,
+	}
+
 	plane := NewPlanEngine()
-	plane.Initialise(context.Background(), db, db, db, db, db, nil, nil, nil, &fakePddlValidator{}, nil, logger, nil)
+	plane.Initialise(context.Background(), db, db, db, db, db, nil, nil, nil, &fakePddlValidator{}, nil, logger, telemetrySvc)
 
 	app := &App{
-		Router: mux.NewRouter(),
-		Engine: plane,
-		Logger: logger,
+		Router:       mux.NewRouter(),
+		Engine:       plane,
+		Logger:       logger,
+		TelemetrySvc: telemetrySvc,
 	}
 
 	app.configureRoutes()

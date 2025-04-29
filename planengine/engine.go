@@ -168,6 +168,10 @@ func (p *PlanEngine) RegisterOrUpdateService(service *ServiceInfo) error {
 			Str("ProjectID", service.ProjectID).
 			Str("ServiceName", service.Name).
 			Msgf("Generating new service ID")
+		p.TelemetrySvc.TrackEvent(EventProjectServiceRegistered, map[string]any{
+			"version":    Version,
+			"project_id": HashUUID(service.ProjectID),
+		})
 	} else {
 		// Load existing service
 		existingService, err := p.svcStorage.LoadServiceByProjectID(service.ProjectID, service.ID)
@@ -182,6 +186,10 @@ func (p *PlanEngine) RegisterOrUpdateService(service *ServiceInfo) error {
 			Str("ServiceName", service.Name).
 			Int64("ServiceVersion", service.Version).
 			Msgf("Updating existing service")
+		p.TelemetrySvc.TrackEvent(EventProjectServiceUpdated, map[string]any{
+			"version":    Version,
+			"project_id": HashUUID(service.ProjectID),
+		})
 	}
 
 	if err := p.svcStorage.StoreService(service); err != nil {
@@ -329,6 +337,11 @@ func (p *PlanEngine) ApplyGroundingSpec(ctx context.Context, spec *GroundingSpec
 		Str("domain", spec.Domain).
 		Msgf("Added grounding spec with %d action uses cases", len(spec.UseCases))
 
+	p.TelemetrySvc.TrackEvent(EventProjectGroundingApplied, map[string]any{
+		"version":    Version,
+		"project_id": HashUUID(projectID),
+	})
+
 	return nil
 }
 
@@ -403,6 +416,11 @@ func (p *PlanEngine) RemoveGroundingSpecByName(projectID string, name string) er
 		Str("name", name).
 		Msg("Removed grounding spec")
 
+	p.TelemetrySvc.TrackEvent(EventProjectGroundingRemoved, map[string]any{
+		"version":    Version,
+		"project_id": HashUUID(projectID),
+	})
+
 	return nil
 }
 
@@ -456,6 +474,7 @@ func (p *PlanEngine) AddProject(project *Project) error {
 	}
 
 	p.projects[project.ID] = project
+	p.TelemetrySvc.TrackEvent(EventProjectAdded, map[string]any{"version": Version})
 	return nil
 }
 

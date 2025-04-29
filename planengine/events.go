@@ -6,31 +6,25 @@
 
 package main
 
-// Common event names for telemetry tracking to ensure consistency
+// Tracked telemetry events
+
 const (
-	// Server events
-	EventServerStart = "server_start"
-	EventServerStop  = "server_stop"
-
-	// Project events
-	EventProjectCreated = "project_created"
-	EventProjectUpdated = "project_updated"
-
-	// Service events
-	EventServiceRegistered = "service_registered"
-	EventServiceUpdated    = "service_updated"
-
-	// Execution plan events
-	EventExecutionPlanAttempted = "orchestration_created"
-	EventExecutionPlanCompleted = "orchestration_completed"
-	EventExecutionPlanFailed    = "orchestration_failed"
-
-	// Domain grounding events
-	EventGroundingApplied = "grounding_applied"
-	EventGroundingRemoved = "grounding_removed"
-
-	// Compensation events
-	EventCompensationStarted   = "compensation_started"
-	EventCompensationCompleted = "compensation_completed"
-	EventCompensationFailed    = "compensation_failed"
+	EventServerStart                   = "server_start"
+	EventServerStop                    = "server_stop"
+	EventProjectAdded                  = "project_added"
+	EventProjectServiceRegistered      = "service_registered"
+	EventProjectServiceUpdated         = "service_updated"
+	EventExecutionPlanNotActionable    = "execution_plan_not_actionable"
+	EventExecutionPlanFailedCreation   = "execution_plan_failed_creation"
+	EventExecutionPlanFailedValidation = "execution_plan_failed_validation"
+	EventExecutionPlanAttempted        = "execution_plan_attempted"
+	EventExecutionPlanCompleted        = "execution_plan_completed"
+	EventExecutionPlanAborted          = "execution_plan_aborted"
+	EventExecutionPlanFailed           = "execution_plan_failed"
+	EventCompensationStarted           = "execution_plan_compensation_started"
+	EventCompensationCompleted         = "execution_plan_compensation_completed"
+	EventCompensationFailed            = "execution_plan_compensation_failed"
+	EventCompensationExpired           = "execution_plan_compensation_expired"
+	EventProjectGroundingApplied       = "project_grounding_applied"
+	EventProjectGroundingRemoved       = "project_grounding_removed"
 )

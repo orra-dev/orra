@@ -47,6 +47,11 @@ func NewCompensationWorker(projectID, orchestrationID string, logManager *LogMan
 }
 
 func (w *CompensationWorker) Start(ctx context.Context, orchestrationID string) {
+	w.LogManager.planEngine.TelemetrySvc.TrackEvent(EventCompensationStarted, map[string]any{
+		"version":           Version,
+		"execution_plan_id": HashUUID(orchestrationID),
+	})
+
 	for _, candidate := range w.Candidates {
 		if err := w.processCandidate(ctx, candidate); err != nil {
 			w.LogManager.Logger.Error().
@@ -61,6 +66,15 @@ func (w *CompensationWorker) Start(ctx context.Context, orchestrationID string) 
 			if strings.Contains(err.Error(), "expired") {
 				status = CompensationExpired
 				logType = CompensationExpiredLogType
+				w.LogManager.planEngine.TelemetrySvc.TrackEvent(EventCompensationExpired, map[string]any{
+					"version":           Version,
+					"execution_plan_id": HashUUID(orchestrationID),
+				})
+			} else {
+				w.LogManager.planEngine.TelemetrySvc.TrackEvent(EventCompensationFailed, map[string]any{
+					"version":           Version,
+					"execution_plan_id": HashUUID(orchestrationID),
+				})
 			}
 
 			// Log the compensation failure
@@ -109,6 +123,11 @@ func (w *CompensationWorker) Start(ctx context.Context, orchestrationID string) 
 					go w.sendWebhookNotification(webhook, payload)
 				}
 			}
+		} else {
+			w.LogManager.planEngine.TelemetrySvc.TrackEvent(EventCompensationCompleted, map[string]any{
+				"version":           Version,
+				"execution_plan_id": HashUUID(orchestrationID),
+			})
 		}
 	}
 }
