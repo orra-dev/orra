@@ -294,7 +294,7 @@ Need help? We're here to support you:
 
 ## Telemetry
 
-See [TELEMETRY.md](./docs/telemetry.md) for details on what is collected and how to opt out.
+See [telemetry.md](./docs/telemetry.md) for details on what is collected and how to opt out.
 
 ## License
 
