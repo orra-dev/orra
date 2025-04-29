@@ -49,6 +49,9 @@ func (s *TelemetryService) TrackEvent(event string, properties map[string]any) {
 	// Use anonymous ID for privacy
 	anonymousID := getOrCreateAnonymousID()
 
+	// Remove $ip property if present
+	delete(properties, "$ip")
+
 	// Add event to PostHog
 	err := s.client.Enqueue(posthog.Capture{
 		DistinctId: anonymousID,
