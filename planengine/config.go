@@ -101,7 +101,7 @@ type Config struct {
 	PddlValidatorPath     string        `envconfig:"default=/usr/local/bin/Validate"`
 	PddlValidationTimeout time.Duration `envconfig:"default=30s"`
 	StoragePath           string        `envconfig:"optional"`
-	AnonymizedTelemetry   bool          `envconfig:"optional=true"`
+	AnonymizedTelemetry   bool          `envconfig:"default=true"`
 }
 
 func Load() (Config, error) {
