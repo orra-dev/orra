@@ -33,6 +33,7 @@ orra coordinates tasks across your existing stack, agents and any tools run as s
 - [Docs](#docs)
 - [Self Hosting & On-premises Deployment](#self-hosting--on-premises-deployment)
 - [Support](#support)
+- [Telemetry](#telemetry)
 - [License](#license)
 
 ## Installation
@@ -290,6 +291,10 @@ Need help? We're here to support you:
 
 - Report a bug or request a feature by creating an [issue](https://github.com/orra-dev/orra/issues/new?template=bug-report-feature-request.yml)
 - Start a [discussion](https://github.com/orra-dev/orra/discussions) about your ideas or questions
+
+## Telemetry
+
+See [TELEMETRY.md](./docs/telemetry.md) for details on what is collected and how to opt out.
 
 ## License
 
