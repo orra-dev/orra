@@ -127,7 +127,7 @@ func (app *App) Run() {
 			app.Logger.Info().Msg(err.Error())
 		}
 
-		app.TelemetrySvc.TrackEvent(EventServerStart, map[string]interface{}{
+		app.TelemetrySvc.TrackEvent(EventServerStart, map[string]any{
 			"version": Version,
 		})
 	}()
@@ -167,6 +167,10 @@ func (app *App) gracefulShutdown(srv *http.Server, ctx context.Context) {
 		app.Logger.Error().Err(err).Msg("Error shutting down plan engine server")
 	}
 	app.Logger.Debug().Msg("http: All connections drained")
+
+	app.TelemetrySvc.TrackEvent(EventServerStop, map[string]any{
+		"version": Version,
+	})
 }
 
 func (app *App) RegisterProject(w http.ResponseWriter, r *http.Request) {
