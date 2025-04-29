@@ -7,6 +7,10 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
+
+	"github.com/google/uuid"
 	"github.com/posthog/posthog-go"
 	"github.com/rs/zerolog"
 )
@@ -37,13 +41,13 @@ func NewTelemetryService(client posthog.Client, enabled bool, logger zerolog.Log
 
 // TrackEvent tracks an event in PostHog if telemetry is enabled.
 // The event will be ignored if telemetry is disabled.
-func (s *TelemetryService) TrackEvent(event string, properties map[string]interface{}) {
+func (s *TelemetryService) TrackEvent(event string, properties map[string]any) {
 	if !s.enabled {
 		return
 	}
 
 	// Use anonymous ID for privacy
-	anonymousID := "anonymous"
+	anonymousID := getOrCreateAnonymousID()
 
 	// Add event to PostHog
 	err := s.client.Enqueue(posthog.Capture{
@@ -62,4 +66,17 @@ func (s *TelemetryService) TrackEvent(event string, properties map[string]interf
 // IsEnabled returns whether telemetry is enabled
 func (s *TelemetryService) IsEnabled() bool {
 	return s.enabled
+}
+
+func getOrCreateAnonymousID() string {
+	tempDir := os.TempDir()
+	uuidFile := filepath.Join(tempDir, AnonymouseIDFilename)
+
+	if data, err := os.ReadFile(uuidFile); err == nil {
+		return string(data)
+	}
+
+	id := uuid.New().String()
+	_ = os.WriteFile(uuidFile, []byte(id), 0600)
+	return id
 }

@@ -41,6 +41,7 @@ const (
 	PauseExecutionCode            = "PAUSE_EXECUTION"
 	StartJsonMarker               = "```json"
 	EndJsonMarker                 = "```"
+	AnonymouseIDFilename          = "orra.telemetry.uuid"
 )
 
 // Supported LLM and Embeddings models
