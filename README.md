@@ -1,10 +1,10 @@
 # 🪡 orra
 
-Move beyond simple Crews and Agents. Use orra's production-grade planning to reliably run multi-agent workflows that require complex real-world interactions.
+orra is infrastructure for resilient AI agent workflows. It helps your agents recover from failures like API outages, broken evals, and more - keeping your workflows moving forward.
 
 ![](images/orra-diagram.png)
 
-orra coordinates tasks across your existing stack, agents and any tools run as services using intelligent reasoning — across any language, agent framework or deployment platform.
+orra coordinates tasks across your existing stack, agents, tools and services using intelligent reasoning and durable execution — across any language, agent framework or deployment platform.
 
 * 🧠 Smart pre-evaluated execution plans
 * 🎯 Domain grounded
