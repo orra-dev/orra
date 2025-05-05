@@ -1,28 +1,37 @@
 # 🪡 orra
 
-orra is infrastructure for resilient AI agent workflows. It helps your agents recover from failures like API outages, broken evals, and more - keeping your workflows moving forward.
+orra is infrastructure for resilient AI agent workflows. It helps your agents recover from failures like API outages, failed evals, and more - keeping your workflows moving forward.
 
 ![](images/orra-diagram.png)
 
-orra coordinates tasks across your existing stack, agents, tools and services using intelligent reasoning and durable execution — across any language, agent framework or deployment platform.
+By intelligently coordinating tasks across your agents, tools, and existing stack, orra ensures robust execution in any environment. It’s designed to work seamlessly with any language, agent framework, or deployment platform.
 
-* 🧠 Smart pre-evaluated execution plans
-* 🎯 Domain grounded
-* 🗿 Durable execution
-* 🚀 Go fast and save cost with tools as services
+* 🧠 Smart execution plans with automatic agent/service discovery
+* 🗿 Durable execution with state persistence
+* 🎯 Domain grounded verification
 * ↩️ Revert state to handle failures
-* ⛑️ Automatic service health monitoring
+* 🕵 Immutable audit logs
+* 🚀 Go fast and save cost with tools as services
+* ⛑️ Automatic health monitoring
 * 🔮 Real-time status tracking
-* 🪝 Webhooks for completion and failure monitoring
+* 🏢 On-premises deployment
+* 🪝 Webhooks notifications for completions and failures
 
 [Learn why we built orra →](https://tinyurl.com/orra-launch-blog-post)
 
 ### Coming Soon
 
+* Plug-and-play adapters for popular agent frameworks
+* Integrate existing agent frameworks via SDK adapters with minimal code
+* Scale your workflows with reliable coverage
+* Course correct execution plans for failed evals
 * Agent replay and multi-LLM consensus planning
+* End-to-end encryption
+* Granular workflow access controls
 * Continuous adjustment of Agent workflows during runtime
 * Additional language SDKs - Ruby, DotNet and Go very soon!
 * MCP integration
+* SOC 2 and GDPR readiness to meet the needs of regulated industries
 
 ## Table of Contents
 
