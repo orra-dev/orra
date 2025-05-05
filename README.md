@@ -21,8 +21,7 @@ By intelligently coordinating tasks across your agents, tools, and existing stac
 
 ### Coming Soon
 
-* Plug-and-play adapters for popular agent frameworks
-* Integrate existing agent frameworks via SDK adapters with minimal code
+* Plug&play integration adapters for popular agent frameworks
 * Scale your workflows with reliable coverage
 * Course correct execution plans for failed evals
 * Agent replay and multi-LLM consensus planning
