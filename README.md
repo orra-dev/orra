@@ -36,6 +36,7 @@ By intelligently coordinating tasks across your agents, tools, and existing stac
 
 - [Installation](#installation)
 - [How The Plan Engine Works](#how-the-plan-engine-works)
+- [How orra Compares](#how-orra-compares)
 - [Guides](#guides)
 - [Explore Examples](#explore-examples)
 - [Docs](#docs)
@@ -242,6 +243,20 @@ The Plan Engine ensures:
 * Built-in retries and recovery
 * Real-time status updates
 * Webhook events for result delivery and monitoring
+
+## How orra compares
+
+Orra takes a unique approach to AI workflow orchestration. Here's how it compares to other solutions:
+
+|                       | **orra**                                                                                                     | **Agent Frameworks**<br/>(e.g. Mastra, LangGraph)                             | **Workflow Engines**<br/>(e.g. Temporal, Inngest)        |
+|-----------------------|--------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------|----------------------------------------------------------|
+| **Purpose**           | Multi-agent coordination layer                                                                               | Build individual AI agents                                                    | Run pre-planned workflows                                |
+| **Planning Style**    | AI-driven plan generation                                                                                    | Hardcoded agent workflows                                                     | Manual workflow definition                               |
+| **Error Recovery**    | Auto-recovery without restart                                                                                | Try/catch manual handling                                                     | Config-based retry policies                              |
+| **Best For**          | Complex unpredictable workflows                                                                              | Single agent development                                                      | Repeatable business processes                            |
+| **Example Use**       | "Deliver this product by Friday" → dynamically coordinates research, inventory, delivery, and payment agents | "Analyze this document" → fixed steps of reading, extracting, and summarizing | "Process new signup" → predefined steps with retry logic |
+
+Orra is for building AI systems that need to adapt and recover when things go wrong, without brittle scripts or manual fixes.
 
 ## Guides
 
