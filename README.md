@@ -1,16 +1,16 @@
 # 🪡 orra
 
-orra is infrastructure for resilient AI agent workflows. It helps your agents recover from failures like API outages, failed evals, and more - keeping your workflows moving forward.
+Orra is infrastructure for resilient AI agent workflows. It helps your agents recover from failures like API outages, failed evals, and more - keeping your workflows moving forward.
 
 ![](images/orra-diagram.png)
 
 By intelligently coordinating tasks across your agents, tools, and existing stack, orra ensures robust execution in any environment. It’s designed to work seamlessly with any language, agent framework, or deployment platform.
 
-* 🧠 Smart execution plans with automatic agent/service discovery
+* 🧠 Planning agent with automatic agent/service discovery
 * 🗿 Durable execution with state persistence
-* 🎯 Domain grounded verification
+* 🎯 Pre-validated execution plans
 * ↩️ Revert state to handle failures
-* 🕵 Immutable audit logs
+* 🕵 Audit logs for traceability
 * 🚀 Go fast and save cost with tools as services
 * ⛑️ Automatic health monitoring
 * 🔮 Real-time status tracking
@@ -21,9 +21,9 @@ By intelligently coordinating tasks across your agents, tools, and existing stac
 
 ### Coming Soon
 
-* Plug&play integration adapters for popular agent frameworks
+* Integration adapters for popular agent frameworks
 * Scale your workflows with reliable coverage
-* Course correct execution plans for failed evals
+* Planning course correction for failed evals
 * Agent replay and multi-LLM consensus planning
 * End-to-end encryption
 * Granular workflow access controls
