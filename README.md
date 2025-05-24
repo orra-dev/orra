@@ -36,7 +36,8 @@ By intelligently coordinating tasks across your agents, tools, and existing stac
 
 - [Installation](#installation)
 - [How The Plan Engine Works](#how-the-plan-engine-works)
-- [How orra Compares](#how-orra-compares)
+- [Orra vs Agent Frameworks & Workflow Engines](#orra-vs-agent-frameworks-and-workflow-engines)
+- [Orra Plan Engine vs MCP](#orra-plan-engine-vs-mcp)
 - [Guides](#guides)
 - [Explore Examples](#explore-examples)
 - [Docs](#docs)
@@ -244,7 +245,7 @@ The Plan Engine ensures:
 * Real-time status updates
 * Webhook events for result delivery and monitoring
 
-## How orra compares
+## Orra vs Agent Frameworks and Workflow Engines
 
 Orra takes a unique approach to AI workflow orchestration. Here's how it compares to other solutions:
 
@@ -257,6 +258,35 @@ Orra takes a unique approach to AI workflow orchestration. Here's how it compare
 | **Example Use**       | "Deliver this product by Friday" → dynamically coordinates research, inventory, delivery, and payment agents | "Analyze this document" → fixed steps of reading, extracting, and summarizing | "Process new signup" → predefined steps with retry logic |
 
 Orra is for building AI systems that need to adapt and recover when things go wrong, without brittle scripts or manual fixes.
+
+## Orra Plan Engine vs MCP
+
+| Aspect | Orra Plan Engine                                          | Model Context Protocol (MCP)                         |
+|--------|-----------------------------------------------------------|------------------------------------------------------|
+| **Purpose** | Orchestrate multi-agent workflows end-to-end              | Connect single LLM to external tools/data            |
+| **Best For** | Production multi-agent applications that need reliability | Extending LLM capabilities with APIs and databases   |
+| **Planning** | AI dynamically generates execution plans                  | Developer defines available tools                    |
+| **Execution** | Stateful workflow coordination with recovery              | Direct tool calls via LLM                            |
+| **State Management** | Persistent orchestration state with audit logs            | Stateless request/response                           |
+| **Error Handling** | Automatic retries, compensation, and rollback             | Tool returns error to LLM                            |
+| **Complexity** | Full workflow orchestration platform                      | Simple integration protocol                          |
+| **When to Use** | Building production AI systems with multiple agents       | Building AI assistants, enhancing single agents      |
+
+### Real-World Examples
+
+**Use MCP when:**
+- Adding web search to your Claude chatbot
+- Connecting an LLM to your company's database
+- Building a research assistant that needs multiple data sources
+
+**Use Orra when:**
+- Orchestrating fraud detection agent pipelines without writing custom abort/retry logic or state management
+- Building incident response agent workflows without implementing failure recovery or escalation infrastructure
+- Creating e-commerce agent workflows without building compensation logic or transaction coordination
+
+### Can They Work Together?
+
+Yes! MCP handles the "how do I connect to systems" while orra handles the "how do I coordinate complex workflows." You might use MCP to expose individual agent capabilities, then use Orra to orchestrate those agents in production workflows.
 
 ## Guides
 
